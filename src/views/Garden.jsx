@@ -1,21 +1,28 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Droplet, Star, Sparkles, ChevronRight, CheckCircle2, Sprout } from 'lucide-react';
+import { mockDb } from '../lib/mockDb';
 
 const Garden = ({ userBP = 0, onGoQuiz }) => {
-  // Step 1 基础展示状态（Step 2 会接入 mockDb 持久化）
-  const [waterCount, setWaterCount] = useState(0);
-  const [growthPercent, setGrowthPercent] = useState(0);
-  const [currentStage, setCurrentStage] = useState(1);
-  const [treeName, setTreeName] = useState('Apple Tree');
+  const treesConfig = mockDb.getTreesConfig();
+  const [gardenState, setGardenState] = useState(() => mockDb.getGardenState());
   const [showMissionModal, setShowMissionModal] = useState(false);
 
-  // 基础点击浇水提示（Step 4 会完整联动数据与扣减）
+  const currentTree = treesConfig.find(t => t.id === gardenState.currentTreeId) || treesConfig[0];
+
+  const updateState = (updates) => {
+    const updated = mockDb.updateGardenState(updates);
+    setGardenState(updated);
+  };
+
   const handleWaterClick = () => {
-    if (waterCount <= 0) {
+    if (gardenState.water <= 0) {
       alert("Complete Daily Missions to earn Water! 💧");
     } else {
-      setWaterCount(prev => prev - 1);
-      setGrowthPercent(prev => Math.min(100, prev + 10));
+      const nextGrowth = Math.min(100, gardenState.growth + 10);
+      updateState({
+        water: gardenState.water - 1,
+        growth: nextGrowth
+      });
     }
   };
 
@@ -78,7 +85,7 @@ const Garden = ({ userBP = 0, onGoQuiz }) => {
         }}>
           <Droplet size={16} fill="#29B6F6" color="#0288D1" />
           <span style={{ fontSize: '14px', fontWeight: 900, color: '#0277BD' }}>
-            {waterCount}
+            {gardenState.water}
           </span>
           <span style={{ fontSize: '11px', fontWeight: 700, color: '#0288D1', opacity: 0.8 }}>
             WATER
@@ -161,7 +168,7 @@ const Garden = ({ userBP = 0, onGoQuiz }) => {
             letterSpacing: '-0.5px',
             lineHeight: 1.2
           }}>
-            {treeName}
+            {currentTree.name}
           </h2>
           <div style={{
             marginTop: '6px',
@@ -175,7 +182,7 @@ const Garden = ({ userBP = 0, onGoQuiz }) => {
           }}>
             <Sprout size={13} color="#2E7D32" />
             <span style={{ fontSize: '11px', fontWeight: 800, color: '#2E7D32' }}>
-              Stage {currentStage}: Seed ({growthPercent}%)
+              Stage {gardenState.stage}: Seed ({gardenState.growth}%)
             </span>
           </div>
         </div>
@@ -234,7 +241,7 @@ const Garden = ({ userBP = 0, onGoQuiz }) => {
             color: '#555'
           }}>
             <span>Tree Growth</span>
-            <span style={{ color: '#2E7D32', fontWeight: 900 }}>{growthPercent}%</span>
+            <span style={{ color: '#2E7D32', fontWeight: 900 }}>{gardenState.growth}%</span>
           </div>
 
           <div style={{
@@ -249,7 +256,7 @@ const Garden = ({ userBP = 0, onGoQuiz }) => {
           }}>
             <div style={{
               height: '100%',
-              width: `${growthPercent}%`,
+              width: `${gardenState.growth}%`,
               background: 'linear-gradient(90deg, #81C784 0%, #4CAF50 100%)',
               borderRadius: '9999px',
               transition: 'width 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)'
@@ -272,14 +279,14 @@ const Garden = ({ userBP = 0, onGoQuiz }) => {
             width: '100%',
             maxWidth: '340px',
             padding: '16px 24px',
-            backgroundColor: waterCount > 0 ? '#29B6F6' : '#B0BEC5',
+            backgroundColor: gardenState.water > 0 ? '#29B6F6' : '#B0BEC5',
             color: '#FFFFFF',
             border: '3px solid #2B2B2B',
             borderRadius: '24px',
             fontSize: '17px',
             fontWeight: 900,
             cursor: 'pointer',
-            boxShadow: waterCount > 0 ? '0 5px 0px #0277BD, 0 8px 12px rgba(0,0,0,0.15)' : '0 4px 0px #78909C',
+            boxShadow: gardenState.water > 0 ? '0 5px 0px #0277BD, 0 8px 12px rgba(0,0,0,0.15)' : '0 4px 0px #78909C',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -307,7 +314,7 @@ const Garden = ({ userBP = 0, onGoQuiz }) => {
           fontWeight: 600,
           textAlign: 'center'
         }}>
-          {waterCount > 0 
+          {gardenState.water > 0 
             ? 'Water your tree to help it grow (+10% Growth)' 
             : 'Complete Daily Missions to earn more Water!'}
         </p>

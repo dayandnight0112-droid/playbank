@@ -4,6 +4,50 @@ const USERS_KEY = 'playbank_users';
 const CURRENT_SESSION_KEY = 'playbank_session';
 const PRODUCTS_KEY = 'playbank_products';
 const ORDERS_KEY = 'playbank_orders';
+const GARDEN_STATE_KEY = 'playbank_garden_state';
+
+export const DEFAULT_TREES = [
+  {
+    id: "apple",
+    name: "Apple Tree",
+    rewardBP: 80
+  },
+  {
+    id: "sunflower",
+    name: "Sunflower",
+    rewardBP: 50
+  },
+  {
+    id: "bean",
+    name: "Bean Plant",
+    rewardBP: 30
+  }
+];
+
+const DEFAULT_GARDEN_STATE = {
+  currentTreeId: "apple",
+  growth: 0,
+  stage: 1,
+  water: 0,
+  completedTrees: [],
+  collection: [],
+  lastUpdated: null
+};
+
+const getGardenStateRaw = () => {
+  try {
+    const raw = localStorage.getItem(GARDEN_STATE_KEY);
+    if (!raw) return { ...DEFAULT_GARDEN_STATE };
+    const parsed = JSON.parse(raw);
+    return { ...DEFAULT_GARDEN_STATE, ...parsed };
+  } catch (e) {
+    return { ...DEFAULT_GARDEN_STATE };
+  }
+};
+
+const saveGardenStateRaw = (state) => {
+  localStorage.setItem(GARDEN_STATE_KEY, JSON.stringify(state));
+};
 
 const getUsers = () => JSON.parse(localStorage.getItem(USERS_KEY)) || [];
 const saveUsers = (users) => localStorage.setItem(USERS_KEY, JSON.stringify(users));
@@ -579,5 +623,22 @@ export const mockDb = {
       return users[index];
     }
     return null;
+  },
+
+  // Garden V1 Data Access
+  getTreesConfig: () => DEFAULT_TREES,
+
+  getGardenState: () => getGardenStateRaw(),
+
+  saveGardenState: (state) => {
+    saveGardenStateRaw(state);
+    return state;
+  },
+
+  updateGardenState: (updates) => {
+    const current = getGardenStateRaw();
+    const updated = { ...current, ...updates, lastUpdated: new Date().toISOString() };
+    saveGardenStateRaw(updated);
+    return updated;
   }
 };
