@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Droplet, Star, Sparkles, ChevronRight, CheckCircle2, Sprout } from 'lucide-react';
 import { mockDb } from '../lib/mockDb';
+import TreeRenderer, { getStageByGrowth } from '../components/TreeRenderer';
 
 const Garden = ({ userBP = 0, onGoQuiz }) => {
   const treesConfig = mockDb.getTreesConfig();
@@ -8,6 +9,7 @@ const Garden = ({ userBP = 0, onGoQuiz }) => {
   const [showMissionModal, setShowMissionModal] = useState(false);
 
   const currentTree = treesConfig.find(t => t.id === gardenState.currentTreeId) || treesConfig[0];
+  const stageInfo = getStageByGrowth(gardenState.growth);
 
   const updateState = (updates) => {
     const updated = mockDb.updateGardenState(updates);
@@ -19,9 +21,11 @@ const Garden = ({ userBP = 0, onGoQuiz }) => {
       alert("Complete Daily Missions to earn Water! 💧");
     } else {
       const nextGrowth = Math.min(100, gardenState.growth + 10);
+      const nextStage = getStageByGrowth(nextGrowth);
       updateState({
         water: gardenState.water - 1,
-        growth: nextGrowth
+        growth: nextGrowth,
+        stage: nextStage.stage
       });
     }
   };
@@ -182,47 +186,13 @@ const Garden = ({ userBP = 0, onGoQuiz }) => {
           }}>
             <Sprout size={13} color="#2E7D32" />
             <span style={{ fontSize: '11px', fontWeight: 800, color: '#2E7D32' }}>
-              Stage {gardenState.stage}: Seed ({gardenState.growth}%)
+              Stage {stageInfo.stage}: {stageInfo.name} ({gardenState.growth}%)
             </span>
           </div>
         </div>
 
-        {/* 2D 树木主视觉图（日系田园/简洁扁平矢量） */}
-        <div style={{
-          position: 'relative',
-          width: '220px',
-          height: '220px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 2
-        }}>
-          {/* 阶段 1：Seed 种子状态（带有小土地与发芽形态） */}
-          <svg viewBox="0 0 200 200" style={{ width: '100%', height: '100%' }}>
-            {/* 泥土底座小山丘 */}
-            <ellipse cx="100" cy="165" rx="72" ry="20" fill="#E0D3BC" />
-            <ellipse cx="100" cy="160" rx="60" ry="16" fill="#8D6E63" />
-            <ellipse cx="100" cy="158" rx="54" ry="12" fill="#6D4C41" />
-
-            {/* 泥土颗粒质感 */}
-            <circle cx="80" cy="158" r="2.5" fill="#5D4037" />
-            <circle cx="115" cy="160" r="2" fill="#5D4037" />
-            <circle cx="95" cy="162" r="3" fill="#4E342E" />
-
-            {/* 种子 / 刚破土的小芽 */}
-            <g transform="translate(100, 150)">
-              {/* 种子外壳 */}
-              <ellipse cx="0" cy="0" rx="10" ry="7" fill="#5D4037" stroke="#2B2B2B" strokeWidth="2.5" />
-              
-              {/* 嫩绿色嫩芽 */}
-              <path d="M 0,-3 C -8,-18 0,-28 2,-32 C 4,-26 8,-16 0,-3 Z" fill="#81C784" stroke="#2B2B2B" strokeWidth="2" />
-              <path d="M 0,-10 C 10,-20 18,-18 20,-14 C 18,-8 8,-6 0,-10 Z" fill="#A5D6A7" stroke="#2B2B2B" strokeWidth="2" />
-              
-              {/* 晨露小水珠 */}
-              <circle cx="16" cy="-14" r="2" fill="#E1F5FE" stroke="#0288D1" strokeWidth="1" />
-            </g>
-          </svg>
-        </div>
+        {/* 2D 树木动态五阶段渲染器 */}
+        <TreeRenderer growth={gardenState.growth} treeId={currentTree.id} />
 
         {/* 成长百分比进度条（Growth Progress Bar） */}
         <div style={{
