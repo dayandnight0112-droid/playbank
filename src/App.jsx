@@ -249,6 +249,7 @@ function App() {
             onStartChallenge={handleStartChallenge}
             onGoMarket={() => setCurrentView('marketplace')}
             onGoBattle={() => setCurrentView('select_subject')}
+            onUpdateBP={(newBP) => setUserBP(newBP)}
           />
         );
       case 'select_subject':

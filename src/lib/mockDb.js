@@ -1120,5 +1120,87 @@ export const mockDb = {
   },
   clearGuestProfile: () => {
     saveGuestProfileRaw(null);
+  },
+
+  // 7-Day Streak Management (Step 27)
+  getStreakState: () => {
+    const STREAK_KEY = 'playbank_streak_data';
+    const today = getMalaysiaDateString();
+    const guest = getGuestProfileRaw();
+    try {
+      const raw = localStorage.getItem(STREAK_KEY);
+      const data = raw ? JSON.parse(raw) : null;
+      if (!data) {
+        const initial = {
+          currentStreak: guest?.streak || 3,
+          lastClaimDate: null,
+          hasClaimedToday: false,
+          claimedDays: [1, 2] // Preset 2 days so Day 3 is ready to claim
+        };
+        localStorage.setItem(STREAK_KEY, JSON.stringify(initial));
+        return initial;
+      }
+      return {
+        ...data,
+        hasClaimedToday: data.lastClaimDate === today
+      };
+    } catch (e) {
+      return {
+        currentStreak: guest?.streak || 3,
+        lastClaimDate: null,
+        hasClaimedToday: false,
+        claimedDays: [1, 2]
+      };
+    }
+  },
+
+  claimDailyStreak: () => {
+    const STREAK_KEY = 'playbank_streak_data';
+    const today = getMalaysiaDateString();
+    const state = mockDb.getStreakState();
+
+    if (state.hasClaimedToday) {
+      return { error: 'Already claimed today' };
+    }
+
+    const nextStreak = (state.currentStreak || 0) + 1;
+    const dayInCycle = ((nextStreak - 1) % 7) + 1;
+
+    // 7-Day Reward Ladder (BP)
+    const rewards = {
+      1: 10,
+      2: 15,
+      3: 20,
+      4: 25,
+      5: 30,
+      6: 40,
+      7: 100
+    };
+    const rewardBP = rewards[dayInCycle] || 20;
+
+    const updatedState = {
+      currentStreak: nextStreak,
+      lastClaimDate: today,
+      hasClaimedToday: true,
+      claimedDays: Array.from(new Set([...(state.claimedDays || []), dayInCycle]))
+    };
+
+    localStorage.setItem(STREAK_KEY, JSON.stringify(updatedState));
+
+    // Update guest profile streak
+    mockDb.updateGuestProfile({ streak: nextStreak });
+
+    // Award BP
+    const newTotalBP = mockDb.awardBP(rewardBP);
+
+    return {
+      success: true,
+      rewardBP,
+      currentStreak: nextStreak,
+      dayInCycle,
+      isSuperChest: dayInCycle === 7,
+      newTotalBP,
+      state: updatedState
+    };
   }
 };

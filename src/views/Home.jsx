@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Flame, Coins, Bell, Shield, Play } from 'lucide-react';
 import PrimaryButton from '../components/common/PrimaryButton';
 import CurrencyBadge from '../components/common/CurrencyBadge';
 import AdventureScene from '../components/home/AdventureScene';
 import LobbySideAction from '../components/home/LobbySideAction';
+import DailyMissionModal from '../components/home/DailyMissionModal';
+import StreakRewardModal from '../components/home/StreakRewardModal';
 import { getHomeScene } from '../data/homeScenes';
 
 const Home = ({
@@ -13,7 +14,8 @@ const Home = ({
   playsToday = 0,
   onStartChallenge,
   onGoMarket,
-  onGoBattle
+  onGoBattle,
+  onUpdateBP
 }) => {
   // Player Display Info
   const playerName = currentUser
@@ -189,7 +191,7 @@ const Home = ({
           onContinue={onGoBattle || onStartChallenge}
         />
 
-        {/* Right Action Column (Event, Boss Gate, Achievement) */}
+        {/* Right Action Column (Event, Boss Gate, Achievements - Step 22) */}
         <div
           style={{
             display: 'flex',
@@ -197,71 +199,62 @@ const Home = ({
             justifyContent: 'flex-start',
             gap: '12px',
             zIndex: 15,
-            width: '54px'
+            width: '56px'
           }}
         >
-          {/* Placeholder for Step 22 Right side icons */}
-          <div
-            style={{
-              width: '48px',
-              height: '48px',
-              borderRadius: '16px',
-              background: 'rgba(30, 41, 59, 0.9)',
-              border: '2px solid rgba(255, 255, 255, 0.15)',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              color: '#FFFFFF'
-            }}
-          >
-            <span style={{ fontSize: '18px' }}>⚡</span>
-            <span style={{ fontSize: '9px', fontWeight: 800 }}>Event</span>
-          </div>
+          {/* 1. 限时活动 (Event - HOT 标识) */}
+          <LobbySideAction
+            icon="⚡"
+            label="Event"
+            badgeType="pill"
+            badgeText="HOT"
+            badgeColor="#A855F7"
+            glowColor="rgba(168, 85, 247, 0.4)"
+            onClick={() => setActiveModal('event')}
+          />
 
-          <div
-            style={{
-              width: '48px',
-              height: '48px',
-              borderRadius: '16px',
-              background: 'rgba(30, 41, 59, 0.9)',
-              border: '2px solid rgba(255, 255, 255, 0.15)',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              color: '#FFFFFF'
-            }}
-          >
-            <span style={{ fontSize: '18px' }}>🔒</span>
-            <span style={{ fontSize: '9px', fontWeight: 800 }}>Boss</span>
-          </div>
+          {/* 2. 领主封印巨门 (Boss Gate - 显示 LOCKED) */}
+          <LobbySideAction
+            icon="💀"
+            label="Boss"
+            badgeType="pill"
+            badgeText="LOCKED"
+            badgeColor="#EF4444"
+            glowColor="rgba(239, 68, 68, 0.35)"
+            onClick={() => setActiveModal('boss')}
+          />
 
-          <div
-            style={{
-              width: '48px',
-              height: '48px',
-              borderRadius: '16px',
-              background: 'rgba(30, 41, 59, 0.9)',
-              border: '2px solid rgba(255, 255, 255, 0.15)',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              color: '#FFFFFF'
-            }}
-          >
-            <span style={{ fontSize: '18px' }}>🏆</span>
-            <span style={{ fontSize: '9px', fontWeight: 800 }}>Badge</span>
-          </div>
+          {/* 3. 成就勋章 (Achievements - 显示进度 1/12) */}
+          <LobbySideAction
+            icon="🏆"
+            label="Badge"
+            badgeType="pill"
+            badgeText="1/12"
+            badgeColor="#EAB308"
+            glowColor="rgba(234, 179, 8, 0.4)"
+            onClick={() => setActiveModal('achievements')}
+          />
         </div>
       </div>
 
-      {/* Dynamic Modal Container for Lobby Side Actions (Steps 21, 26, 27, 28) */}
-      {activeModal && (
+      {/* Dedicated Daily Missions Modal (Step 26) */}
+      <DailyMissionModal
+        isOpen={activeModal === 'daily'}
+        onClose={() => setActiveModal(null)}
+        userBP={userBP}
+        onUpdateBP={onUpdateBP}
+        onGoBattle={onGoBattle || onStartChallenge}
+      />
+
+      {/* Dedicated Streak Reward Modal (Step 27) */}
+      <StreakRewardModal
+        isOpen={activeModal === 'streak'}
+        onClose={() => setActiveModal(null)}
+        onUpdateBP={onUpdateBP}
+      />
+
+      {/* Dynamic Modal Container for Lobby Side Actions (Steps 28, etc.) */}
+      {activeModal && activeModal !== 'daily' && activeModal !== 'streak' && (
         <div
           onClick={() => setActiveModal(null)}
           style={{
@@ -289,25 +282,44 @@ const Home = ({
               textAlign: 'center'
             }}
           >
-            {activeModal === 'daily' && (
-              <>
-                <div style={{ fontSize: '40px', marginBottom: '8px' }}>📜</div>
-                <h3 style={{ fontSize: '20px', fontWeight: 900, color: '#FFFFFF', margin: '0 0 8px 0' }}>Daily Mission</h3>
-                <p style={{ fontSize: '13px', color: '#94A3B8', margin: '0 0 20px 0' }}>每日任务系统（完成练习、累计答题）已就绪。</p>
-              </>
-            )}
-            {activeModal === 'streak' && (
-              <>
-                <div style={{ fontSize: '40px', marginBottom: '8px' }}>🔥</div>
-                <h3 style={{ fontSize: '20px', fontWeight: 900, color: '#FFFFFF', margin: '0 0 8px 0' }}>Streak Reward</h3>
-                <p style={{ fontSize: '13px', color: '#94A3B8', margin: '0 0 20px 0' }}>连续签到进度已记录：第 {streakDays} 天！</p>
-              </>
-            )}
             {activeModal === 'chest' && (
               <>
                 <div style={{ fontSize: '40px', marginBottom: '8px' }}>🎁</div>
                 <h3 style={{ fontSize: '20px', fontWeight: 900, color: '#FFFFFF', margin: '0 0 8px 0' }}>Lucky Chest</h3>
                 <p style={{ fontSize: '13px', color: '#94A3B8', margin: '0 0 20px 0' }}>免费幸运宝箱已就绪（READY），随时可开启！</p>
+              </>
+            )}
+            {activeModal === 'event' && (
+              <>
+                <div style={{ fontSize: '40px', marginBottom: '8px' }}>⚡</div>
+                <h3 style={{ fontSize: '20px', fontWeight: 900, color: '#FFFFFF', margin: '0 0 8px 0' }}>Limited Event</h3>
+                <div style={{ background: 'rgba(168, 85, 247, 0.15)', border: '1.5px solid #A855F7', borderRadius: '14px', padding: '12px', marginBottom: '16px' }}>
+                  <div style={{ fontSize: '14px', fontWeight: 900, color: '#F3E8FF', marginBottom: '4px' }}>🔥 阶段狂欢：双倍 BP 掉落</div>
+                  <p style={{ fontSize: '12px', color: '#D8B4FE', margin: 0 }}>本周末通关任意主线关卡，可获得 200% BankPoint！</p>
+                </div>
+              </>
+            )}
+            {activeModal === 'boss' && (
+              <>
+                <div style={{ fontSize: '40px', marginBottom: '8px' }}>💀</div>
+                <h3 style={{ fontSize: '20px', fontWeight: 900, color: '#EF4444', margin: '0 0 8px 0' }}>Boss Gate · 封印巨门</h3>
+                <div style={{ background: 'rgba(239, 68, 68, 0.15)', border: '1.5px solid #EF4444', borderRadius: '14px', padding: '12px', marginBottom: '16px' }}>
+                  <div style={{ fontSize: '14px', fontWeight: 900, color: '#FEE2E2', marginBottom: '4px' }}>🔒 状态：当前锁定中</div>
+                  <p style={{ fontSize: '12px', color: '#FCA5A5', margin: 0 }}>需通关 Chapter 1「训练营地」全部 8 个 Stage 方可挑战守卫巨兽！</p>
+                </div>
+              </>
+            )}
+            {activeModal === 'achievements' && (
+              <>
+                <div style={{ fontSize: '40px', marginBottom: '8px' }}>🏆</div>
+                <h3 style={{ fontSize: '20px', fontWeight: 900, color: '#FFBC00', margin: '0 0 8px 0' }}>Achievements & Badges</h3>
+                <div style={{ background: 'rgba(234, 179, 8, 0.15)', border: '1.5px solid #FFBC00', borderRadius: '14px', padding: '12px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ fontSize: '28px' }}>🎖️</span>
+                  <div style={{ textAlign: 'left' }}>
+                    <div style={{ fontSize: '13px', fontWeight: 900, color: '#FEF08A' }}>冒险启程者 (Starter Badge)</div>
+                    <div style={{ fontSize: '11px', color: '#CBD5E1' }}>已解锁 · 成功通过新手引导试炼</div>
+                  </div>
+                </div>
               </>
             )}
             <PrimaryButton onClick={() => setActiveModal(null)} size="medium" variant="primary">
