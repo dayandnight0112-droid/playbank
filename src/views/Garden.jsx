@@ -47,14 +47,45 @@ const Garden = ({ userBP = 0, onGoQuiz }) => {
   const claimedCount = missionsList.filter(m => m.claimed).length;
   const claimableCount = missionsList.filter(m => m.progress >= m.target && !m.claimed).length;
 
+  // Step 8: 浇水动画状态管理
+  const [isWatering, setIsWatering] = useState(false);
+  const [wateringPhase, setWateringPhase] = useState('idle'); // 'idle' | 'falling' | 'splashing'
+  const [showFloatingText, setShowFloatingText] = useState(false);
+
   const handleWaterClick = () => {
-    const result = mockDb.waterTree();
-    if (result.error) {
-      setToastMessage(result.error);
+    if (isWatering) return; // 播放动画期间防连点防狂刷
+    if (gardenState.water <= 0) {
+      setToastMessage('Complete Daily Missions to earn Water!');
       setTimeout(() => setToastMessage(null), 3200);
-    } else {
-      setGardenState(result.gardenState);
+      return;
     }
+
+    // Step 8: 触发纯 2D 浇水动效序列（总时长控制在 ~0.9s 以内）
+    setIsWatering(true);
+    setWateringPhase('falling');
+
+    // 阶段 1：水滴从上方下落 (~0.35s)
+    setTimeout(() => {
+      // 阶段 2：击中泥土/植物，水滴溅散波纹 + 树木弹跳 + 飘出 +10% Growth
+      setWateringPhase('splashing');
+      setShowFloatingText(true);
+
+      const result = mockDb.waterTree();
+      if (!result.error) {
+        setGardenState({ ...result.gardenState });
+      }
+
+      // 阶段 3：波纹平息 (0.35s)
+      setTimeout(() => {
+        setWateringPhase('idle');
+      }, 350);
+
+      // 阶段 4：成长徽章浮空淡出，解除按钮禁用，恢复可点击 (~0.9s 总时长)
+      setTimeout(() => {
+        setShowFloatingText(false);
+        setIsWatering(false);
+      }, 550);
+    }, 350);
   };
 
   // 手动点击 CLAIM 领取 Water
@@ -291,8 +322,112 @@ const Garden = ({ userBP = 0, onGoQuiz }) => {
           </div>
         </div>
 
-        {/* 2D 树木动态五阶段渲染器 */}
-        <TreeRenderer growth={gardenState.growth} treeId={currentTree.id} />
+        {/* Step 8: 树木容器与弹跳动画 */}
+        <div style={{
+          position: 'relative',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 2,
+          transformOrigin: 'bottom center',
+          animation: wateringPhase === 'splashing' ? 'tree-bounce 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)' : 'none'
+        }}>
+          {/* 下落水滴 (Phase: falling, ~0.35s) */}
+          {wateringPhase === 'falling' && (
+            <div style={{
+              position: 'absolute',
+              top: '-30px',
+              left: '50%',
+              zIndex: 25,
+              pointerEvents: 'none',
+              animation: 'drop-fall 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards'
+            }}>
+              <svg width="24" height="34" viewBox="0 0 24 34">
+                <path d="M 12,0 C 12,0 0,14 0,22 C 0,28.6 5.4,34 12,34 C 18.6,34 24,28.6 24,22 C 24,14 12,0 12,0 Z" fill="#29B6F6" stroke="#0277BD" strokeWidth="2" />
+                <ellipse cx="8" cy="22" rx="3" ry="6" fill="#E1F5FE" opacity="0.75" transform="rotate(-20 8 22)" />
+              </svg>
+            </div>
+          )}
+
+          {/* 水花与波纹特效 (Phase: splashing) */}
+          {wateringPhase === 'splashing' && (
+            <div style={{
+              position: 'absolute',
+              bottom: '40px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              zIndex: 25,
+              pointerEvents: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              {/* 扩散涟漪圈 */}
+              <div style={{
+                position: 'absolute',
+                width: '64px',
+                height: '24px',
+                borderRadius: '50%',
+                border: '2.5px solid #29B6F6',
+                background: 'rgba(41, 182, 246, 0.25)',
+                animation: 'splash-ripple 0.35s ease-out forwards'
+              }} />
+              {/* 左飞溅小水珠 */}
+              <div style={{
+                position: 'absolute',
+                width: '7px',
+                height: '7px',
+                borderRadius: '50%',
+                background: '#29B6F6',
+                border: '1.5px solid #0277BD',
+                animation: 'splash-left 0.35s ease-out forwards'
+              }} />
+              {/* 右飞溅小水珠 */}
+              <div style={{
+                position: 'absolute',
+                width: '7px',
+                height: '7px',
+                borderRadius: '50%',
+                background: '#29B6F6',
+                border: '1.5px solid #0277BD',
+                animation: 'splash-right 0.35s ease-out forwards'
+              }} />
+            </div>
+          )}
+
+          {/* 浮空飘动文字：“+10% Growth 🌿” */}
+          {showFloatingText && (
+            <div style={{
+              position: 'absolute',
+              top: '40%',
+              left: '50%',
+              zIndex: 35,
+              pointerEvents: 'none',
+              animation: 'float-up-growth 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards'
+            }}>
+              <div style={{
+                background: '#2E7D32',
+                color: '#FFFFFF',
+                border: '2px solid #1B5E20',
+                borderRadius: '9999px',
+                padding: '5px 14px',
+                fontSize: '13px',
+                fontWeight: 900,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                boxShadow: '0 4px 10px rgba(46, 125, 50, 0.4)',
+                whiteSpace: 'nowrap'
+              }}>
+                <span>+10% Growth</span>
+                <span>🌿</span>
+              </div>
+            </div>
+          )}
+
+          {/* 2D 树木动态五阶段渲染器 */}
+          <TreeRenderer growth={gardenState.growth} treeId={currentTree.id} />
+        </div>
 
         {/* 成长百分比进度条（Growth Progress Bar） */}
         <div style={{
@@ -345,28 +480,30 @@ const Garden = ({ userBP = 0, onGoQuiz }) => {
       }}>
         <button
           onClick={handleWaterClick}
+          disabled={isWatering || gardenState.water <= 0}
           style={{
             width: '100%',
             maxWidth: '340px',
             padding: '16px 24px',
-            backgroundColor: gardenState.water > 0 ? '#29B6F6' : '#B0BEC5',
+            backgroundColor: isWatering ? '#0288D1' : gardenState.water > 0 ? '#29B6F6' : '#B0BEC5',
             color: '#FFFFFF',
             border: '3px solid #2B2B2B',
             borderRadius: '24px',
             fontSize: '17px',
             fontWeight: 900,
-            cursor: 'pointer',
-            boxShadow: gardenState.water > 0 ? '0 5px 0px #0277BD, 0 8px 12px rgba(0,0,0,0.15)' : '0 4px 0px #78909C',
+            cursor: isWatering || gardenState.water <= 0 ? 'not-allowed' : 'pointer',
+            boxShadow: isWatering ? '0 2px 0px #01579B' : gardenState.water > 0 ? '0 5px 0px #0277BD, 0 8px 12px rgba(0,0,0,0.15)' : '0 4px 0px #78909C',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             gap: '10px',
-            transition: 'transform 0.1s ease, box-shadow 0.1s ease',
+            transform: isWatering ? 'translateY(3px)' : 'none',
+            transition: 'all 0.15s ease',
             letterSpacing: '0.5px'
           }}
         >
           <Droplet size={24} fill="#FFFFFF" color="#FFFFFF" />
-          <span>WATER TREE</span>
+          <span>{isWatering ? 'WATERING...' : 'WATER TREE'}</span>
           <span style={{
             fontSize: '12px',
             background: 'rgba(0,0,0,0.2)',
@@ -389,6 +526,87 @@ const Garden = ({ userBP = 0, onGoQuiz }) => {
             : 'Complete Daily Missions to earn more Water!'}
         </p>
       </div>
+
+      {/* Step 8: 浇水 2D 动画专有样式 */}
+      <style>{`
+        @keyframes drop-fall {
+          0% {
+            transform: translate(-50%, -80px) scale(0.6);
+            opacity: 0;
+          }
+          20% {
+            opacity: 1;
+          }
+          80% {
+            transform: translate(-50%, 60px) scale(1.1);
+            opacity: 1;
+          }
+          100% {
+            transform: translate(-50%, 100px) scale(0.7);
+            opacity: 0;
+          }
+        }
+
+        @keyframes splash-ripple {
+          0% {
+            transform: scale(0.2);
+            opacity: 0.9;
+          }
+          100% {
+            transform: scale(1.5);
+            opacity: 0;
+          }
+        }
+
+        @keyframes splash-left {
+          0% {
+            transform: translate(0, 0) scale(1);
+            opacity: 1;
+          }
+          100% {
+            transform: translate(-22px, -20px) scale(0);
+            opacity: 0;
+          }
+        }
+
+        @keyframes splash-right {
+          0% {
+            transform: translate(0, 0) scale(1);
+            opacity: 1;
+          }
+          100% {
+            transform: translate(22px, -20px) scale(0);
+            opacity: 0;
+          }
+        }
+
+        @keyframes tree-bounce {
+          0% { transform: scale(1); }
+          25% { transform: scale(1.08, 0.94) translateY(-5px); }
+          50% { transform: scale(0.96, 1.04) translateY(0); }
+          75% { transform: scale(1.02, 0.98); }
+          100% { transform: scale(1) translateY(0); }
+        }
+
+        @keyframes float-up-growth {
+          0% {
+            transform: translate(-50%, 10px) scale(0.6);
+            opacity: 0;
+          }
+          30% {
+            transform: translate(-50%, -20px) scale(1.1);
+            opacity: 1;
+          }
+          70% {
+            transform: translate(-50%, -40px) scale(1.0);
+            opacity: 1;
+          }
+          100% {
+            transform: translate(-50%, -60px) scale(0.9);
+            opacity: 0;
+          }
+        }
+      `}</style>
 
       {/* Daily Mission 预览抽屉/模态框 */}
       {showMissionModal && (
