@@ -1,5 +1,5 @@
 // Mock Database using LocalStorage
-import { questions as defaultQuestions } from '../data/questions';
+import { questions as defaultQuestions } from '../data/questions.js';
 const USERS_KEY = 'playbank_users';
 const CURRENT_SESSION_KEY = 'playbank_session';
 const PRODUCTS_KEY = 'playbank_products';
@@ -67,6 +67,30 @@ export const getMalaysiaDateString = () => {
   const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
   const malaysiaTime = new Date(utc + (3600000 * 8));
   return malaysiaTime.toISOString().split('T')[0];
+};
+
+export const getTimeUntilMalaysiaMidnight = () => {
+  const now = new Date();
+  const nowUtc = now.getTime() + (now.getTimezoneOffset() * 60000);
+  const nowMY = new Date(nowUtc + (8 * 3600000));
+  
+  const nextMidnightMY = new Date(nowMY);
+  nextMidnightMY.setHours(24, 0, 0, 0);
+  
+  const diffMs = Math.max(0, nextMidnightMY.getTime() - nowMY.getTime());
+  const hours = Math.floor(diffMs / (1000 * 60 * 60));
+  const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+  const seconds = Math.floor((diffMs % (1000 * 60)) / 1000);
+  const pad = (n) => String(n).padStart(2, '0');
+
+  return {
+    diffMs,
+    hours,
+    minutes,
+    seconds,
+    formatted: `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`,
+    approxFormatted: `${hours}h ${minutes}m`
+  };
 };
 
 export const createInitialDailyMissions = (dateStr) => ({
@@ -801,5 +825,23 @@ export const mockDb = {
       saveDailyMissionsRaw(state);
     }
     return state;
+  },
+
+  // Step 6: 检查并在跨天时自动重置
+  checkAndResetDailyMissions: () => {
+    return getDailyMissionsRaw();
+  },
+
+  // Step 6: 模拟触发 00:00 跨天重置（重置 3 个任务 progress=0, claimed=false；Water 与树成长不重置）
+  resetDailyMissionsForce: (targetDate) => {
+    const today = targetDate || getMalaysiaDateString();
+    const resetState = createInitialDailyMissions(today);
+    saveDailyMissionsRaw(resetState);
+    return resetState;
+  },
+
+  // Step 6: 获取距马来西亚 00:00 的倒计时
+  getTimeUntilMalaysiaMidnight: () => {
+    return getTimeUntilMalaysiaMidnight();
   }
 };

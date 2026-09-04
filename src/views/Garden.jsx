@@ -12,6 +12,35 @@ const Garden = ({ userBP = 0, onGoQuiz }) => {
   const stageInfo = getStageByGrowth(gardenState.growth);
   const [toastMessage, setToastMessage] = useState(null);
   const [dailyMissionsState, setDailyMissionsState] = useState(() => mockDb.getDailyMissions());
+  const [countdown, setCountdown] = useState(() => mockDb.getTimeUntilMalaysiaMidnight().formatted);
+
+  // Step 6: 实时更新马来西亚 00:00 倒计时并在跨天时自动刷新重置
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const timeInfo = mockDb.getTimeUntilMalaysiaMidnight();
+      setCountdown(timeInfo.formatted);
+
+      // 当跨日时自动重置任务
+      const freshMissions = mockDb.checkAndResetDailyMissions();
+      if (freshMissions.date !== dailyMissionsState.date) {
+        setDailyMissionsState({ ...freshMissions });
+      }
+    }, 1000);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        const freshMissions = mockDb.checkAndResetDailyMissions();
+        setDailyMissionsState({ ...freshMissions });
+        setGardenState(mockDb.getGardenState());
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [dailyMissionsState.date]);
 
   // 统计完成与待领取数
   const missionsList = Object.values(dailyMissionsState.missions || {});
@@ -46,6 +75,15 @@ const Garden = ({ userBP = 0, onGoQuiz }) => {
   const handleTestCompleteMission = (missionKey) => {
     const state = mockDb.setMissionProgressDirect(missionKey, 999);
     setDailyMissionsState({ ...state });
+  };
+
+  // Step 6: 供直接模拟 00:00 马来西亚时间跨日重置（保留 Water 与 Growth）
+  const handleSimulateMidnightReset = () => {
+    const resetMissions = mockDb.resetDailyMissionsForce();
+    setDailyMissionsState({ ...resetMissions });
+    const currentGarden = mockDb.getGardenState();
+    setToastMessage(`🔄 00:00 Reset: Missions reset to 0/3. Water (${currentGarden.water}) & Tree (${currentGarden.growth}%) kept!`);
+    setTimeout(() => setToastMessage(null), 3500);
   };
 
   return (
@@ -379,11 +417,25 @@ const Garden = ({ userBP = 0, onGoQuiz }) => {
             flexDirection: 'column',
             gap: '16px'
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
-                <h3 style={{ fontSize: '20px', fontWeight: 900, color: '#2B2B2B' }}>Daily Missions</h3>
-                <p style={{ fontSize: '12px', fontWeight: 600, color: '#777', marginTop: '2px' }}>
-                  Resets daily at 00:00 (Malaysia Time)
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <h3 style={{ fontSize: '20px', fontWeight: 900, color: '#2B2B2B' }}>Daily Missions</h3>
+                  <span style={{
+                    background: '#EDE7F6',
+                    color: '#5E35B1',
+                    border: '1px solid #D1C4E9',
+                    fontSize: '10px',
+                    fontWeight: 800,
+                    padding: '2px 7px',
+                    borderRadius: '9999px',
+                    letterSpacing: '0.3px'
+                  }}>
+                    MYT (UTC+8)
+                  </span>
+                </div>
+                <p style={{ fontSize: '12px', fontWeight: 700, color: '#666666', marginTop: '3px' }}>
+                  Resets in: <span style={{ color: '#E65100', fontFamily: 'monospace', fontWeight: 900, fontSize: '13px' }}>{countdown}</span> (at 00:00)
                 </p>
               </div>
               <button 
@@ -403,6 +455,45 @@ const Garden = ({ userBP = 0, onGoQuiz }) => {
                 }}
               >
                 ✕
+              </button>
+            </div>
+
+            {/* Step 6: 00:00 重置机制提示与快捷测试卡片 */}
+            <div style={{
+              background: '#F3E5F5',
+              border: '1.5px dashed #BA68C8',
+              borderRadius: '14px',
+              padding: '10px 14px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '10px'
+            }}>
+              <div>
+                <p style={{ fontSize: '11px', fontWeight: 800, color: '#6A1B9A', lineHeight: 1.2 }}>
+                  🌙 00:00 Auto Reset (MYT)
+                </p>
+                <p style={{ fontSize: '10px', color: '#7B1FA2', marginTop: '2px' }}>
+                  Missions reset daily. Water & Tree growth are preserved!
+                </p>
+              </div>
+              <button
+                onClick={handleSimulateMidnightReset}
+                title="Simulate 00:00 midnight reset"
+                style={{
+                  background: '#8E24AA',
+                  color: '#FFFFFF',
+                  border: '1.5px solid #4A148C',
+                  borderRadius: '10px',
+                  padding: '5px 10px',
+                  fontSize: '11px',
+                  fontWeight: 900,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  boxShadow: '0 2px 0 #4A148C'
+                }}
+              >
+                🔄 Test Reset
               </button>
             </div>
 
