@@ -170,7 +170,7 @@ function App() {
       case 'select_subject':
         return <SelectSubject onBack={() => setCurrentView('home')} onStartQuiz={startQuizFlow} openModal={openModal} />;
       case 'quiz':
-        return <Quiz onComplete={handleQuizComplete} onBack={handleQuitQuiz} currentBP={userBP} currentUser={currentUser} />;
+        return <Quiz onComplete={handleQuizComplete} onBack={handleQuitQuiz} currentBP={userBP} currentUser={currentUser} onGoGarden={() => setCurrentView('garden')} />;
       case 'garden':
         return <Garden userBP={userBP} onGoQuiz={() => setCurrentView('select_subject')} />;
       case 'marketplace':

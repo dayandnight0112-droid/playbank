@@ -97,7 +97,7 @@ function SummaryItem({ icon, color, label, value }) {
 
 const shuffleArray = (array) => [...array].sort(() => Math.random() - 0.5);
 
-const Quiz = ({ onComplete, onBack, currentBP, currentUser }) => {
+const Quiz = ({ onComplete, onBack, currentBP, currentUser, onGoGarden }) => {
   const rawQuestions = mockDb.getQuestions();
   const { width, height } = useWindowSize();
   const multiplier = currentUser?.score_multiplier || 1;
@@ -126,6 +126,7 @@ const Quiz = ({ onComplete, onBack, currentBP, currentUser }) => {
   const claimBtnRef = useRef(null);
   const [isAnimating, setIsAnimating] = useState(false);
   const [animVars, setAnimVars] = useState({});
+  const hasRecordedMissionsRef = useRef(false);
 
   // Initialize quiz
   useEffect(() => {
@@ -134,6 +135,18 @@ const Quiz = ({ onComplete, onBack, currentBP, currentUser }) => {
     setupQuestion(shuffledQ[0]);
     setStartTime(Date.now());
   }, []);
+
+  // Step 7: Quiz 挑战完成进入结算时，自动推进 Daily Missions 进度（不直接给水，只推进度）
+  useEffect(() => {
+    if (status === 'result' && questions.length > 0 && !hasRecordedMissionsRef.current) {
+      hasRecordedMissionsRef.current = true;
+      mockDb.recordQuizForDailyMissions({
+        quizCompleted: 1,
+        questionsAnswered: questions.length,
+        correctAnswers: correctCount
+      });
+    }
+  }, [status, questions.length, correctCount]);
 
   const setupQuestion = (question) => {
     if (!question) return;
@@ -315,6 +328,62 @@ const Quiz = ({ onComplete, onBack, currentBP, currentUser }) => {
             </div>
 
             <ProgressCard />
+
+            {/* Step 7: Garden Missions Progress Notification */}
+            <div 
+              onClick={() => {
+                if (onGoGarden) onGoGarden();
+              }}
+              style={{
+                marginTop: '12px',
+                background: '#F1F8E9',
+                border: '2px solid #66BB6A',
+                borderRadius: '18px',
+                padding: '12px 14px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                cursor: onGoGarden ? 'pointer' : 'default',
+                boxShadow: '0 3px 0px #2E7D32'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '50%',
+                  background: '#C8E6C9',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '18px'
+                }}>
+                  🌱
+                </div>
+                <div>
+                  <p style={{ fontSize: '13px', fontWeight: 900, color: '#1B5E20' }}>
+                    Garden Missions Updated!
+                  </p>
+                  <p style={{ fontSize: '11px', fontWeight: 600, color: '#2E7D32', marginTop: '2px' }}>
+                    +1 Quiz · +{questions.length} Qs · +{correctCount} Correct
+                  </p>
+                </div>
+              </div>
+              <div style={{
+                background: '#2E7D32',
+                color: '#FFF',
+                padding: '6px 12px',
+                borderRadius: '10px',
+                fontSize: '11px',
+                fontWeight: 900,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '3px',
+                whiteSpace: 'nowrap'
+              }}>
+                CLAIM 💧 →
+              </div>
+            </div>
 
             <div style={{ marginTop: '16px', borderRadius: '18px', border: '1px solid #EEEEEE', background: '#FFF', padding: '12px' }}>
               <h2 style={{ fontSize: '13px', fontWeight: 900, color: '#000' }}>

@@ -843,5 +843,48 @@ export const mockDb = {
   // Step 6: 获取距马来西亚 00:00 的倒计时
   getTimeUntilMalaysiaMidnight: () => {
     return getTimeUntilMalaysiaMidnight();
+  },
+
+  // Step 7: 连接 Quiz 挑战结果到 Daily Mission 进度（不直接给水，只推进任务进度）
+  recordQuizForDailyMissions: ({ quizCompleted = 1, questionsAnswered = 10, correctAnswers = 0 } = {}) => {
+    const state = getDailyMissionsRaw();
+    if (!state || !state.missions) return null;
+
+    let updated = false;
+
+    // 任务 1: Complete 1 Quiz (目标 1)
+    if (state.missions.completeQuiz && !state.missions.completeQuiz.claimed) {
+      const oldVal = state.missions.completeQuiz.progress || 0;
+      state.missions.completeQuiz.progress = Math.min(
+        state.missions.completeQuiz.target,
+        oldVal + quizCompleted
+      );
+      updated = true;
+    }
+
+    // 任务 2: Answer 10 Questions (目标 10)
+    if (state.missions.answerQuestions && !state.missions.answerQuestions.claimed) {
+      const oldVal = state.missions.answerQuestions.progress || 0;
+      state.missions.answerQuestions.progress = Math.min(
+        state.missions.answerQuestions.target,
+        oldVal + questionsAnswered
+      );
+      updated = true;
+    }
+
+    // 任务 3: Get 5 Correct Answers (目标 5)
+    if (state.missions.correctAnswers && !state.missions.correctAnswers.claimed) {
+      const oldVal = state.missions.correctAnswers.progress || 0;
+      state.missions.correctAnswers.progress = Math.min(
+        state.missions.correctAnswers.target,
+        oldVal + correctAnswers
+      );
+      updated = true;
+    }
+
+    if (updated) {
+      saveDailyMissionsRaw(state);
+    }
+    return state;
   }
 };
