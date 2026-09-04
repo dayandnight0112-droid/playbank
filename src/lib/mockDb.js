@@ -10,17 +10,23 @@ export const DEFAULT_TREES = [
   {
     id: "apple",
     name: "Apple Tree",
-    rewardBP: 80
+    icon: "🍎",
+    rewardBP: 80,
+    description: "Classic sweet apple tree with fresh leaves and juicy red apples."
   },
   {
     id: "sunflower",
     name: "Sunflower",
-    rewardBP: 50
+    icon: "🌻",
+    rewardBP: 50,
+    description: "Radiant golden sunflower blooming with warm sunshine and seeds."
   },
   {
     id: "bean",
     name: "Bean Plant",
-    rewardBP: 30
+    icon: "🫘",
+    rewardBP: 30,
+    description: "Enchanted climbing beanstalk with hanging jade bean pods."
   }
 ];
 
@@ -958,12 +964,44 @@ export const mockDb = {
 
     saveGardenStateRaw(updatedState);
 
+    const nextTree = mockDb.getNextTreeConfig(treeConfig.id);
+
     return {
       success: true,
       rewardBP,
       newTotalBP,
       tree: treeConfig,
+      nextTree,
       gardenState: updatedState
+    };
+  },
+
+  // Step 10: 获取当前植物对应的下一棵树种配置
+  getNextTreeConfig: (currentTreeId) => {
+    const trees = DEFAULT_TREES;
+    const currentIndex = trees.findIndex(t => t.id === currentTreeId);
+    if (currentIndex === -1) return trees[1] || trees[0];
+    const nextIndex = (currentIndex + 1) % trees.length;
+    return trees[nextIndex];
+  },
+
+  // Step 10: 切换/种植下一棵树（保留现有水滴、BP与历史收藏，成长值重置为 0% 阶段 1）
+  switchTree: (treeId) => {
+    const state = getGardenStateRaw();
+    const targetTree = DEFAULT_TREES.find(t => t.id === treeId) || DEFAULT_TREES[0];
+
+    const updated = {
+      ...state,
+      currentTreeId: targetTree.id,
+      growth: 0,
+      stage: 1,
+      lastUpdated: new Date().toISOString()
+    };
+    saveGardenStateRaw(updated);
+    return {
+      success: true,
+      tree: targetTree,
+      gardenState: updated
     };
   },
 

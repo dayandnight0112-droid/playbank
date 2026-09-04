@@ -10,6 +10,7 @@ const Garden = ({ userBP = 0, onUpdateBP, onGoQuiz }) => {
   const [gardenState, setGardenState] = useState(() => mockDb.getGardenState());
   const [showMissionModal, setShowMissionModal] = useState(false);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
+  const [showUnlockModal, setShowUnlockModal] = useState(false);
   const [localBP, setLocalBP] = useState(userBP);
 
   const { width, height } = useWindowSize();
@@ -19,6 +20,7 @@ const Garden = ({ userBP = 0, onUpdateBP, onGoQuiz }) => {
   }, [userBP]);
 
   const currentTree = treesConfig.find(t => t.id === gardenState.currentTreeId) || treesConfig[0];
+  const nextTree = mockDb.getNextTreeConfig(currentTree.id);
   const stageInfo = getStageByGrowth(gardenState.growth);
   const [toastMessage, setToastMessage] = useState(null);
   const [dailyMissionsState, setDailyMissionsState] = useState(() => mockDb.getDailyMissions());
@@ -118,7 +120,7 @@ const Garden = ({ userBP = 0, onUpdateBP, onGoQuiz }) => {
     }, 350);
   };
 
-  // Step 9: 领取成熟树木的 BP 奖励
+  // Step 9 & 10: 领取成熟树木的 BP 奖励并触发下一棵树解锁
   const handleCollectTreeReward = () => {
     const res = mockDb.claimTreeReward(currentTree.id);
     if (res.success) {
@@ -128,10 +130,24 @@ const Garden = ({ userBP = 0, onUpdateBP, onGoQuiz }) => {
       setToastMessage(`🎉 Congratulations! +${res.rewardBP} BP collected!`);
       setTimeout(() => setToastMessage(null), 3500);
       setShowCompleteModal(false);
+      // Step 10: 领取奖励后，展示解锁下一棵树弹窗！
+      setShowUnlockModal(true);
     } else {
       setToastMessage(res.error);
       setTimeout(() => setToastMessage(null), 3000);
       setShowCompleteModal(false);
+    }
+  };
+
+  // Step 10: 切换/种植指定树种（保留现有水滴、BP余额与历史图鉴，成长值重置为 0% 种子）
+  const handleSwitchToTree = (targetTreeId) => {
+    const res = mockDb.switchTree(targetTreeId);
+    if (res.success) {
+      setGardenState({ ...res.gardenState });
+      setShowUnlockModal(false);
+      setShowCompleteModal(false);
+      setToastMessage(`🌱 Planted ${res.tree.icon || ''} ${res.tree.name}! Ready to grow.`);
+      setTimeout(() => setToastMessage(null), 3200);
     }
   };
 
@@ -359,6 +375,64 @@ const Garden = ({ userBP = 0, onUpdateBP, onGoQuiz }) => {
           zIndex: 1
         }} />
 
+        {/* Step 10: 植物选择与切换标签栏 (Tree Selector Bar) */}
+        <div style={{
+          zIndex: 5,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '8px',
+          marginBottom: '10px'
+        }}>
+          {treesConfig.map(tree => {
+            const isSelected = tree.id === currentTree.id;
+            const isCompleted = gardenState.completedTrees?.includes(tree.id);
+            return (
+              <button
+                key={tree.id}
+                onClick={() => {
+                  if (tree.id !== currentTree.id) {
+                    handleSwitchToTree(tree.id);
+                  }
+                }}
+                title={`Switch to ${tree.name}`}
+                style={{
+                  padding: '5px 12px',
+                  borderRadius: '9999px',
+                  border: isSelected ? '2px solid #2B2B2B' : '1.5px solid #D7CCC8',
+                  background: isSelected ? '#FFFFFF' : 'rgba(255,255,255,0.7)',
+                  boxShadow: isSelected ? '2px 2px 0px #2B2B2B' : 'none',
+                  fontSize: '12px',
+                  fontWeight: isSelected ? 900 : 700,
+                  color: isSelected ? '#2B2B2B' : '#795548',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <span>{tree.icon || '🌱'}</span>
+                <span>{tree.name}</span>
+                {isCompleted && (
+                  <span style={{
+                    fontSize: '10px',
+                    background: '#C8E6C9',
+                    color: '#2E7D32',
+                    borderRadius: '50%',
+                    width: '14px',
+                    height: '14px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: 900
+                  }}>✓</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
         {/* 树名称与当前阶段徽章 */}
         <div style={{ zIndex: 2, textAlign: 'center', marginBottom: '16px' }}>
           <h2 style={{
@@ -368,7 +442,7 @@ const Garden = ({ userBP = 0, onUpdateBP, onGoQuiz }) => {
             letterSpacing: '-0.5px',
             lineHeight: 1.2
           }}>
-            {currentTree.name}
+            {currentTree.icon} {currentTree.name}
           </h2>
           <div style={{
             marginTop: '6px',
@@ -574,26 +648,33 @@ const Garden = ({ userBP = 0, onUpdateBP, onGoQuiz }) => {
             <span>🎉</span>
           </button>
         ) : isMature && isTreeRewardClaimed ? (
-          /* 成熟且已领：提示准备进入下一棵树 */
-          <div style={{
-            width: '100%',
-            maxWidth: '340px',
-            padding: '14px 20px',
-            backgroundColor: '#E8F5E9',
-            color: '#2E7D32',
-            border: '2px solid #66BB6A',
-            borderRadius: '20px',
-            fontSize: '14px',
-            fontWeight: 900,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '8px',
-            boxShadow: '0 3px 0px #388E3C'
-          }}>
-            <CheckCircle2 size={18} color="#2E7D32" />
-            <span>Tree Completed & BP Claimed!</span>
-          </div>
+          /* 成熟且已领：提示一键种植下一棵树 */
+          <button
+            onClick={() => setShowUnlockModal(true)}
+            style={{
+              width: '100%',
+              maxWidth: '340px',
+              padding: '16px 24px',
+              backgroundColor: '#4CAF50',
+              color: '#FFFFFF',
+              border: '3px solid #2B2B2B',
+              borderRadius: '24px',
+              fontSize: '16px',
+              fontWeight: 900,
+              cursor: 'pointer',
+              boxShadow: '0 5px 0px #2E7D32, 0 8px 16px rgba(46, 125, 50, 0.25)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              letterSpacing: '0.3px',
+              animation: 'pop 0.3s ease'
+            }}
+          >
+            <Sprout size={22} fill="#FFFFFF" color="#2B2B2B" />
+            <span>PLANT NEXT: {nextTree.name} ({nextTree.icon})</span>
+            <span>🌱</span>
+          </button>
         ) : (
           /* 未成熟：常规 WATER TREE 按键 */
           <button
@@ -676,6 +757,29 @@ const Garden = ({ userBP = 0, onUpdateBP, onGoQuiz }) => {
               ⚡ Test 100% Mature
             </button>
           )}
+        </div>
+
+        {/* Step 10 辅助测试：快速切换树种 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px' }}>
+          <span style={{ fontSize: '11px', color: '#8A8A8A', fontWeight: 700 }}>Switch Plant:</span>
+          {treesConfig.map(t => (
+            <button
+              key={t.id}
+              onClick={() => handleSwitchToTree(t.id)}
+              style={{
+                background: t.id === currentTree.id ? '#C8E6C9' : '#FFFFFF',
+                border: t.id === currentTree.id ? '1.5px solid #4CAF50' : '1px solid #D7CCC8',
+                borderRadius: '6px',
+                padding: '2px 8px',
+                fontSize: '11px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                color: '#2B2B2B'
+              }}
+            >
+              {t.icon} {t.name.split(' ')[0]}
+            </button>
+          ))}
         </div>
 
         <p style={{
@@ -1181,6 +1285,150 @@ const Garden = ({ userBP = 0, onUpdateBP, onGoQuiz }) => {
             >
               <span>Collect {currentTree.rewardBP} BP & Continue</span>
               <span>→</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Step 10: 解锁下一棵树弹窗 (Next Tree Unlocked Modal) */}
+      {showUnlockModal && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          backgroundColor: 'rgba(0,0,0,0.72)',
+          backdropFilter: 'blur(6px)',
+          zIndex: 310,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '20px'
+        }}>
+          <Confetti width={width} height={height} recycle={false} numberOfPieces={280} colors={['#FFD54F', '#81C784', '#64B5F6', '#FF8A65', '#FFF']} />
+          
+          <div style={{
+            background: '#FFFFFF',
+            width: '100%',
+            maxWidth: '380px',
+            borderRadius: '28px',
+            border: '3px solid #2B2B2B',
+            padding: '28px 24px 24px 24px',
+            boxShadow: '0 16px 36px rgba(0,0,0,0.3)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            textAlign: 'center',
+            position: 'relative',
+            animation: 'pop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)'
+          }}>
+            {/* 顶部解锁勋章 */}
+            <div style={{
+              background: '#E8F5E9',
+              border: '2px solid #4CAF50',
+              borderRadius: '9999px',
+              padding: '5px 16px',
+              fontSize: '12px',
+              fontWeight: 900,
+              color: '#2E7D32',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              marginBottom: '10px'
+            }}>
+              <Sparkles size={15} color="#2E7D32" />
+              <span>NEXT PLANT UNLOCKED!</span>
+            </div>
+
+            {/* 新植物图示 (成熟全貌预览) */}
+            <div style={{
+              width: '160px',
+              height: '160px',
+              margin: '2px 0 10px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <TreeRenderer growth={100} treeId={nextTree.id} />
+            </div>
+
+            <h3 style={{
+              fontSize: '24px',
+              fontWeight: 900,
+              color: '#2B2B2B',
+              lineHeight: 1.2
+            }}>
+              {nextTree.icon} {nextTree.name}
+            </h3>
+
+            <p style={{
+              fontSize: '13px',
+              fontWeight: 600,
+              color: '#666',
+              marginTop: '6px',
+              lineHeight: 1.4
+            }}>
+              {nextTree.description}
+            </p>
+
+            {/* 奖励机制说明卡片 */}
+            <div style={{
+              marginTop: '16px',
+              width: '100%',
+              background: 'linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%)',
+              border: '2px solid #4CAF50',
+              borderRadius: '20px',
+              padding: '12px 16px',
+              boxShadow: '0 4px 0px #388E3C'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                <Star size={20} fill="#FFB300" color="#E65100" />
+                <span style={{ fontSize: '20px', fontWeight: 900, color: '#1B5E20' }}>
+                  +{nextTree.rewardBP} BP Reward
+                </span>
+              </div>
+              <p style={{ fontSize: '11px', fontWeight: 800, color: '#2E7D32', marginTop: '4px' }}>
+                Water to 100% maturity to claim! (Retains all water: {gardenState.water} 💧)
+              </p>
+            </div>
+
+            {/* 立即种植按键 */}
+            <button
+              onClick={() => handleSwitchToTree(nextTree.id)}
+              style={{
+                marginTop: '20px',
+                width: '100%',
+                padding: '16px',
+                background: '#4CAF50',
+                color: '#FFFFFF',
+                border: '3px solid #2B2B2B',
+                borderRadius: '20px',
+                fontSize: '16px',
+                fontWeight: 900,
+                cursor: 'pointer',
+                boxShadow: '0 5px 0px #2E7D32',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px'
+              }}
+            >
+              <span>Plant {nextTree.name} Now 🌱</span>
+            </button>
+
+            {/* 稍后种植 */}
+            <button
+              onClick={() => setShowUnlockModal(false)}
+              style={{
+                marginTop: '10px',
+                background: 'none',
+                border: 'none',
+                color: '#8A8A8A',
+                fontSize: '13px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                padding: '6px 12px'
+              }}
+            >
+              Maybe Later (Keep Current View)
             </button>
           </div>
         </div>
