@@ -7,6 +7,7 @@ import Quiz from './views/Quiz';
 import Marketplace from './views/Marketplace';
 import Profile from './views/Profile';
 import Leaderboard from './views/Leaderboard';
+import Garden from './views/Garden';
 import SaveScoreModal from './components/SaveScoreModal';
 import CustomModal from './components/CustomModal';
 import BoosterOfferModal from './components/BoosterOfferModal';
@@ -170,6 +171,8 @@ function App() {
         return <SelectSubject onBack={() => setCurrentView('home')} onStartQuiz={startQuizFlow} openModal={openModal} />;
       case 'quiz':
         return <Quiz onComplete={handleQuizComplete} onBack={handleQuitQuiz} currentBP={userBP} currentUser={currentUser} />;
+      case 'garden':
+        return <Garden userBP={userBP} onGoQuiz={() => setCurrentView('select_subject')} />;
       case 'marketplace':
         return (
           <Marketplace 

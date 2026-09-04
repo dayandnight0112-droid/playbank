@@ -1,9 +1,10 @@
-import { Home, Grid, Trophy, ShoppingBag, User } from 'lucide-react';
+import { Home, Zap, Sprout, ShoppingBag, User } from 'lucide-react';
 
 const BottomNav = ({ currentView, setCurrentView }) => {
   const navItems = [
     { id: 'home', icon: Home, label: 'Home' },
-    { id: 'leaderboard', icon: Trophy, label: 'Leaderboard' },
+    { id: 'select_subject', icon: Zap, label: 'Quiz' },
+    { id: 'garden', icon: Sprout, label: 'Garden' },
     { id: 'marketplace', icon: ShoppingBag, label: 'Redeem' },
     { id: 'profile', icon: User, label: 'Profile' }
   ];
