@@ -10,23 +10,15 @@ const Garden = ({ userBP = 0, onGoQuiz }) => {
 
   const currentTree = treesConfig.find(t => t.id === gardenState.currentTreeId) || treesConfig[0];
   const stageInfo = getStageByGrowth(gardenState.growth);
-
-  const updateState = (updates) => {
-    const updated = mockDb.updateGardenState(updates);
-    setGardenState(updated);
-  };
+  const [toastMessage, setToastMessage] = useState(null);
 
   const handleWaterClick = () => {
-    if (gardenState.water <= 0) {
-      alert("Complete Daily Missions to earn Water! 💧");
+    const result = mockDb.waterTree();
+    if (result.error) {
+      setToastMessage(result.error);
+      setTimeout(() => setToastMessage(null), 3200);
     } else {
-      const nextGrowth = Math.min(100, gardenState.growth + 10);
-      const nextStage = getStageByGrowth(nextGrowth);
-      updateState({
-        water: gardenState.water - 1,
-        growth: nextGrowth,
-        stage: nextStage.stage
-      });
+      setGardenState(result.gardenState);
     }
   };
 
@@ -88,14 +80,41 @@ const Garden = ({ userBP = 0, onGoQuiz }) => {
           boxShadow: '2px 2px 0px #1E88E5'
         }}>
           <Droplet size={16} fill="#29B6F6" color="#0288D1" />
-          <span style={{ fontSize: '14px', fontWeight: 900, color: '#0277BD' }}>
-            {gardenState.water}
-          </span>
-          <span style={{ fontSize: '11px', fontWeight: 700, color: '#0288D1', opacity: 0.8 }}>
-            WATER
+          <span style={{ fontSize: '13px', fontWeight: 900, color: '#0277BD' }}>
+            Water × {gardenState.water}
           </span>
         </div>
       </header>
+
+      {/* 缺水提示 Toast Banner */}
+      {toastMessage && (
+        <div 
+          onClick={() => setShowMissionModal(true)}
+          style={{
+            margin: '4px 20px 0 20px',
+            background: '#FFF0F0',
+            border: '2px solid #FF4D4F',
+            borderRadius: '16px',
+            padding: '10px 16px',
+            boxShadow: '0 4px 12px rgba(255, 77, 79, 0.15)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            zIndex: 99,
+            cursor: 'pointer'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '16px' }}>💧</span>
+            <span style={{ fontSize: '12px', fontWeight: 800, color: '#CF1322' }}>
+              {toastMessage}
+            </span>
+          </div>
+          <span style={{ fontSize: '11px', fontWeight: 900, color: '#FF4D4F', textDecoration: 'underline' }}>
+            View Missions →
+          </span>
+        </div>
+      )}
 
       {/* 每日任务快捷入口浮条（Daily Mission Entry） */}
       <div style={{ padding: '0 20px', marginTop: '6px', zIndex: 10 }}>

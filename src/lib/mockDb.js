@@ -28,18 +28,29 @@ const DEFAULT_GARDEN_STATE = {
   currentTreeId: "apple",
   growth: 0,
   stage: 1,
-  water: 0,
+  water: 3,
   completedTrees: [],
   collection: [],
-  lastUpdated: null
+  lastUpdated: null,
+  starterGranted: true
 };
 
 const getGardenStateRaw = () => {
   try {
     const raw = localStorage.getItem(GARDEN_STATE_KEY);
-    if (!raw) return { ...DEFAULT_GARDEN_STATE };
+    if (!raw) {
+      saveGardenStateRaw(DEFAULT_GARDEN_STATE);
+      return { ...DEFAULT_GARDEN_STATE };
+    }
     const parsed = JSON.parse(raw);
-    return { ...DEFAULT_GARDEN_STATE, ...parsed };
+    const merged = { ...DEFAULT_GARDEN_STATE, ...parsed };
+    // 确保初次体验 Step 4 时拥有 3 滴水供测试
+    if (!merged.starterGranted && merged.water === 0 && merged.growth === 0) {
+      merged.water = 3;
+      merged.starterGranted = true;
+      saveGardenStateRaw(merged);
+    }
+    return merged;
   } catch (e) {
     return { ...DEFAULT_GARDEN_STATE };
   }
@@ -638,6 +649,46 @@ export const mockDb = {
   updateGardenState: (updates) => {
     const current = getGardenStateRaw();
     const updated = { ...current, ...updates, lastUpdated: new Date().toISOString() };
+    saveGardenStateRaw(updated);
+    return updated;
+  },
+
+  // 浇水：Water -1, Growth +10
+  waterTree: () => {
+    const state = getGardenStateRaw();
+    const currentWater = state.water || 0;
+    if (currentWater <= 0) {
+      return { error: 'Complete Daily Missions to earn Water!' };
+    }
+
+    const newWater = Math.max(0, currentWater - 1);
+    const newGrowth = Math.min(100, (state.growth || 0) + 10);
+    
+    let newStage = 1;
+    if (newGrowth >= 80) newStage = 5;
+    else if (newGrowth >= 60) newStage = 4;
+    else if (newGrowth >= 40) newStage = 3;
+    else if (newGrowth >= 20) newStage = 2;
+
+    const updated = {
+      ...state,
+      water: newWater,
+      growth: newGrowth,
+      stage: newStage,
+      lastUpdated: new Date().toISOString()
+    };
+    saveGardenStateRaw(updated);
+    return { success: true, gardenState: updated };
+  },
+
+  // 增加 Water 资源
+  addWater: (amount = 1) => {
+    const state = getGardenStateRaw();
+    const updated = {
+      ...state,
+      water: (state.water || 0) + amount,
+      lastUpdated: new Date().toISOString()
+    };
     saveGardenStateRaw(updated);
     return updated;
   }
