@@ -14,9 +14,24 @@ import BoosterOfferModal from './components/BoosterOfferModal';
 import CompleteProfileModal from './components/CompleteProfileModal';
 import { mockDb } from './lib/mockDb';
 import AdminDashboard from './views/AdminDashboard';
+import WelcomeScreen from './views/WelcomeScreen';
+import ChoosePath from './views/ChoosePath';
+import Tutorial from './views/Tutorial';
+import TutorialReward from './views/TutorialReward';
+import LoginModal from './components/LoginModal';
 
 function App() {
-  const [currentView, setCurrentView] = useState('home');
+  const [guestProfile, setGuestProfile] = useState(() => mockDb.getGuestProfile());
+  const [showLoginModal, setShowLoginModal] = useState(false);
+
+  const [currentView, setCurrentView] = useState(() => {
+    const session = mockDb.getCurrentSession();
+    if (session) return 'home';
+    const guest = mockDb.getGuestProfile();
+    if (guest && guest.tutorialComplete) return 'home';
+    if (guest && guest.selectedPath && !guest.tutorialComplete) return 'tutorial';
+    return 'welcome';
+  });
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [showBoosterOffer, setShowBoosterOffer] = useState(false);
@@ -38,7 +53,9 @@ function App() {
   
   const [userBP, setUserBP] = useState(() => {
     const session = mockDb.getCurrentSession();
-    return session ? session.total_bp : (parseInt(localStorage.getItem('playbank_user_bp')) || 0);
+    if (session) return session.total_bp;
+    const guest = mockDb.getGuestProfile();
+    return guest ? (guest.bankPoint || 0) : (parseInt(localStorage.getItem('playbank_user_bp')) || 0);
   });
   
   const [playsToday, setPlaysToday] = useState(() => {
@@ -94,16 +111,18 @@ function App() {
     setPlaysToday(0);
     setUserBP(0);
     setCurrentUser(null);
+    mockDb.clearGuestProfile();
+    setGuestProfile(null);
     localStorage.removeItem(`playbank_plays_today_${currentUser ? currentUser.id : 'guest'}`);
     localStorage.removeItem(`playbank_last_play_date_${currentUser ? currentUser.id : 'guest'}`);
     localStorage.removeItem('playbank_user_bp');
     sessionStorage.removeItem('guest_first_play_register');
     sessionStorage.removeItem('guest_200_register');
     sessionStorage.removeItem('user_200_booster_shown');
-    setCurrentView('home');
+    setCurrentView('welcome');
     openModal({
       title: 'Reset Successful',
-      message: 'You are now a brand new guest! All BP, attempts, and memory have been wiped.',
+      message: 'You are now a brand new player! All data wiped, starting from Welcome Screen.',
       confirmText: 'Awesome'
     });
   };
@@ -165,6 +184,58 @@ function App() {
 
   const renderView = () => {
     switch (currentView) {
+      case 'welcome':
+        return (
+          <WelcomeScreen
+            onStart={() => setCurrentView('choose_path')}
+            onOpenLogin={() => setShowLoginModal(true)}
+          />
+        );
+      case 'choose_path':
+        return (
+          <ChoosePath
+            onSelectPath={(path) => {
+              const newGuest = mockDb.createGuest(path);
+              setGuestProfile(newGuest);
+              setUserBP(0);
+              setCurrentView('tutorial');
+            }}
+            onBack={() => setCurrentView('welcome')}
+          />
+        );
+      case 'tutorial':
+        return (
+          <Tutorial
+            guest={guestProfile}
+            onComplete={(earnedBP = 120) => {
+              const updated = mockDb.updateGuestProfile({
+                tutorialComplete: true,
+                bankPoint: (guestProfile?.bankPoint || 0) + earnedBP
+              });
+              setGuestProfile(updated);
+              setUserBP(updated?.bankPoint || earnedBP);
+              setCurrentView('tutorial_reward');
+            }}
+            onExit={() => {
+              openModal({
+                title: 'Leave Tutorial?',
+                message: "You're almost there! Complete the training to start your adventure.",
+                showCancel: true,
+                confirmText: 'Keep Going',
+                cancelText: 'Exit',
+                onConfirm: closeModal
+              });
+            }}
+          />
+        );
+      case 'tutorial_reward':
+        return (
+          <TutorialReward
+            guest={guestProfile}
+            onEnterLobby={() => setCurrentView('home')}
+            onLoginAndSave={() => setShowLoginModal(true)}
+          />
+        );
       case 'home':
         return <Home onStartChallenge={handleStartChallenge} onGoMarket={() => setCurrentView('marketplace')} userBP={userBP} playsToday={playsToday} />;
       case 'select_subject':
@@ -197,7 +268,7 @@ function App() {
               mockDb.logoutUser(); 
               setCurrentUser(null); 
               setUserBP(parseInt(localStorage.getItem('playbank_user_bp')) || 0); 
-              setCurrentView('home');
+              setCurrentView('welcome');
             }} 
             onRegister={() => setShowSaveModal('normal')} 
           />
@@ -210,6 +281,8 @@ function App() {
   if (currentUser && currentUser.role === 'admin') {
     return <AdminDashboard onLogout={() => { mockDb.logoutUser(); setCurrentUser(null); }} />;
   }
+
+  const hideBottomNav = ['welcome', 'choose_path', 'tutorial', 'tutorial_reward', 'quiz'].includes(currentView);
 
   return (
     <div className="app-container">
@@ -244,10 +317,21 @@ function App() {
 
       {renderView()}
       
-      {/* Bottom Navigation is hidden on Quiz screen */}
-      {currentView !== 'quiz' && (
+      {/* Bottom Navigation is hidden on Onboarding, Tutorial, and Quiz screens */}
+      {!hideBottomNav && (
         <BottomNav currentView={currentView} setCurrentView={setCurrentView} />
       )}
+
+      {/* Returning Player Login Modal */}
+      <LoginModal
+        isOpen={showLoginModal}
+        onClose={() => setShowLoginModal(false)}
+        onLoginSuccess={(user) => {
+          setCurrentUser(user);
+          setUserBP(user.total_bp);
+          setCurrentView('home');
+        }}
+      />
 
       {showSaveModal && (
         <SaveScoreModal 

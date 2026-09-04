@@ -5,6 +5,24 @@ const CURRENT_SESSION_KEY = 'playbank_session';
 const PRODUCTS_KEY = 'playbank_products';
 const ORDERS_KEY = 'playbank_orders';
 const GARDEN_STATE_KEY = 'playbank_garden_state';
+const GUEST_PROFILE_KEY = 'playbank_guest_profile';
+
+const getGuestProfileRaw = () => {
+  try {
+    const raw = localStorage.getItem(GUEST_PROFILE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+};
+
+const saveGuestProfileRaw = (profile) => {
+  if (profile) {
+    localStorage.setItem(GUEST_PROFILE_KEY, JSON.stringify(profile));
+  } else {
+    localStorage.removeItem(GUEST_PROFILE_KEY);
+  }
+};
 
 export const DEFAULT_TREES = [
   {
@@ -1055,5 +1073,52 @@ export const mockDb = {
     };
     saveGardenStateRaw(updated);
     return updated;
+  },
+
+  // Guest Management
+  getGuestProfile: () => getGuestProfileRaw(),
+  saveGuestProfile: (profile) => saveGuestProfileRaw(profile),
+  createGuest: (selectedPath = 'chinese') => {
+    const randomId = Math.floor(1000 + Math.random() * 9000);
+    const guest = {
+      playerId: `guest_${randomId}`,
+      id: `guest_${randomId}`,
+      guestName: `Guest ${randomId}`,
+      selectedPath, // 'chinese' | 'english' | 'mixed'
+      tutorialProgress: 1,
+      tutorialStep: 1,
+      tutorialComplete: false,
+      bankPoint: 0,
+      level: 1,
+      streak: 1,
+      chapterProgress: {
+        chapter: 1,
+        chapterName: 'Training Grounds',
+        stage: 1,
+        totalStages: 8
+      },
+      currentChapter: 1,
+      currentStage: 1,
+      homeSceneId: 'trainingCamp',
+      dailyMission: { completed: 0, total: 4 },
+      achievements: [],
+      createdAt: new Date().toISOString()
+    };
+    saveGuestProfileRaw(guest);
+    localStorage.setItem('playbank_user_bp', '0');
+    return guest;
+  },
+  updateGuestProfile: (updates) => {
+    const current = getGuestProfileRaw();
+    if (!current) return null;
+    const updated = { ...current, ...updates };
+    saveGuestProfileRaw(updated);
+    if (typeof updates.bankPoint === 'number') {
+      localStorage.setItem('playbank_user_bp', updates.bankPoint.toString());
+    }
+    return updated;
+  },
+  clearGuestProfile: () => {
+    saveGuestProfileRaw(null);
   }
 };
