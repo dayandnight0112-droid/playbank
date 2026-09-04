@@ -60,6 +60,70 @@ const saveGardenStateRaw = (state) => {
   localStorage.setItem(GARDEN_STATE_KEY, JSON.stringify(state));
 };
 
+const DAILY_MISSIONS_KEY = 'playbank_daily_missions';
+
+export const getMalaysiaDateString = () => {
+  const now = new Date();
+  const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+  const malaysiaTime = new Date(utc + (3600000 * 8));
+  return malaysiaTime.toISOString().split('T')[0];
+};
+
+export const createInitialDailyMissions = (dateStr) => ({
+  date: dateStr || getMalaysiaDateString(),
+  missions: {
+    completeQuiz: {
+      id: 'completeQuiz',
+      title: 'Complete 1 Quiz',
+      reward: 1,
+      progress: 0,
+      target: 1,
+      claimed: false
+    },
+    answerQuestions: {
+      id: 'answerQuestions',
+      title: 'Answer 10 Questions',
+      reward: 1,
+      progress: 0,
+      target: 10,
+      claimed: false
+    },
+    correctAnswers: {
+      id: 'correctAnswers',
+      title: 'Get 5 Correct Answers',
+      reward: 1,
+      progress: 0,
+      target: 5,
+      claimed: false
+    }
+  }
+});
+
+const getDailyMissionsRaw = () => {
+  try {
+    const today = getMalaysiaDateString();
+    const raw = localStorage.getItem(DAILY_MISSIONS_KEY);
+    if (!raw) {
+      const initial = createInitialDailyMissions(today);
+      localStorage.setItem(DAILY_MISSIONS_KEY, JSON.stringify(initial));
+      return initial;
+    }
+    const parsed = JSON.parse(raw);
+    if (parsed.date !== today) {
+      const resetMissions = createInitialDailyMissions(today);
+      localStorage.setItem(DAILY_MISSIONS_KEY, JSON.stringify(resetMissions));
+      return resetMissions;
+    }
+    return parsed;
+  } catch (e) {
+    return createInitialDailyMissions();
+  }
+};
+
+const saveDailyMissionsRaw = (missionsState) => {
+  localStorage.setItem(DAILY_MISSIONS_KEY, JSON.stringify(missionsState));
+};
+
 const getUsers = () => JSON.parse(localStorage.getItem(USERS_KEY)) || [];
 const saveUsers = (users) => localStorage.setItem(USERS_KEY, JSON.stringify(users));
 
@@ -691,5 +755,51 @@ export const mockDb = {
     };
     saveGardenStateRaw(updated);
     return updated;
+  },
+
+  // Daily Missions API
+  getDailyMissions: () => getDailyMissionsRaw(),
+
+  claimMissionReward: (missionKey) => {
+    const state = getDailyMissionsRaw();
+    const mission = state.missions[missionKey];
+    if (!mission) return { error: 'Mission not found' };
+    if (mission.claimed) return { error: 'Reward already claimed' };
+    if (mission.progress < mission.target) return { error: 'Mission target not reached yet' };
+
+    mission.claimed = true;
+    saveDailyMissionsRaw(state);
+
+    const updatedGarden = mockDb.addWater(mission.reward || 1);
+    return {
+      success: true,
+      mission,
+      waterAdded: mission.reward || 1,
+      gardenState: updatedGarden,
+      missionsState: state
+    };
+  },
+
+  updateMissionProgress: (updates = {}) => {
+    const state = getDailyMissionsRaw();
+    Object.keys(updates).forEach(key => {
+      if (state.missions[key]) {
+        state.missions[key].progress = Math.min(
+          state.missions[key].target,
+          (state.missions[key].progress || 0) + updates[key]
+        );
+      }
+    });
+    saveDailyMissionsRaw(state);
+    return state;
+  },
+
+  setMissionProgressDirect: (key, progress) => {
+    const state = getDailyMissionsRaw();
+    if (state.missions[key]) {
+      state.missions[key].progress = Math.min(state.missions[key].target, progress);
+      saveDailyMissionsRaw(state);
+    }
+    return state;
   }
 };

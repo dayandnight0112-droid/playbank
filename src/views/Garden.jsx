@@ -11,6 +11,12 @@ const Garden = ({ userBP = 0, onGoQuiz }) => {
   const currentTree = treesConfig.find(t => t.id === gardenState.currentTreeId) || treesConfig[0];
   const stageInfo = getStageByGrowth(gardenState.growth);
   const [toastMessage, setToastMessage] = useState(null);
+  const [dailyMissionsState, setDailyMissionsState] = useState(() => mockDb.getDailyMissions());
+
+  // 统计完成与待领取数
+  const missionsList = Object.values(dailyMissionsState.missions || {});
+  const claimedCount = missionsList.filter(m => m.claimed).length;
+  const claimableCount = missionsList.filter(m => m.progress >= m.target && !m.claimed).length;
 
   const handleWaterClick = () => {
     const result = mockDb.waterTree();
@@ -20,6 +26,26 @@ const Garden = ({ userBP = 0, onGoQuiz }) => {
     } else {
       setGardenState(result.gardenState);
     }
+  };
+
+  // 手动点击 CLAIM 领取 Water
+  const handleClaimReward = (missionKey) => {
+    const res = mockDb.claimMissionReward(missionKey);
+    if (res.success) {
+      setDailyMissionsState({ ...res.missionsState });
+      setGardenState({ ...res.gardenState });
+      setToastMessage(`🎉 Claimed +${res.waterAdded} 💧 Water!`);
+      setTimeout(() => setToastMessage(null), 2500);
+    } else {
+      setToastMessage(res.error);
+      setTimeout(() => setToastMessage(null), 2500);
+    }
+  };
+
+  // 辅助测试完成任务（供在 Step 7 正式串联前直接快速验证 CLAIM 行为）
+  const handleTestCompleteMission = (missionKey) => {
+    const state = mockDb.setMissionProgressDirect(missionKey, 999);
+    setDailyMissionsState({ ...state });
   };
 
   return (
@@ -145,17 +171,34 @@ const Garden = ({ userBP = 0, onGoQuiz }) => {
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <span style={{
-              background: '#FFF3C4',
-              color: '#B78103',
-              fontSize: '11px',
-              fontWeight: 900,
-              padding: '3px 8px',
-              borderRadius: '8px',
-              border: '1px solid #FFE082'
-            }}>
-              0/3 Done
-            </span>
+            {claimableCount > 0 ? (
+              <span style={{
+                background: '#E8F5E9',
+                color: '#2E7D32',
+                fontSize: '11px',
+                fontWeight: 900,
+                padding: '3px 8px',
+                borderRadius: '8px',
+                border: '1.5px solid #4CAF50',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '3px'
+              }}>
+                🎁 {claimableCount} Ready to Claim!
+              </span>
+            ) : (
+              <span style={{
+                background: claimedCount === missionsList.length ? '#E8F5E9' : '#FFF3C4',
+                color: claimedCount === missionsList.length ? '#2E7D32' : '#B78103',
+                fontSize: '11px',
+                fontWeight: 900,
+                padding: '3px 8px',
+                borderRadius: '8px',
+                border: `1px solid ${claimedCount === missionsList.length ? '#A5D6A7' : '#FFE082'}`
+              }}>
+                {claimedCount}/{missionsList.length} Done
+              </span>
+            )}
             <ChevronRight size={16} color="#2B2B2B" />
           </div>
         </div>
@@ -363,97 +406,157 @@ const Garden = ({ userBP = 0, onGoQuiz }) => {
               </button>
             </div>
 
-            {/* 3 个每日任务卡片预览 */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {/* Mission 1 */}
-              <div style={{
-                background: '#FAF9F5',
-                border: '2px solid #E0DCCD',
-                borderRadius: '16px',
-                padding: '12px 14px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between'
-              }}>
-                <div>
-                  <p style={{ fontSize: '13px', fontWeight: 900, color: '#2B2B2B' }}>Complete 1 Quiz</p>
-                  <p style={{ fontSize: '11px', fontWeight: 600, color: '#888', marginTop: '2px' }}>Progress: 0 / 1</p>
-                </div>
-                <div style={{
-                  background: '#E8F4FD',
-                  color: '#0288D1',
-                  border: '1.5px solid #29B6F6',
-                  borderRadius: '12px',
-                  padding: '6px 12px',
-                  fontSize: '12px',
-                  fontWeight: 900,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px'
-                }}>
-                  <Droplet size={14} fill="#29B6F6" /> +1
-                </div>
-              </div>
+            {/* 3 个每日任务卡片（动态渲染） */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {missionsList.map(mission => {
+                const isReadyToClaim = !mission.claimed && (mission.progress >= mission.target);
+                const isDone = mission.claimed;
+                const progressPercent = Math.min(100, Math.round((mission.progress / mission.target) * 100));
 
-              {/* Mission 2 */}
-              <div style={{
-                background: '#FAF9F5',
-                border: '2px solid #E0DCCD',
-                borderRadius: '16px',
-                padding: '12px 14px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between'
-              }}>
-                <div>
-                  <p style={{ fontSize: '13px', fontWeight: 900, color: '#2B2B2B' }}>Answer 10 Questions</p>
-                  <p style={{ fontSize: '11px', fontWeight: 600, color: '#888', marginTop: '2px' }}>Progress: 0 / 10</p>
-                </div>
-                <div style={{
-                  background: '#E8F4FD',
-                  color: '#0288D1',
-                  border: '1.5px solid #29B6F6',
-                  borderRadius: '12px',
-                  padding: '6px 12px',
-                  fontSize: '12px',
-                  fontWeight: 900,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px'
-                }}>
-                  <Droplet size={14} fill="#29B6F6" /> +1
-                </div>
-              </div>
+                return (
+                  <div 
+                    key={mission.id}
+                    style={{
+                      background: isReadyToClaim ? '#F1F8E9' : isDone ? '#F5F5F5' : '#FAF9F5',
+                      border: isReadyToClaim ? '2px solid #4CAF50' : '2px solid #E0DCCD',
+                      borderRadius: '16px',
+                      padding: '14px 16px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '10px',
+                      boxShadow: isReadyToClaim ? '0 3px 0px #2E7D32' : 'none',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                          <p style={{
+                            fontSize: '14px',
+                            fontWeight: 900,
+                            color: isDone ? '#888888' : '#2B2B2B',
+                            lineHeight: 1.2
+                          }}>
+                            {mission.title}
+                          </p>
+                          {isDone && (
+                            <span style={{
+                              fontSize: '10px',
+                              background: '#E0E0E0',
+                              color: '#616161',
+                              padding: '1px 6px',
+                              borderRadius: '4px',
+                              fontWeight: 800
+                            }}>
+                              COMPLETED
+                            </span>
+                          )}
+                        </div>
+                        <p style={{
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          color: isDone ? '#9E9E9E' : '#666666',
+                          marginTop: '3px'
+                        }}>
+                          Progress: {mission.progress} / {mission.target}
+                        </p>
+                      </div>
 
-              {/* Mission 3 */}
-              <div style={{
-                background: '#FAF9F5',
-                border: '2px solid #E0DCCD',
-                borderRadius: '16px',
-                padding: '12px 14px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between'
-              }}>
-                <div>
-                  <p style={{ fontSize: '13px', fontWeight: 900, color: '#2B2B2B' }}>Get 5 Correct Answers</p>
-                  <p style={{ fontSize: '11px', fontWeight: 600, color: '#888', marginTop: '2px' }}>Progress: 0 / 5</p>
-                </div>
-                <div style={{
-                  background: '#E8F4FD',
-                  color: '#0288D1',
-                  border: '1.5px solid #29B6F6',
-                  borderRadius: '12px',
-                  padding: '6px 12px',
-                  fontSize: '12px',
-                  fontWeight: 900,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px'
-                }}>
-                  <Droplet size={14} fill="#29B6F6" /> +1
-                </div>
-              </div>
+                      {/* 领取 / 状态区 */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        {isDone ? (
+                          <span style={{
+                            background: '#EEEEEE',
+                            color: '#757575',
+                            border: '1.5px solid #BDBDBD',
+                            borderRadius: '12px',
+                            padding: '6px 12px',
+                            fontSize: '12px',
+                            fontWeight: 900,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}>
+                            ✓ CLAIMED
+                          </span>
+                        ) : isReadyToClaim ? (
+                          <button
+                            onClick={() => handleClaimReward(mission.id)}
+                            style={{
+                              background: '#4CAF50',
+                              color: '#FFFFFF',
+                              border: '2px solid #2B2B2B',
+                              borderRadius: '12px',
+                              padding: '8px 14px',
+                              fontSize: '12px',
+                              fontWeight: 900,
+                              cursor: 'pointer',
+                              boxShadow: '0 3px 0 #1B5E20',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                              letterSpacing: '0.3px'
+                            }}
+                          >
+                            <Droplet size={13} fill="#FFFFFF" color="#FFFFFF" />
+                            CLAIM +{mission.reward}
+                          </button>
+                        ) : (
+                          <>
+                            <div style={{
+                              background: '#E8F4FD',
+                              color: '#0288D1',
+                              border: '1.5px solid #29B6F6',
+                              borderRadius: '12px',
+                              padding: '6px 10px',
+                              fontSize: '12px',
+                              fontWeight: 900,
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}>
+                              <Droplet size={13} fill="#29B6F6" /> +{mission.reward}
+                            </div>
+                            <button
+                              onClick={() => handleTestCompleteMission(mission.id)}
+                              title="Simulate completing this mission for testing"
+                              style={{
+                                background: '#FFF8E1',
+                                color: '#F57F17',
+                                border: '1px dashed #FFB300',
+                                borderRadius: '8px',
+                                padding: '5px 7px',
+                                fontSize: '10px',
+                                fontWeight: 800,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              ⚡ Test
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* 单个任务进度条 */}
+                    <div style={{
+                      height: '6px',
+                      width: '100%',
+                      background: '#EAE5D9',
+                      borderRadius: '9999px',
+                      overflow: 'hidden'
+                    }}>
+                      <div style={{
+                        height: '100%',
+                        width: `${progressPercent}%`,
+                        background: isDone ? '#BDBDBD' : isReadyToClaim ? '#4CAF50' : '#29B6F6',
+                        borderRadius: '9999px',
+                        transition: 'width 0.3s ease'
+                      }} />
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
             <button
