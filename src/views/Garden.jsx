@@ -1,10 +1,19 @@
 import { useState, useEffect } from 'react';
-import { Droplet, Star, Sparkles, ChevronRight, CheckCircle2, Sprout, Award, Check, BookOpen } from 'lucide-react';
+import { Droplet, Star, Sparkles, ChevronRight, CheckCircle2, Sprout, Award, Check, BookOpen, HelpCircle, Volume2, VolumeX } from 'lucide-react';
 import Confetti from 'react-confetti';
 import { useWindowSize } from 'react-use';
 import { mockDb } from '../lib/mockDb';
 import TreeRenderer, { getStageByGrowth } from '../components/TreeRenderer';
 import TreeCollectionView from '../components/TreeCollectionView';
+import GardenHelpModal from '../components/GardenHelpModal';
+import {
+  playWaterDropSound,
+  playClaimWaterSound,
+  playCelebrationSound,
+  playPlantSwitchSound,
+  isSoundEnabled,
+  setSoundEnabled
+} from '../lib/soundEffects';
 
 const Garden = ({ userBP = 0, onUpdateBP, onGoQuiz }) => {
   const treesConfig = mockDb.getTreesConfig();
@@ -13,6 +22,8 @@ const Garden = ({ userBP = 0, onUpdateBP, onGoQuiz }) => {
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [showUnlockModal, setShowUnlockModal] = useState(false);
   const [showCollectionModal, setShowCollectionModal] = useState(false);
+  const [showHelpModal, setShowHelpModal] = useState(false);
+  const [soundOn, setSoundOn] = useState(() => isSoundEnabled());
   const [localBP, setLocalBP] = useState(userBP);
 
   const { width, height } = useWindowSize();
@@ -76,6 +87,13 @@ const Garden = ({ userBP = 0, onUpdateBP, onGoQuiz }) => {
   const [wateringPhase, setWateringPhase] = useState('idle'); // 'idle' | 'falling' | 'splashing'
   const [showFloatingText, setShowFloatingText] = useState(false);
 
+  const handleToggleSound = () => {
+    const next = !soundOn;
+    setSoundOn(next);
+    setSoundEnabled(next);
+    if (next) playPlantSwitchSound();
+  };
+
   const handleWaterClick = () => {
     if (isWatering) return; // 播放动画期间防连点防狂刷
     if (gardenState.water <= 0) {
@@ -84,9 +102,10 @@ const Garden = ({ userBP = 0, onUpdateBP, onGoQuiz }) => {
       return;
     }
 
-    // Step 8: 触发纯 2D 浇水动效序列（总时长控制在 ~0.9s 以内）
+    // Step 8 & 12: 触发纯 2D 浇水动效与水滴入土音效
     setIsWatering(true);
     setWateringPhase('falling');
+    playWaterDropSound();
 
     // 阶段 1：水滴从上方下落 (~0.35s)
     setTimeout(() => {
@@ -114,8 +133,9 @@ const Garden = ({ userBP = 0, onUpdateBP, onGoQuiz }) => {
         setShowFloatingText(false);
         setIsWatering(false);
 
-        // Step 9: 达到 100% 自动触发成熟庆祝弹窗
+        // Step 9 & 12: 达到 100% 自动触发成熟庆祝弹窗与庆典音效
         if (updatedGrowth >= 100 && !isAlreadyFinished) {
+          playCelebrationSound();
           setShowCompleteModal(true);
         }
       }, 550);
@@ -126,6 +146,7 @@ const Garden = ({ userBP = 0, onUpdateBP, onGoQuiz }) => {
   const handleCollectTreeReward = () => {
     const res = mockDb.claimTreeReward(currentTree.id);
     if (res.success) {
+      playCelebrationSound();
       setGardenState({ ...res.gardenState });
       setLocalBP(res.newTotalBP);
       if (onUpdateBP) onUpdateBP(res.newTotalBP);
@@ -141,10 +162,11 @@ const Garden = ({ userBP = 0, onUpdateBP, onGoQuiz }) => {
     }
   };
 
-  // Step 10: 切换/种植指定树种（保留现有水滴、BP余额与历史图鉴，成长值重置为 0% 种子）
+  // Step 10 & 12: 切换/种植指定树种（保留现有水滴、BP余额与历史图鉴，成长值重置为 0% 种子）
   const handleSwitchToTree = (targetTreeId) => {
     const res = mockDb.switchTree(targetTreeId);
     if (res.success) {
+      playPlantSwitchSound();
       setGardenState({ ...res.gardenState });
       setShowUnlockModal(false);
       setShowCompleteModal(false);
@@ -175,6 +197,7 @@ const Garden = ({ userBP = 0, onUpdateBP, onGoQuiz }) => {
   const handleClaimReward = (missionKey) => {
     const res = mockDb.claimMissionReward(missionKey);
     if (res.success) {
+      playClaimWaterSound();
       setDailyMissionsState({ ...res.missionsState });
       setGardenState({ ...res.gardenState });
       setToastMessage(`🎉 Claimed +${res.waterAdded} 💧 Water!`);
@@ -246,20 +269,60 @@ const Garden = ({ userBP = 0, onUpdateBP, onGoQuiz }) => {
           </span>
         </div>
 
-        {/* 右侧：Codex & Water 专属资源 */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        {/* 右侧：声音控制、帮助说明、Codex & Water */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          {/* Step 12: 声音切换按钮 */}
+          <button
+            onClick={handleToggleSound}
+            title={soundOn ? "Mute sounds" : "Enable sounds"}
+            style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '50%',
+              background: soundOn ? '#FFFFFF' : '#EEEEEE',
+              border: '2px solid #2B2B2B',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              boxShadow: '1.5px 1.5px 0px #2B2B2B'
+            }}
+          >
+            {soundOn ? <Volume2 size={15} color="#2B2B2B" /> : <VolumeX size={15} color="#9E9E9E" />}
+          </button>
+
+          {/* Step 12: 玩法指南按钮 */}
+          <button
+            onClick={() => setShowHelpModal(true)}
+            title="How to play Garden"
+            style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '50%',
+              background: '#FFFFFF',
+              border: '2px solid #2B2B2B',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              boxShadow: '1.5px 1.5px 0px #2B2B2B'
+            }}
+          >
+            <HelpCircle size={16} color="#2B2B2B" />
+          </button>
+
           {/* Step 11: 树木图鉴 Codex 按钮 */}
           <button
             onClick={() => setShowCollectionModal(true)}
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '5px',
+              gap: '4px',
               background: '#FFF9C4',
               border: '2px solid #2B2B2B',
               borderRadius: '9999px',
-              padding: '6px 12px',
-              boxShadow: '2px 2px 0px #2B2B2B',
+              padding: '6px 10px',
+              boxShadow: '1.5px 1.5px 0px #2B2B2B',
               cursor: 'pointer'
             }}
           >
@@ -269,19 +332,20 @@ const Garden = ({ userBP = 0, onUpdateBP, onGoQuiz }) => {
             </span>
           </button>
 
+          {/* Water 专属资源 */}
           <div style={{
             display: 'flex',
             alignItems: 'center',
-            gap: '6px',
+            gap: '5px',
             background: '#E8F4FD',
             border: '2px solid #1E88E5',
             borderRadius: '9999px',
-            padding: '6px 14px',
-            boxShadow: '2px 2px 0px #1E88E5'
+            padding: '6px 12px',
+            boxShadow: '1.5px 1.5px 0px #1E88E5'
           }}>
-            <Droplet size={16} fill="#29B6F6" color="#0288D1" />
-            <span style={{ fontSize: '13px', fontWeight: 900, color: '#0277BD' }}>
-              Water × {gardenState.water}
+            <Droplet size={15} fill="#29B6F6" color="#0288D1" />
+            <span style={{ fontSize: '12px', fontWeight: 900, color: '#0277BD' }}>
+              ×{gardenState.water}
             </span>
           </div>
         </div>
@@ -1498,6 +1562,12 @@ const Garden = ({ userBP = 0, onUpdateBP, onGoQuiz }) => {
         onClose={() => setShowCollectionModal(false)}
         collectionData={mockDb.getGardenCollection()}
         onSelectTree={(treeId) => handleSwitchToTree(treeId)}
+      />
+
+      {/* Step 12: 游戏指南与规则弹窗 (Garden Help & Rules Modal) */}
+      <GardenHelpModal
+        isOpen={showHelpModal}
+        onClose={() => setShowHelpModal(false)}
       />
     </div>
   );
