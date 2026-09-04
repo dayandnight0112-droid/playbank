@@ -172,7 +172,7 @@ function App() {
       case 'quiz':
         return <Quiz onComplete={handleQuizComplete} onBack={handleQuitQuiz} currentBP={userBP} currentUser={currentUser} onGoGarden={() => setCurrentView('garden')} />;
       case 'garden':
-        return <Garden userBP={userBP} onGoQuiz={() => setCurrentView('select_subject')} />;
+        return <Garden userBP={userBP} onUpdateBP={(newBP) => setUserBP(newBP)} onGoQuiz={() => setCurrentView('select_subject')} />;
       case 'marketplace':
         return (
           <Marketplace 

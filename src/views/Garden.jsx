@@ -1,18 +1,38 @@
 import { useState, useEffect } from 'react';
-import { Droplet, Star, Sparkles, ChevronRight, CheckCircle2, Sprout } from 'lucide-react';
+import { Droplet, Star, Sparkles, ChevronRight, CheckCircle2, Sprout, Award, Check } from 'lucide-react';
+import Confetti from 'react-confetti';
+import { useWindowSize } from 'react-use';
 import { mockDb } from '../lib/mockDb';
 import TreeRenderer, { getStageByGrowth } from '../components/TreeRenderer';
 
-const Garden = ({ userBP = 0, onGoQuiz }) => {
+const Garden = ({ userBP = 0, onUpdateBP, onGoQuiz }) => {
   const treesConfig = mockDb.getTreesConfig();
   const [gardenState, setGardenState] = useState(() => mockDb.getGardenState());
   const [showMissionModal, setShowMissionModal] = useState(false);
+  const [showCompleteModal, setShowCompleteModal] = useState(false);
+  const [localBP, setLocalBP] = useState(userBP);
+
+  const { width, height } = useWindowSize();
+
+  useEffect(() => {
+    setLocalBP(userBP);
+  }, [userBP]);
 
   const currentTree = treesConfig.find(t => t.id === gardenState.currentTreeId) || treesConfig[0];
   const stageInfo = getStageByGrowth(gardenState.growth);
   const [toastMessage, setToastMessage] = useState(null);
   const [dailyMissionsState, setDailyMissionsState] = useState(() => mockDb.getDailyMissions());
   const [countdown, setCountdown] = useState(() => mockDb.getTimeUntilMalaysiaMidnight().formatted);
+
+  const isMature = (gardenState.growth || 0) >= 100;
+  const isTreeRewardClaimed = gardenState.completedTrees?.includes(currentTree.id);
+
+  // 若一进页面就已经是 100% 且尚未领取奖励，自动弹出成熟弹窗
+  useEffect(() => {
+    if (isMature && !isTreeRewardClaimed) {
+      setShowCompleteModal(true);
+    }
+  }, []);
 
   // Step 6: 实时更新马来西亚 00:00 倒计时并在跨天时自动刷新重置
   useEffect(() => {
@@ -71,8 +91,13 @@ const Garden = ({ userBP = 0, onGoQuiz }) => {
       setShowFloatingText(true);
 
       const result = mockDb.waterTree();
+      let updatedGrowth = gardenState.growth;
+      let isAlreadyFinished = false;
+
       if (!result.error) {
         setGardenState({ ...result.gardenState });
+        updatedGrowth = result.gardenState.growth;
+        isAlreadyFinished = result.gardenState.completedTrees?.includes(currentTree.id);
       }
 
       // 阶段 3：波纹平息 (0.35s)
@@ -84,8 +109,39 @@ const Garden = ({ userBP = 0, onGoQuiz }) => {
       setTimeout(() => {
         setShowFloatingText(false);
         setIsWatering(false);
+
+        // Step 9: 达到 100% 自动触发成熟庆祝弹窗
+        if (updatedGrowth >= 100 && !isAlreadyFinished) {
+          setShowCompleteModal(true);
+        }
       }, 550);
     }, 350);
+  };
+
+  // Step 9: 领取成熟树木的 BP 奖励
+  const handleCollectTreeReward = () => {
+    const res = mockDb.claimTreeReward(currentTree.id);
+    if (res.success) {
+      setGardenState({ ...res.gardenState });
+      setLocalBP(res.newTotalBP);
+      if (onUpdateBP) onUpdateBP(res.newTotalBP);
+      setToastMessage(`🎉 Congratulations! +${res.rewardBP} BP collected!`);
+      setTimeout(() => setToastMessage(null), 3500);
+      setShowCompleteModal(false);
+    } else {
+      setToastMessage(res.error);
+      setTimeout(() => setToastMessage(null), 3000);
+      setShowCompleteModal(false);
+    }
+  };
+
+  // 测试辅助：一键模拟达到 100% 成熟，验证 Step 9 弹窗与结算
+  const handleTestMaxGrowth = () => {
+    const updated = mockDb.setTreeGrowthDirect(100);
+    setGardenState({ ...updated });
+    if (!updated.completedTrees?.includes(currentTree.id)) {
+      setShowCompleteModal(true);
+    }
   };
 
   // 手动点击 CLAIM 领取 Water
@@ -159,7 +215,7 @@ const Garden = ({ userBP = 0, onGoQuiz }) => {
             <Star size={12} fill="#000" color="#000" />
           </div>
           <span style={{ fontSize: '13px', fontWeight: 900, color: '#2B2B2B' }}>
-            {Number(userBP).toLocaleString()} BP
+            {Number(localBP).toLocaleString()} BP
           </span>
         </div>
 
@@ -310,14 +366,16 @@ const Garden = ({ userBP = 0, onGoQuiz }) => {
             display: 'inline-flex',
             alignItems: 'center',
             gap: '6px',
-            background: '#E8F5E9',
-            border: '1.5px solid #66BB6A',
+            background: isMature ? '#FFF9C4' : '#E8F5E9',
+            border: isMature ? '1.5px solid #FBC02D' : '1.5px solid #66BB6A',
             borderRadius: '9999px',
             padding: '3px 12px'
           }}>
-            <Sprout size={13} color="#2E7D32" />
-            <span style={{ fontSize: '11px', fontWeight: 800, color: '#2E7D32' }}>
-              Stage {stageInfo.stage}: {stageInfo.name} ({gardenState.growth}%)
+            {isMature ? <Award size={13} color="#F57F17" /> : <Sprout size={13} color="#2E7D32" />}
+            <span style={{ fontSize: '11px', fontWeight: 800, color: isMature ? '#E65100' : '#2E7D32' }}>
+              {isMature 
+                ? `Stage 5: Fully Grown (100%) ${isTreeRewardClaimed ? '✓ Claimed' : '🎉 Ready to Harvest'}` 
+                : `Stage ${stageInfo.stage}: ${stageInfo.name} (${gardenState.growth}%)`}
             </span>
           </div>
         </div>
@@ -470,7 +528,7 @@ const Garden = ({ userBP = 0, onGoQuiz }) => {
         </div>
       </div>
 
-      {/* 底部浇水操作区域（Water Button） */}
+      {/* 底部浇水 / 成熟结算操作区域 */}
       <div style={{
         padding: '0 24px 20px 24px',
         display: 'flex',
@@ -478,52 +536,126 @@ const Garden = ({ userBP = 0, onGoQuiz }) => {
         alignItems: 'center',
         zIndex: 10
       }}>
-        <button
-          onClick={handleWaterClick}
-          disabled={isWatering || gardenState.water <= 0}
-          style={{
+        {isMature && !isTreeRewardClaimed ? (
+          /* 成熟未领：高亮金色结算大按键 */
+          <button
+            onClick={() => setShowCompleteModal(true)}
+            style={{
+              width: '100%',
+              maxWidth: '340px',
+              padding: '16px 24px',
+              backgroundColor: '#FFD54F',
+              color: '#000000',
+              border: '3px solid #2B2B2B',
+              borderRadius: '24px',
+              fontSize: '16px',
+              fontWeight: 900,
+              cursor: 'pointer',
+              boxShadow: '0 5px 0px #F57F17, 0 8px 16px rgba(245, 127, 23, 0.25)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              letterSpacing: '0.3px',
+              animation: 'pop 0.3s ease'
+            }}
+          >
+            <Star size={22} fill="#FFB300" color="#000" />
+            <span>CLAIM REWARD (+{currentTree.rewardBP} BP)</span>
+            <span>🎉</span>
+          </button>
+        ) : isMature && isTreeRewardClaimed ? (
+          /* 成熟且已领：提示准备进入下一棵树 */
+          <div style={{
             width: '100%',
             maxWidth: '340px',
-            padding: '16px 24px',
-            backgroundColor: isWatering ? '#0288D1' : gardenState.water > 0 ? '#29B6F6' : '#B0BEC5',
-            color: '#FFFFFF',
-            border: '3px solid #2B2B2B',
-            borderRadius: '24px',
-            fontSize: '17px',
+            padding: '14px 20px',
+            backgroundColor: '#E8F5E9',
+            color: '#2E7D32',
+            border: '2px solid #66BB6A',
+            borderRadius: '20px',
+            fontSize: '14px',
             fontWeight: 900,
-            cursor: isWatering || gardenState.water <= 0 ? 'not-allowed' : 'pointer',
-            boxShadow: isWatering ? '0 2px 0px #01579B' : gardenState.water > 0 ? '0 5px 0px #0277BD, 0 8px 12px rgba(0,0,0,0.15)' : '0 4px 0px #78909C',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: '10px',
-            transform: isWatering ? 'translateY(3px)' : 'none',
-            transition: 'all 0.15s ease',
-            letterSpacing: '0.5px'
-          }}
-        >
-          <Droplet size={24} fill="#FFFFFF" color="#FFFFFF" />
-          <span>{isWatering ? 'WATERING...' : 'WATER TREE'}</span>
-          <span style={{
-            fontSize: '12px',
-            background: 'rgba(0,0,0,0.2)',
-            padding: '2px 8px',
-            borderRadius: '9999px'
+            gap: '8px',
+            boxShadow: '0 3px 0px #388E3C'
           }}>
-            -1 💧
-          </span>
-        </button>
+            <CheckCircle2 size={18} color="#2E7D32" />
+            <span>Tree Completed & BP Claimed!</span>
+          </div>
+        ) : (
+          /* 未成熟：常规 WATER TREE 按键 */
+          <button
+            onClick={handleWaterClick}
+            disabled={isWatering || gardenState.water <= 0}
+            style={{
+              width: '100%',
+              maxWidth: '340px',
+              padding: '16px 24px',
+              backgroundColor: isWatering ? '#0288D1' : gardenState.water > 0 ? '#29B6F6' : '#B0BEC5',
+              color: '#FFFFFF',
+              border: '3px solid #2B2B2B',
+              borderRadius: '24px',
+              fontSize: '17px',
+              fontWeight: 900,
+              cursor: isWatering || gardenState.water <= 0 ? 'not-allowed' : 'pointer',
+              boxShadow: isWatering ? '0 2px 0px #01579B' : gardenState.water > 0 ? '0 5px 0px #0277BD, 0 8px 12px rgba(0,0,0,0.15)' : '0 4px 0px #78909C',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '10px',
+              transform: isWatering ? 'translateY(3px)' : 'none',
+              transition: 'all 0.15s ease',
+              letterSpacing: '0.5px'
+            }}
+          >
+            <Droplet size={24} fill="#FFFFFF" color="#FFFFFF" />
+            <span>{isWatering ? 'WATERING...' : 'WATER TREE'}</span>
+            <span style={{
+              fontSize: '12px',
+              background: 'rgba(0,0,0,0.2)',
+              padding: '2px 8px',
+              borderRadius: '9999px'
+            }}>
+              -1 💧
+            </span>
+          </button>
+        )}
+
+        {/* 辅助测试按键（仅在未达 100% 时提供快速测试入口） */}
+        {!isMature && (
+          <button
+            onClick={handleTestMaxGrowth}
+            title="Simulate tree reaching 100% mature"
+            style={{
+              marginTop: '8px',
+              background: 'transparent',
+              border: 'none',
+              color: '#888',
+              fontSize: '11px',
+              fontWeight: 700,
+              textDecoration: 'underline',
+              cursor: 'pointer'
+            }}
+          >
+            ⚡ Test 100% Maturity
+          </button>
+        )}
 
         <p style={{
-          marginTop: '10px',
+          marginTop: '8px',
           fontSize: '12px',
           color: '#8A8A8A',
           fontWeight: 600,
           textAlign: 'center'
         }}>
-          {gardenState.water > 0 
-            ? 'Water your tree to help it grow (+10% Growth)' 
-            : 'Complete Daily Missions to earn more Water!'}
+          {isMature 
+            ? 'Your tree is 100% grown! Harvest and earn BP.' 
+            : gardenState.water > 0 
+              ? 'Water your tree to help it grow (+10% Growth)' 
+              : 'Complete Daily Missions to earn more Water!'}
         </p>
       </div>
 
@@ -887,6 +1019,134 @@ const Garden = ({ userBP = 0, onGoQuiz }) => {
               }}
             >
               Go to Quiz to Earn Water →
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Step 9: 100% 树木成熟庆祝与 BP 发放弹窗 (Tree Complete Celebration Modal) */}
+      {showCompleteModal && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          backgroundColor: 'rgba(0,0,0,0.68)',
+          backdropFilter: 'blur(6px)',
+          zIndex: 300,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '20px'
+        }}>
+          <Confetti width={width} height={height} recycle={false} numberOfPieces={360} colors={['#FFD54F', '#4CAF50', '#29B6F6', '#FF5722', '#FFFFFF']} />
+          
+          <div style={{
+            background: '#FFFFFF',
+            width: '100%',
+            maxWidth: '380px',
+            borderRadius: '28px',
+            border: '3px solid #2B2B2B',
+            padding: '28px 24px 24px 24px',
+            boxShadow: '0 16px 36px rgba(0,0,0,0.3)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            textAlign: 'center',
+            position: 'relative'
+          }}>
+            {/* 顶部成熟勋章 */}
+            <div style={{
+              background: '#FFF9C4',
+              border: '2px solid #FBC02D',
+              borderRadius: '9999px',
+              padding: '5px 16px',
+              fontSize: '12px',
+              fontWeight: 900,
+              color: '#F57F17',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              marginBottom: '10px'
+            }}>
+              <Award size={16} color="#F57F17" />
+              <span>TREE FULLY GROWN!</span>
+            </div>
+
+            {/* 成熟五阶段大树图示 */}
+            <div style={{
+              width: '160px',
+              height: '160px',
+              margin: '2px 0 10px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <TreeRenderer growth={100} treeId={currentTree.id} />
+            </div>
+
+            <h3 style={{
+              fontSize: '24px',
+              fontWeight: 900,
+              color: '#2B2B2B',
+              lineHeight: 1.2
+            }}>
+              Congratulations!
+            </h3>
+
+            <p style={{
+              fontSize: '13px',
+              fontWeight: 600,
+              color: '#666',
+              marginTop: '6px',
+              lineHeight: 1.4
+            }}>
+              Your <strong style={{ color: '#2E7D32' }}>{currentTree.name}</strong> is 100% mature and ready to harvest!
+            </p>
+
+            {/* 奖励展示卡片 */}
+            <div style={{
+              marginTop: '16px',
+              width: '100%',
+              background: 'linear-gradient(135deg, #FFFDE7 0%, #FFF9C4 100%)',
+              border: '2px solid #FBC02D',
+              borderRadius: '20px',
+              padding: '14px 16px',
+              boxShadow: '0 4px 0px #FBC02D'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                <Star size={24} fill="#FFB300" color="#FF8F00" />
+                <span style={{ fontSize: '28px', fontWeight: 900, color: '#E65100' }}>
+                  +{currentTree.rewardBP} BP
+                </span>
+              </div>
+              <p style={{ fontSize: '11px', fontWeight: 800, color: '#B78103', marginTop: '4px' }}>
+                One-time Tree Completion Reward
+              </p>
+            </div>
+
+            {/* 领取并继续按键 */}
+            <button
+              onClick={handleCollectTreeReward}
+              style={{
+                marginTop: '20px',
+                width: '100%',
+                padding: '16px',
+                background: 'var(--brand-primary)',
+                color: '#000000',
+                border: '3px solid #2B2B2B',
+                borderRadius: '20px',
+                fontSize: '16px',
+                fontWeight: 900,
+                cursor: 'pointer',
+                boxShadow: '0 5px 0px #2B2B2B',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                transition: 'transform 0.1s ease'
+              }}
+            >
+              <span>Collect {currentTree.rewardBP} BP & Continue</span>
+              <span>→</span>
             </button>
           </div>
         </div>

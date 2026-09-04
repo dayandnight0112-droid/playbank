@@ -886,5 +886,87 @@ export const mockDb = {
       saveDailyMissionsRaw(state);
     }
     return state;
+  },
+
+  // Step 9: 增加用户 BP（兼容登录用户与访客）
+  awardBP: (amount = 0) => {
+    const session = mockDb.getCurrentSession();
+    if (session && session.id) {
+      const updated = mockDb.updateUserBP(session.id, amount);
+      return updated?.total_bp || 0;
+    } else {
+      const current = parseInt(localStorage.getItem('playbank_user_bp') || '0', 10);
+      const next = current + amount;
+      localStorage.setItem('playbank_user_bp', next.toString());
+      return next;
+    }
+  },
+
+  // Step 9: 100% 树木成熟结算与领取一次性 BP 奖励（严格防重）
+  claimTreeReward: (treeId) => {
+    const state = getGardenStateRaw();
+    const treeConfig = DEFAULT_TREES.find(t => t.id === (treeId || state.currentTreeId)) || DEFAULT_TREES[0];
+
+    const completedList = state.completedTrees || [];
+    if (completedList.includes(treeConfig.id)) {
+      return { error: 'Reward for this tree has already been claimed!' };
+    }
+
+    if ((state.growth || 0) < 100) {
+      return { error: 'Tree is not fully grown yet (needs 100% Growth)!' };
+    }
+
+    // 发放 BP
+    const rewardBP = treeConfig.rewardBP || 50;
+    const newTotalBP = mockDb.awardBP(rewardBP);
+
+    // 记录到 completedTrees 和 collection
+    const updatedCompleted = [...completedList, treeConfig.id];
+    const existingCollection = state.collection || [];
+    const updatedCollection = existingCollection.some(c => c.treeId === treeConfig.id)
+      ? existingCollection
+      : [...existingCollection, { treeId: treeConfig.id, name: treeConfig.name, completedAt: new Date().toISOString(), rewardBP }];
+
+    const updatedState = {
+      ...state,
+      completedTrees: updatedCompleted,
+      collection: updatedCollection,
+      lastRewardClaimed: {
+        treeId: treeConfig.id,
+        rewardBP,
+        claimedAt: new Date().toISOString()
+      },
+      lastUpdated: new Date().toISOString()
+    };
+
+    saveGardenStateRaw(updatedState);
+
+    return {
+      success: true,
+      rewardBP,
+      newTotalBP,
+      tree: treeConfig,
+      gardenState: updatedState
+    };
+  },
+
+  // 测试辅助：直接调整树木成长百分比（用于验证 100% 阶段与成熟弹窗）
+  setTreeGrowthDirect: (growth = 100) => {
+    const state = getGardenStateRaw();
+    const newGrowth = Math.min(100, Math.max(0, growth));
+    let newStage = 1;
+    if (newGrowth >= 80) newStage = 5;
+    else if (newGrowth >= 60) newStage = 4;
+    else if (newGrowth >= 40) newStage = 3;
+    else if (newGrowth >= 20) newStage = 2;
+
+    const updated = {
+      ...state,
+      growth: newGrowth,
+      stage: newStage,
+      lastUpdated: new Date().toISOString()
+    };
+    saveGardenStateRaw(updated);
+    return updated;
   }
 };
