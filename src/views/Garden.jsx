@@ -144,6 +144,15 @@ const Garden = ({ userBP = 0, onUpdateBP, onGoQuiz }) => {
     }
   };
 
+  // 一键重置树木状态至 Stage 1 种子初始态 (0% Growth, 3 💧 Water)
+  const handleResetTree = () => {
+    const fresh = mockDb.resetGardenState();
+    setGardenState({ ...fresh });
+    setShowCompleteModal(false);
+    setToastMessage('🌱 Tree reset to Stage 1 Seed (0% Growth, 3 💧 Water)!');
+    setTimeout(() => setToastMessage(null), 3000);
+  };
+
   // 手动点击 CLAIM 领取 Water
   const handleClaimReward = (missionKey) => {
     const res = mockDb.claimMissionReward(missionKey);
@@ -624,25 +633,50 @@ const Garden = ({ userBP = 0, onUpdateBP, onGoQuiz }) => {
           </button>
         )}
 
-        {/* 辅助测试按键（仅在未达 100% 时提供快速测试入口） */}
-        {!isMature && (
+        {/* 辅助测试按键区（包含重置与一键满级） */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '10px' }}>
           <button
-            onClick={handleTestMaxGrowth}
-            title="Simulate tree reaching 100% mature"
+            onClick={handleResetTree}
+            title="Reset tree to 0% seed"
             style={{
-              marginTop: '8px',
-              background: 'transparent',
-              border: 'none',
-              color: '#888',
+              background: '#FFF0F0',
+              border: '1.5px solid #FFCDD2',
+              borderRadius: '8px',
+              padding: '4px 10px',
+              color: '#D32F2F',
               fontSize: '11px',
-              fontWeight: 700,
-              textDecoration: 'underline',
-              cursor: 'pointer'
+              fontWeight: 800,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px'
             }}
           >
-            ⚡ Test 100% Maturity
+            🔄 Reset Tree (0%)
           </button>
-        )}
+
+          {!isMature && (
+            <button
+              onClick={handleTestMaxGrowth}
+              title="Simulate tree reaching 100% mature"
+              style={{
+                background: '#FFF8E1',
+                border: '1.5px solid #FFE082',
+                borderRadius: '8px',
+                padding: '4px 10px',
+                color: '#F57F17',
+                fontSize: '11px',
+                fontWeight: 800,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}
+            >
+              ⚡ Test 100% Mature
+            </button>
+          )}
+        </div>
 
         <p style={{
           marginTop: '8px',

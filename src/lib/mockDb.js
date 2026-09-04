@@ -741,6 +741,23 @@ export const mockDb = {
     return updated;
   },
 
+  // 重置树木状态至 Stage 1 种子初始态 (0% Growth, 3 滴初始水)
+  resetGardenState: () => {
+    const fresh = {
+      ...DEFAULT_GARDEN_STATE,
+      currentTreeId: 'apple',
+      growth: 0,
+      stage: 1,
+      water: 3,
+      completedTrees: [],
+      collection: [],
+      starterGranted: true,
+      lastUpdated: new Date().toISOString()
+    };
+    saveGardenStateRaw(fresh);
+    return fresh;
+  },
+
   // 浇水：Water -1, Growth +10
   waterTree: () => {
     const state = getGardenStateRaw();
