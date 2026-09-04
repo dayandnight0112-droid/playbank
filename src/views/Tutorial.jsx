@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTutorialStateMachine, TUTORIAL_TOTAL_STEPS } from '../hooks/useTutorialStateMachine';
 import { getTutorialQuestion } from '../data/tutorialQuestions';
 import { Sparkles, X, Check, ArrowRight, Flame, AlertCircle } from 'lucide-react';
 import PrimaryButton from '../components/common/PrimaryButton';
+import MechanismPopup from '../components/common/MechanismPopup';
 
 const Tutorial = ({ guest, onComplete, onExit }) => {
   const machine = useTutorialStateMachine({
@@ -31,18 +32,57 @@ const Tutorial = ({ guest, onComplete, onExit }) => {
   // Local state for exit retention modal
   const [showExitModal, setShowExitModal] = useState(false);
 
+  // Mechanism Milestone Popups (Step 11)
+  const [activePopup, setActivePopup] = useState(null); // 'bankpoint' | 'combo' | 'speed_challenge' | null
+  const [hasShownBP, setHasShownBP] = useState(false);
+  const [hasShownCombo, setHasShownCombo] = useState(false);
+  const [hasShownSpeed, setHasShownSpeed] = useState(false);
+
   // Selected path from guest
   const selectedPath = guest?.selectedPath || 'chinese';
   const currentQ = getTutorialQuestion(currentStep, selectedPath);
 
-  // Auto-trigger timer if question is timed (e.g. Q8)
-  React.useEffect(() => {
-    if (currentQ.isTimed && phase === 'answering') {
+  // Q8 10-Second Challenge Intro & Timer management
+  useEffect(() => {
+    if (currentStep === 8 && !hasShownSpeed && phase === 'answering') {
+      setHasShownSpeed(true);
+      setActivePopup('speed_challenge');
+    } else if (currentQ.isTimed && phase === 'answering' && hasShownSpeed && !activePopup) {
       startTimer(currentQ.timeLimit || 10, () => {
         handleAnswer(-1, currentQ.correctIndex, 0);
       });
     }
-  }, [currentStep, phase, currentQ.isTimed, currentQ.correctIndex, currentQ.timeLimit, startTimer, handleAnswer]);
+  }, [currentStep, phase, hasShownSpeed, activePopup, currentQ.isTimed, currentQ.correctIndex, currentQ.timeLimit, startTimer, handleAnswer]);
+
+  const handleNextStepClick = () => {
+    // Q3 milestone: First BankPoint introduction
+    if (currentStep === 3 && !hasShownBP) {
+      setHasShownBP(true);
+      setActivePopup('bankpoint');
+      return;
+    }
+
+    // Q5 milestone: Combo x3 introduction
+    if (currentStep === 5 && !hasShownCombo) {
+      setHasShownCombo(true);
+      setActivePopup('combo');
+      return;
+    }
+
+    nextStep();
+  };
+
+  const handlePopupClose = () => {
+    const closedType = activePopup;
+    setActivePopup(null);
+    if (closedType === 'bankpoint' || closedType === 'combo') {
+      nextStep();
+    } else if (closedType === 'speed_challenge') {
+      startTimer(10, () => {
+        handleAnswer(-1, currentQ.correctIndex, 0);
+      });
+    }
+  };
 
   const optionLetters = ['A', 'B', 'C', 'D'];
 
@@ -394,7 +434,7 @@ const Tutorial = ({ guest, onComplete, onExit }) => {
           </div>
 
           <PrimaryButton
-            onClick={lastAnswerResult?.isCorrect ? nextStep : retryQuestion}
+            onClick={lastAnswerResult?.isCorrect ? handleNextStepClick : retryQuestion}
             size="large"
             variant={lastAnswerResult?.isCorrect ? 'success' : 'primary'}
             style={{ width: '100%' }}
@@ -405,6 +445,12 @@ const Tutorial = ({ guest, onComplete, onExit }) => {
           </PrimaryButton>
         </div>
       )}
+
+      {/* Game Mechanism Milestone Popups (Step 11) */}
+      <MechanismPopup
+        type={activePopup}
+        onClose={handlePopupClose}
+      />
 
       {/* Exit Retention Modal (Step 31) */}
       {showExitModal && (

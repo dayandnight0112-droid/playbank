@@ -23,6 +23,7 @@ import LoginModal from './components/LoginModal';
 function App() {
   const [guestProfile, setGuestProfile] = useState(() => mockDb.getGuestProfile());
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [tutorialStats, setTutorialStats] = useState({ earnedBP: 120, maxCombo: 6 });
 
   const [currentView, setCurrentView] = useState(() => {
     const session = mockDb.getCurrentSession();
@@ -207,13 +208,14 @@ function App() {
         return (
           <Tutorial
             guest={guestProfile}
-            onComplete={(earnedBP = 120) => {
+            onComplete={(earnedBP = 120, maxCombo = 6) => {
               const updated = mockDb.updateGuestProfile({
                 tutorialComplete: true,
                 bankPoint: (guestProfile?.bankPoint || 0) + earnedBP
               });
               setGuestProfile(updated);
               setUserBP(updated?.bankPoint || earnedBP);
+              setTutorialStats({ earnedBP, maxCombo });
               setCurrentView('tutorial_reward');
             }}
             onExit={() => {
@@ -232,12 +234,23 @@ function App() {
         return (
           <TutorialReward
             guest={guestProfile}
+            stats={tutorialStats}
             onEnterLobby={() => setCurrentView('home')}
             onLoginAndSave={() => setShowLoginModal(true)}
           />
         );
       case 'home':
-        return <Home onStartChallenge={handleStartChallenge} onGoMarket={() => setCurrentView('marketplace')} userBP={userBP} playsToday={playsToday} />;
+        return (
+          <Home
+            currentUser={currentUser}
+            guestProfile={guestProfile}
+            userBP={userBP}
+            playsToday={playsToday}
+            onStartChallenge={handleStartChallenge}
+            onGoMarket={() => setCurrentView('marketplace')}
+            onGoBattle={() => setCurrentView('select_subject')}
+          />
+        );
       case 'select_subject':
         return <SelectSubject onBack={() => setCurrentView('home')} onStartQuiz={startQuizFlow} openModal={openModal} />;
       case 'quiz':
