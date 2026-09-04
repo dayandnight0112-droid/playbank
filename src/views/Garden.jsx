@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Droplet, Star, Sparkles, ChevronRight, CheckCircle2, Sprout, Award, Check } from 'lucide-react';
+import { Droplet, Star, Sparkles, ChevronRight, CheckCircle2, Sprout, Award, Check, BookOpen } from 'lucide-react';
 import Confetti from 'react-confetti';
 import { useWindowSize } from 'react-use';
 import { mockDb } from '../lib/mockDb';
 import TreeRenderer, { getStageByGrowth } from '../components/TreeRenderer';
+import TreeCollectionView from '../components/TreeCollectionView';
 
 const Garden = ({ userBP = 0, onUpdateBP, onGoQuiz }) => {
   const treesConfig = mockDb.getTreesConfig();
@@ -11,6 +12,7 @@ const Garden = ({ userBP = 0, onUpdateBP, onGoQuiz }) => {
   const [showMissionModal, setShowMissionModal] = useState(false);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [showUnlockModal, setShowUnlockModal] = useState(false);
+  const [showCollectionModal, setShowCollectionModal] = useState(false);
   const [localBP, setLocalBP] = useState(userBP);
 
   const { width, height } = useWindowSize();
@@ -244,21 +246,44 @@ const Garden = ({ userBP = 0, onUpdateBP, onGoQuiz }) => {
           </span>
         </div>
 
-        {/* 右侧：Water 专属资源 */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '6px',
-          background: '#E8F4FD',
-          border: '2px solid #1E88E5',
-          borderRadius: '9999px',
-          padding: '6px 14px',
-          boxShadow: '2px 2px 0px #1E88E5'
-        }}>
-          <Droplet size={16} fill="#29B6F6" color="#0288D1" />
-          <span style={{ fontSize: '13px', fontWeight: 900, color: '#0277BD' }}>
-            Water × {gardenState.water}
-          </span>
+        {/* 右侧：Codex & Water 专属资源 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {/* Step 11: 树木图鉴 Codex 按钮 */}
+          <button
+            onClick={() => setShowCollectionModal(true)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '5px',
+              background: '#FFF9C4',
+              border: '2px solid #2B2B2B',
+              borderRadius: '9999px',
+              padding: '6px 12px',
+              boxShadow: '2px 2px 0px #2B2B2B',
+              cursor: 'pointer'
+            }}
+          >
+            <BookOpen size={14} color="#F57F17" />
+            <span style={{ fontSize: '12px', fontWeight: 900, color: '#2B2B2B' }}>
+              Codex {gardenState.completedTrees?.length || 0}/3
+            </span>
+          </button>
+
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            background: '#E8F4FD',
+            border: '2px solid #1E88E5',
+            borderRadius: '9999px',
+            padding: '6px 14px',
+            boxShadow: '2px 2px 0px #1E88E5'
+          }}>
+            <Droplet size={16} fill="#29B6F6" color="#0288D1" />
+            <span style={{ fontSize: '13px', fontWeight: 900, color: '#0277BD' }}>
+              Water × {gardenState.water}
+            </span>
+          </div>
         </div>
       </header>
 
@@ -431,6 +456,39 @@ const Garden = ({ userBP = 0, onUpdateBP, onGoQuiz }) => {
               </button>
             );
           })}
+
+          {/* Step 11: 树木图鉴 Codex 按钮 */}
+          <button
+            onClick={() => setShowCollectionModal(true)}
+            title="Open Plant Codex (树木图鉴)"
+            style={{
+              padding: '5px 10px',
+              borderRadius: '9999px',
+              border: '2px solid #2B2B2B',
+              background: '#FFF9C4',
+              boxShadow: '2px 2px 0px #2B2B2B',
+              fontSize: '12px',
+              fontWeight: 900,
+              color: '#E65100',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              transition: 'all 0.15s ease'
+            }}
+          >
+            <BookOpen size={13} color="#E65100" />
+            <span>Codex</span>
+            <span style={{
+              fontSize: '10px',
+              background: '#FFE082',
+              padding: '1px 5px',
+              borderRadius: '9999px',
+              color: '#B78103'
+            }}>
+              {gardenState.completedTrees?.length || 0}/3
+            </span>
+          </button>
         </div>
 
         {/* 树名称与当前阶段徽章 */}
@@ -1433,6 +1491,14 @@ const Garden = ({ userBP = 0, onUpdateBP, onGoQuiz }) => {
           </div>
         </div>
       )}
+
+      {/* Step 11: 树木图鉴弹窗 (Tree Collection View / Plant Codex) */}
+      <TreeCollectionView
+        isOpen={showCollectionModal}
+        onClose={() => setShowCollectionModal(false)}
+        collectionData={mockDb.getGardenCollection()}
+        onSelectTree={(treeId) => handleSwitchToTree(treeId)}
+      />
     </div>
   );
 };

@@ -1005,6 +1005,38 @@ export const mockDb = {
     };
   },
 
+  // Step 11: 获取全量树木图鉴与收集成就统计数据
+  getGardenCollection: () => {
+    const state = getGardenStateRaw();
+    const completedList = state.completedTrees || [];
+    const collectionRecords = state.collection || [];
+
+    const trees = DEFAULT_TREES.map(tree => {
+      const isCompleted = completedList.includes(tree.id);
+      const isCurrent = state.currentTreeId === tree.id;
+      const record = collectionRecords.find(c => c.treeId === tree.id);
+      return {
+        ...tree,
+        isCompleted,
+        isCurrent,
+        currentGrowth: isCurrent ? (state.growth || 0) : 0,
+        completedAt: record?.completedAt || null,
+        harvestCount: record ? 1 : 0
+      };
+    });
+
+    const totalBPFromGarden = collectionRecords.reduce((sum, item) => sum + (item.rewardBP || 0), 0);
+
+    return {
+      trees,
+      totalCompleted: completedList.length,
+      totalTrees: DEFAULT_TREES.length,
+      totalBPFromGarden,
+      currentTreeId: state.currentTreeId,
+      water: state.water || 0
+    };
+  },
+
   // 测试辅助：直接调整树木成长百分比（用于验证 100% 阶段与成熟弹窗）
   setTreeGrowthDirect: (growth = 100) => {
     const state = getGardenStateRaw();
