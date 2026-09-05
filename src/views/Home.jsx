@@ -49,6 +49,7 @@ const Home = ({
 
   return (
     <div
+      className="home-lobby"
       style={{
         position: 'relative',
         width: '100%',
@@ -57,19 +58,23 @@ const Home = ({
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'space-between',
-        background: '#0B132B',
+        background: 'transparent',
         padding: '16px 16px calc(80px + env(safe-area-inset-bottom, 0px))',
         boxSizing: 'border-box',
         overflow: 'hidden'
       }}
     >
-      {/* 0. FULL-BLEED ADVENTURE SCENE BACKGROUND (Spans entire Home Screen) */}
+      {/* 0. FULL-BLEED ADVENTURE SCENE BACKGROUND (Fixed 100vw x 100vh spanning whole viewport) */}
       <div
+        className="home-fullscreen-background"
         style={{
-          position: 'absolute',
-          inset: 0,
-          width: '100%',
-          height: '100%',
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          width: '100vw',
+          height: '100vh',
           overflow: 'hidden',
           pointerEvents: 'none',
           zIndex: 0,
@@ -80,7 +85,7 @@ const Home = ({
           <TrainingCampArt />
         )}
 
-        {/* Ambient lighting & vignette for optimal contrast with HUD and side buttons */}
+        {/* Ambient lighting & subtle vignette for contrast */}
         <div
           style={{
             position: 'absolute',

@@ -113,6 +113,19 @@ body, html {
   flex-direction: column;
 }
 
+/* Full-bleed Home Screen: Ensure root and app-container are completely transparent */
+.app-container.home-active,
+.app-container:has(.home-lobby) {
+  background: transparent !important;
+  background-color: transparent !important;
+  box-shadow: none !important;
+}
+
+body:has(.home-lobby),
+body.home-active-body {
+  background-color: #0B132B !important;
+}
+
 .dark-mode .app-container {
   box-shadow: 0 0 40px rgba(0,0,0,0.5);
 }

@@ -375,7 +375,7 @@ function App() {
   const hideBottomNav = ['welcome', 'choose_path', 'tutorial', 'tutorial_reward', 'quiz', 'boss_battle'].includes(currentView);
 
   return (
-    <div className="app-container">
+    <div className={`app-container ${currentView === 'home' ? 'home-active' : ''}`}>
       {/* Returning Player Welcome Back Toast */}
       {welcomeBackToast && (
         <div style={{
