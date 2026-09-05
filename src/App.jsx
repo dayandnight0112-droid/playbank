@@ -324,7 +324,18 @@ function App() {
           />
         );
       default:
-        return <Home onStartChallenge={handleStartChallenge} onGoMarket={() => setCurrentView('marketplace')} userBP={userBP} playsToday={playsToday} />;
+        return (
+          <Home
+            currentUser={currentUser}
+            guestProfile={guestProfile}
+            userBP={userBP}
+            playsToday={playsToday}
+            onStartChallenge={handleStartChallenge}
+            onGoMarket={() => setCurrentView('marketplace')}
+            onOpenLogin={() => setShowLoginModal(true)}
+            onUpdateBP={(newBP) => setUserBP(newBP)}
+          />
+        );
     }
   };
 
@@ -407,9 +418,18 @@ function App() {
       <LoginModal
         isOpen={showLoginModal}
         onClose={() => setShowLoginModal(false)}
-        onLoginSuccess={(user) => {
+        guestProfile={guestProfile}
+        guestBP={userBP}
+        onLoginSuccess={(user, mergeInfo) => {
           setCurrentUser(user);
           setUserBP(user.total_bp);
+          setGuestProfile(null);
+          setShowLoginModal(false);
+          if (mergeInfo?.mergedBP > 0) {
+            setWelcomeBackToast(`✨ 登录成功！已成功合并 ${mergeInfo.mergedBP} BP 战利品 (总额: ${user.total_bp} BP)`);
+          } else {
+            setWelcomeBackToast(`⚔️ 欢迎归来，${user.ic_name || user.email?.split('@')[0] || 'Player'}！云端存档已就绪`);
+          }
           setCurrentView('home');
         }}
       />

@@ -19,6 +19,7 @@ const Home = ({
   onStartChallenge,
   onGoMarket,
   onGoBattle,
+  onOpenLogin,
   onUpdateBP
 }) => {
   // Player Display Info
@@ -115,6 +116,31 @@ const Home = ({
               >
                 Lv.{playerLevel}
               </span>
+
+              {!currentUser && onOpenLogin && (
+                <button
+                  type="button"
+                  onClick={onOpenLogin}
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.22) 0%, rgba(245, 158, 11, 0.08) 100%)',
+                    border: '1px solid rgba(245, 158, 11, 0.45)',
+                    color: '#FCD34D',
+                    borderRadius: '9999px',
+                    padding: '1px 8px',
+                    fontSize: '10px',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '3px',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                    transition: 'all 0.15s ease'
+                  }}
+                  title="登录已有账号 / 绑定云端存档"
+                >
+                  ☁️ 登录
+                </button>
+              )}
             </div>
           </div>
         </div>

@@ -172,7 +172,37 @@ const saveDailyMissionsRaw = (missionsState) => {
   localStorage.setItem(DAILY_MISSIONS_KEY, JSON.stringify(missionsState));
 };
 
-const getUsers = () => JSON.parse(localStorage.getItem(USERS_KEY)) || [];
+const getUsers = () => {
+  try {
+    let users = JSON.parse(localStorage.getItem(USERS_KEY));
+    if (!users || users.length === 0) {
+      users = [
+        {
+          id: 'user_hero_1',
+          email: 'hero@playbank.com',
+          password: 'password123',
+          whatsapp: '+60123456789',
+          referral_code: 'HERO888',
+          referred_by: null,
+          ic_name: 'Alex Tan',
+          ic_no: '090101-14-1234',
+          age: 14,
+          school: 'SMK Cyberjaya',
+          total_referral_bonus: 0,
+          total_bp: 500,
+          weekly_bp: 500,
+          score_multiplier: 1,
+          badges: ['starter_badge'],
+          created_at: new Date().toISOString()
+        }
+      ];
+      localStorage.setItem(USERS_KEY, JSON.stringify(users));
+    }
+    return users;
+  } catch (e) {
+    return [];
+  }
+};
 const saveUsers = (users) => localStorage.setItem(USERS_KEY, JSON.stringify(users));
 
 const getProducts = () => {
@@ -325,6 +355,46 @@ export const mockDb = {
     }
     localStorage.setItem(CURRENT_SESSION_KEY, JSON.stringify(user));
     return { user };
+  },
+
+  // Step 35: Merge guest loot into existing user account
+  mergeGuestToUser: (userId, guestData = {}) => {
+    const users = getUsers();
+    const userIndex = users.findIndex(u => u.id === userId);
+    if (userIndex === -1) return null;
+
+    const guestBP = typeof guestData.bankPoint === 'number' ? guestData.bankPoint : 0;
+    users[userIndex].total_bp = (users[userIndex].total_bp || 0) + guestBP;
+    users[userIndex].weekly_bp = (users[userIndex].weekly_bp || 0) + guestBP;
+
+    // Merge badges
+    const userBadges = new Set(users[userIndex].badges || []);
+    if (Array.isArray(guestData.badges)) {
+      guestData.badges.forEach(b => userBadges.add(b));
+    }
+    users[userIndex].badges = Array.from(userBadges);
+
+    saveUsers(users);
+    const updatedUser = users[userIndex];
+    localStorage.setItem(CURRENT_SESSION_KEY, JSON.stringify(updatedUser));
+
+    // Clear guest profile & reset guest BP in storage
+    mockDb.clearGuestProfile();
+    localStorage.setItem('playbank_user_bp', '0');
+
+    return { user: updatedUser, mergedBP: guestBP };
+  },
+
+  // Step 35: Restore cloud user only (discard current guest session)
+  restoreCloudUserOnly: (userId) => {
+    const users = getUsers();
+    const user = users.find(u => u.id === userId);
+    if (!user) return null;
+
+    localStorage.setItem(CURRENT_SESSION_KEY, JSON.stringify(user));
+    mockDb.clearGuestProfile();
+    localStorage.setItem('playbank_user_bp', '0');
+    return user;
   },
 
   // Logout current user
