@@ -65,6 +65,7 @@ const AdventureScene = ({
 
         {/* Chapter Title */}
         <h2
+          className="adventure-scene-title"
           style={{
             fontSize: '24px',
             fontWeight: 900,
@@ -79,6 +80,7 @@ const AdventureScene = ({
 
         {/* Stage Progress Bar & Counter */}
         <div
+          className="adventure-scene-progress"
           style={{
             display: 'flex',
             flexDirection: 'column',

@@ -59,7 +59,7 @@ const Home = ({
         flexDirection: 'column',
         justifyContent: 'space-between',
         background: 'transparent',
-        padding: '16px 16px calc(80px + env(safe-area-inset-bottom, 0px))',
+        padding: 'max(16px, env(safe-area-inset-top, 16px)) 16px calc(80px + env(safe-area-inset-bottom, 0px))',
         boxSizing: 'border-box',
         overflow: 'hidden'
       }}
@@ -211,6 +211,7 @@ const Home = ({
       >
         {/* Left Action Column (Daily Mission, Streak Reward, Lucky Chest - Step 21) */}
         <div
+          className="side-action-col"
           style={{
             display: 'flex',
             flexDirection: 'column',
@@ -265,6 +266,7 @@ const Home = ({
 
         {/* Right Action Column (Event, Boss Gate, Achievements - Step 22) */}
         <div
+          className="side-action-col"
           style={{
             display: 'flex',
             flexDirection: 'column',

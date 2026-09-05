@@ -380,7 +380,7 @@ function App() {
       {welcomeBackToast && (
         <div style={{
           position: 'absolute',
-          top: '16px',
+          top: 'calc(max(16px, env(safe-area-inset-top, 16px)) + 54px)',
           left: '50%',
           transform: 'translateX(-50%)',
           zIndex: 999,

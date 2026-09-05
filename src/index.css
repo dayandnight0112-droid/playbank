@@ -126,6 +126,27 @@ body.home-active-body {
   background-color: #0B132B !important;
 }
 
+/* Compact screens (e.g. iPhone SE / height <= 700px) scaling */
+@media (max-height: 700px) {
+  .home-lobby {
+    padding-top: max(8px, env(safe-area-inset-top, 8px)) !important;
+    padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+  .home-lobby header {
+    margin-bottom: 6px !important;
+  }
+  .home-lobby .side-action-col {
+    gap: 8px !important;
+  }
+  .home-lobby .adventure-scene-title {
+    font-size: 20px !important;
+    margin-bottom: 4px !important;
+  }
+  .home-lobby .adventure-scene-progress {
+    padding: 4px 12px !important;
+  }
+}
+
 .dark-mode .app-container {
   box-shadow: 0 0 40px rgba(0,0,0,0.5);
 }
