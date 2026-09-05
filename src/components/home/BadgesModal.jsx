@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, Trophy, Check, Lock, Sparkles, Award } from 'lucide-react';
 import PrimaryButton from '../common/PrimaryButton';
 import { mockDb } from '../../lib/mockDb';
+import { playLootSparkleSound } from '../../lib/soundEffects';
 
 /**
  * BadgesModal
@@ -105,6 +106,8 @@ const BadgesModal = ({
     const updated = Array.from(new Set([...claimedBadges, badgeId]));
     setClaimedBadges(updated);
     localStorage.setItem('playbank_unlocked_badges', JSON.stringify(updated));
+
+    playLootSparkleSound();
 
     const newTotal = mockDb.awardBP(rewardBP);
     if (onUpdateBP) {

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Zap, Trophy, Clock, Sparkles, Check, ArrowRight } from 'lucide-react';
 import PrimaryButton from '../common/PrimaryButton';
 import { mockDb } from '../../lib/mockDb';
+import { playLootSparkleSound } from '../../lib/soundEffects';
 
 /**
  * EventCardModal
@@ -35,6 +36,8 @@ const EventCardModal = ({
 
     localStorage.setItem('playbank_event_milestone_claimed', 'true');
     setMilestoneClaimed(true);
+
+    playLootSparkleSound();
 
     const newTotal = mockDb.awardBP(50);
     if (onUpdateBP) {

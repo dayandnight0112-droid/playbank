@@ -1,4 +1,5 @@
 import React from 'react';
+import { playTapSound } from '../../lib/soundEffects';
 
 const CurrencyBadge = ({
   icon = '🪙',
@@ -11,9 +12,16 @@ const CurrencyBadge = ({
     ? (amount % 1 === 0 ? amount.toLocaleString() : amount.toFixed(1))
     : amount;
 
+  const handleClick = (e) => {
+    if (onClick) {
+      playTapSound();
+      onClick(e);
+    }
+  };
+
   return (
     <div
-      onClick={onClick}
+      onClick={handleClick}
       style={{
         background: 'rgba(30, 41, 59, 0.9)',
         border: `2px solid ${borderColor}`,
@@ -25,7 +33,20 @@ const CurrencyBadge = ({
         backdropFilter: 'blur(6px)',
         boxShadow: '0 2px 8px rgba(0, 0, 0, 0.35)',
         cursor: onClick ? 'pointer' : 'default',
-        userSelect: 'none'
+        userSelect: 'none',
+        transition: 'transform 0.1s ease, box-shadow 0.1s ease'
+      }}
+      onMouseDown={(e) => {
+        if (onClick) e.currentTarget.style.transform = 'scale(0.95)';
+      }}
+      onMouseUp={(e) => {
+        if (onClick) e.currentTarget.style.transform = 'scale(1)';
+      }}
+      onTouchStart={(e) => {
+        if (onClick) e.currentTarget.style.transform = 'scale(0.95)';
+      }}
+      onTouchEnd={(e) => {
+        if (onClick) e.currentTarget.style.transform = 'scale(1)';
       }}
     >
       <span style={{ fontSize: '15px', lineHeight: 1 }}>{icon}</span>
