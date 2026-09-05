@@ -83,6 +83,7 @@ export const BOSS_CHARACTERS = {
       accentColor: '#F59E0B',        // Electric Amber
       dangerColor: '#EF4444',
       glowColor: 'rgba(6, 182, 212, 0.45)',
+      arenaBackground: '/bosses/speed_demon/arena_bg.png',
       arenaGradient: 'linear-gradient(180deg, #0B132B 0%, #172554 40%, #1E1B4B 80%, #0F172A 100%)',
       arenaFloorColor: '#1E293B',
       particleType: 'sparks',

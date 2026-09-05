@@ -458,15 +458,21 @@ const BossBattle = ({
           justifyContent: 'center',
           alignItems: 'center',
           padding: '16px 20px',
-          overflow: 'hidden'
+          overflow: 'hidden',
+          backgroundImage: encounter.character.theme.arenaBackground
+            ? `url(${encounter.character.theme.arenaBackground})`
+            : 'none',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center bottom',
+          backgroundRepeat: 'no-repeat'
         }}
       >
-        {/* Arena Ambient Backdrop */}
+        {/* Arena Subtle Ambient Overlay for readable contrast */}
         <div
           style={{
             position: 'absolute',
             inset: 0,
-            background: 'radial-gradient(circle at 50% 40%, rgba(56, 189, 248, 0.15) 0%, transparent 70%)',
+            background: 'linear-gradient(180deg, rgba(11, 15, 25, 0.45) 0%, rgba(11, 15, 25, 0.15) 50%, rgba(15, 23, 42, 0.65) 100%)',
             pointerEvents: 'none'
           }}
         />
@@ -477,7 +483,7 @@ const BossBattle = ({
             key={Date.now()}
             style={{
               position: 'absolute',
-              top: '22%',
+              top: '18%',
               zIndex: 40,
               fontSize: damageFloat.comboTier?.level >= 5 ? '28px' : damageFloat.isCrit ? '26px' : '22px',
               fontWeight: 900,
@@ -485,8 +491,8 @@ const BossBattle = ({
                 ? '#60A5FA'
                 : (damageFloat.comboTier?.color || (damageFloat.isCrit ? '#FACC15' : '#EF4444')),
               textShadow: damageFloat.comboTier?.glow && damageFloat.comboTier.glow !== 'none'
-                ? `0 4px 12px rgba(0,0,0,0.8), ${damageFloat.comboTier.glow}`
-                : '0 4px 12px rgba(0,0,0,0.8), 0 0 20px currentColor',
+                ? `0 4px 12px rgba(0,0,0,0.9), ${damageFloat.comboTier.glow}`
+                : '0 4px 12px rgba(0,0,0,0.9), 0 0 20px currentColor',
               animation: 'floatAndFade 0.7s ease-out forwards'
             }}
           >
@@ -506,7 +512,8 @@ const BossBattle = ({
               gap: '6px',
               padding: '6px 14px',
               borderRadius: '9999px',
-              background: comboTier.bg,
+              background: 'rgba(15, 23, 42, 0.75)',
+              backdropFilter: 'blur(8px)',
               border: `1.5px solid ${comboTier.color}`,
               boxShadow: comboTier.glow,
               color: comboTier.color,
@@ -527,7 +534,7 @@ const BossBattle = ({
             width: '100%',
             maxWidth: '360px',
             display: 'flex',
-            alignItems: 'center',
+            alignItems: 'flex-end',
             justifyContent: 'space-between',
             zIndex: 10,
             padding: '0 10px'
@@ -545,23 +552,22 @@ const BossBattle = ({
                 : 'translateX(0) scale(1)'
             }}
           >
-            {/* Player 2D Avatar Card */}
+            {/* Player Transparent Character Container */}
             <div
               style={{
-                width: '82px',
-                height: '82px',
-                borderRadius: '20px',
-                background: 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)',
-                border: '3px solid #FDE68A',
-                boxShadow: comboTier?.glow && comboTier.glow !== 'none'
-                  ? `0 8px 24px rgba(245, 158, 11, 0.4), ${comboTier.glow}`
-                  : '0 8px 24px rgba(245, 158, 11, 0.4)',
+                width: '90px',
+                height: '110px',
+                background: 'transparent',
+                border: 'none',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                fontSize: '38px',
+                fontSize: '52px',
                 position: 'relative',
-                transition: 'box-shadow 0.2s ease-out'
+                filter: comboTier?.glow && comboTier.glow !== 'none'
+                  ? `drop-shadow(0 10px 18px rgba(0, 0, 0, 0.8)) drop-shadow(0 0 16px ${comboTier.color})`
+                  : 'drop-shadow(0 10px 18px rgba(0, 0, 0, 0.8))',
+                transition: 'filter 0.2s ease-out'
               }}
             >
               {playerAnimation === PLAYER_ANIMATIONS.VICTORY ? '👑' : '🧙‍♂️'}
@@ -571,19 +577,19 @@ const BossBattle = ({
                 <div
                   style={{
                     position: 'absolute',
-                    top: '-10px',
-                    right: '-10px',
+                    top: '-4px',
+                    right: '-4px',
                     background: comboTier?.color ? comboTier.color : '#EF4444',
                     color: '#FFF',
                     fontSize: '10px',
                     fontWeight: 900,
-                    padding: '2px 6px',
+                    padding: '2px 7px',
                     borderRadius: '9999px',
                     border: '1.5px solid #FFF',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '2px',
-                    boxShadow: comboTier?.glow || '0 2px 6px rgba(0,0,0,0.4)',
+                    boxShadow: comboTier?.glow || '0 2px 8px rgba(0,0,0,0.6)',
                     animation: 'pulse 1s infinite'
                   }}
                 >
@@ -591,13 +597,30 @@ const BossBattle = ({
                 </div>
               )}
             </div>
-            <span style={{ fontSize: '11px', fontWeight: 800, marginTop: '8px', color: '#F1F5F9' }}>
+            <span
+              style={{
+                fontSize: '11px',
+                fontWeight: 900,
+                marginTop: '4px',
+                color: '#F1F5F9',
+                textShadow: '0 2px 6px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.8)'
+              }}
+            >
               Player
             </span>
           </div>
 
           {/* VS Clash Particle Divider */}
-          <div style={{ fontSize: '13px', fontWeight: 900, color: '#475569', fontStyle: 'italic' }}>
+          <div
+            style={{
+              fontSize: '15px',
+              fontWeight: 900,
+              color: '#FDE047',
+              fontStyle: 'italic',
+              textShadow: '0 2px 8px rgba(0,0,0,0.9), 0 0 14px rgba(250, 204, 21, 0.6)',
+              marginBottom: '40px'
+            }}
+          >
             VS
           </div>
 
@@ -613,34 +636,26 @@ const BossBattle = ({
                 : bossAnimation === BOSS_ANIMATIONS.BLOCK
                   ? 'translateX(-12px) scale(1.1)'
                   : bossAnimation === BOSS_ANIMATIONS.DEFEAT
-                    ? 'scale(0.85) rotate(6deg) opacity(0.9)'
+                    ? 'scale(0.9) rotate(6deg) opacity(0.95)'
                     : bossAnimation === BOSS_ANIMATIONS.ESCAPE
                       ? 'scale(0.5) translateY(-30px) opacity(0.2)'
                       : 'translate(0, 0) scale(1)'
             }}
           >
-            {/* Boss 2D Dynamic Sprite Card */}
+            {/* Boss Transparent Character Container */}
             <div
               style={{
-                width: '100px',
-                height: '100px',
-                borderRadius: '24px',
-                background: bossAnimation === BOSS_ANIMATIONS.HIT
-                  ? 'rgba(255, 255, 255, 0.9)'
-                  : bossAnimation === BOSS_ANIMATIONS.BLOCK
-                    ? 'linear-gradient(135deg, rgba(30, 64, 175, 0.6) 0%, rgba(59, 130, 246, 0.6) 100%)'
-                    : 'linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.8) 100%)',
-                border: bossAnimation === BOSS_ANIMATIONS.BLOCK
-                  ? '2.5px solid #60A5FA'
-                  : '2.5px solid rgba(255, 255, 255, 0.2)',
-                boxShadow: bossAnimation === BOSS_ANIMATIONS.BLOCK
-                  ? '0 0 28px rgba(59, 130, 246, 0.8)'
-                  : '0 8px 24px rgba(0, 0, 0, 0.6)',
+                width: '125px',
+                height: '135px',
+                background: 'transparent',
+                border: 'none',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 position: 'relative',
-                overflow: 'hidden',
+                filter: bossAnimation === BOSS_ANIMATIONS.BLOCK
+                  ? 'drop-shadow(0 10px 20px rgba(0, 0, 0, 0.8)) drop-shadow(0 0 20px #3B82F6)'
+                  : 'drop-shadow(0 10px 20px rgba(0, 0, 0, 0.85))',
                 animation: bossAnimation === BOSS_ANIMATIONS.IDLE ? 'floatBob 2.4s ease-in-out infinite' : 'none'
               }}
             >
@@ -661,8 +676,8 @@ const BossBattle = ({
                     src={activeImg}
                     alt={encounter.character.name}
                     style={{
-                      width: '90%',
-                      height: '90%',
+                      width: '100%',
+                      height: '100%',
                       objectFit: 'contain',
                       filter: bossAnimation === BOSS_ANIMATIONS.HIT ? 'brightness(1.8) contrast(1.2)' : 'none',
                       transition: 'all 0.15s ease-out'
@@ -676,20 +691,28 @@ const BossBattle = ({
                 <div
                   style={{
                     position: 'absolute',
-                    top: '6px',
-                    right: '6px',
+                    top: '10px',
+                    right: '10px',
                     background: '#2563EB',
                     borderRadius: '50%',
-                    padding: '4px',
-                    boxShadow: '0 0 10px #60A5FA',
-                    fontSize: '12px'
+                    padding: '5px',
+                    boxShadow: '0 0 14px #60A5FA',
+                    fontSize: '14px'
                   }}
                 >
                   🛡️
                 </div>
               )}
             </div>
-            <span style={{ fontSize: '11px', fontWeight: 800, marginTop: '8px', color: '#94A3B8' }}>
+            <span
+              style={{
+                fontSize: '11px',
+                fontWeight: 900,
+                marginTop: '4px',
+                color: '#38BDF8',
+                textShadow: '0 2px 6px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.8)'
+              }}
+            >
               {encounter.character.name}
             </span>
           </div>
