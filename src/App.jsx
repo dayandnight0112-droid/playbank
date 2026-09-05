@@ -20,6 +20,7 @@ import Tutorial from './views/Tutorial';
 import TutorialReward from './views/TutorialReward';
 import LoginModal from './components/LoginModal';
 import ExitRetentionModal from './components/home/ExitRetentionModal';
+import BossBattle from './views/BossBattle';
 
 function App() {
   const [guestProfile, setGuestProfile] = useState(() => mockDb.getGuestProfile());
@@ -74,12 +75,7 @@ function App() {
 
   const [currentUser, setCurrentUser] = useState(() => mockDb.getCurrentSession());
   
-  const [userBP, setUserBP] = useState(() => {
-    const session = mockDb.getCurrentSession();
-    if (session) return session.total_bp;
-    const guest = mockDb.getGuestProfile();
-    return guest ? (guest.bankPoint || 0) : (parseInt(localStorage.getItem('playbank_user_bp')) || 0);
-  });
+  const [userBP, setUserBP] = useState(() => mockDb.getSafeUserBP());
   
   const [playsToday, setPlaysToday] = useState(() => {
     const session = mockDb.getCurrentSession();
@@ -116,6 +112,26 @@ function App() {
     localStorage.setItem(`playbank_plays_today_${currentUser ? currentUser.id : 'guest'}`, (playsToday || 0).toString());
     localStorage.setItem(`playbank_last_play_date_${currentUser ? currentUser.id : 'guest'}`, getTodayDateString());
   }, [playsToday, currentUser]);
+
+  // Step 36: Dual-Track Balance Integrity & Self-Healing Guard
+  useEffect(() => {
+    mockDb.validateAndHealState();
+
+    const handleStorageChange = (e) => {
+      if (['playbank_user_bp', 'playbank_session', 'playbank_guest_profile', 'playbank_users'].includes(e.key)) {
+        const safeBP = mockDb.getSafeUserBP();
+        setUserBP(safeBP);
+        const session = mockDb.getCurrentSession();
+        setCurrentUser(session);
+        if (!session) {
+          setGuestProfile(mockDb.getGuestProfile());
+        }
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
 
 
 
@@ -288,6 +304,16 @@ function App() {
         return <SelectSubject onBack={() => setCurrentView('home')} onStartQuiz={startQuizFlow} openModal={openModal} />;
       case 'quiz':
         return <Quiz onComplete={handleQuizComplete} onBack={handleQuitQuiz} currentBP={userBP} currentUser={currentUser} onGoGarden={() => setCurrentView('garden')} />;
+      case 'boss_battle':
+        return (
+          <BossBattle
+            currentUser={currentUser}
+            onComplete={(stats) => {
+              handleQuizComplete(stats.earnedBP || 0);
+            }}
+            onBack={() => setCurrentView('home')}
+          />
+        );
       case 'garden':
         return <Garden userBP={userBP} onUpdateBP={(newBP) => setUserBP(newBP)} onGoQuiz={() => setCurrentView('select_subject')} />;
       case 'marketplace':
@@ -316,7 +342,10 @@ function App() {
               } else {
                 mockDb.logoutUser(); 
                 setCurrentUser(null); 
-                setUserBP(parseInt(localStorage.getItem('playbank_user_bp')) || 0); 
+                mockDb.clearGuestProfile();
+                localStorage.setItem('playbank_user_bp', '0');
+                setUserBP(0); 
+                setGuestProfile(null);
                 setCurrentView('welcome');
               }
             }} 
@@ -343,7 +372,7 @@ function App() {
     return <AdminDashboard onLogout={() => { mockDb.logoutUser(); setCurrentUser(null); }} />;
   }
 
-  const hideBottomNav = ['welcome', 'choose_path', 'tutorial', 'tutorial_reward', 'quiz'].includes(currentView);
+  const hideBottomNav = ['welcome', 'choose_path', 'tutorial', 'tutorial_reward', 'quiz', 'boss_battle'].includes(currentView);
 
   return (
     <div className="app-container">
@@ -406,6 +435,34 @@ function App() {
       >
         ↺
       </button>
+
+      {/* Temporary Dev Test Button for Step 4 Boss Battle Prototype */}
+      {currentView === 'home' && (
+        <button
+          onClick={() => setCurrentView('boss_battle')}
+          style={{
+            position: 'absolute',
+            bottom: '200px',
+            right: '20px',
+            zIndex: 100,
+            background: 'linear-gradient(135deg, #EF4444, #F59E0B)',
+            color: '#FFF',
+            border: '2px solid #FFF',
+            borderRadius: '50%',
+            width: '42px',
+            height: '42px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            boxShadow: '0 4px 14px rgba(239, 68, 68, 0.5)',
+            fontSize: '18px'
+          }}
+          title="Play Boss Battle Prototype (5 Questions)"
+        >
+          ⚔️
+        </button>
+      )}
 
       {renderView()}
       

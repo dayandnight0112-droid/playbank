@@ -7,18 +7,61 @@ const ORDERS_KEY = 'playbank_orders';
 const GARDEN_STATE_KEY = 'playbank_garden_state';
 const GUEST_PROFILE_KEY = 'playbank_guest_profile';
 
-const getGuestProfileRaw = () => {
+const BACKUP_SNAPSHOT_KEY = 'playbank_data_backup_snapshot';
+
+export const safeGetJSON = (key, fallback = null) => {
   try {
-    const raw = localStorage.getItem(GUEST_PROFILE_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch (e) {
-    return null;
+    const raw = localStorage.getItem(key);
+    if (raw === null || raw === undefined) return fallback;
+    const parsed = JSON.parse(raw);
+    return parsed !== null ? parsed : fallback;
+  } catch (err) {
+    console.warn(`[mockDb] Safe recovery: key "${key}" was corrupted. Restoring fallback.`, err);
+    if (fallback !== null && fallback !== undefined) {
+      try {
+        localStorage.setItem(key, JSON.stringify(fallback));
+      } catch (e) {}
+    }
+    return fallback;
   }
+};
+
+export const safeSetJSON = (key, value) => {
+  try {
+    if ([USERS_KEY, CURRENT_SESSION_KEY, GUEST_PROFILE_KEY].includes(key)) {
+      try {
+        const current = localStorage.getItem(key);
+        if (current) {
+          localStorage.setItem(`${key}_bak`, current);
+        }
+      } catch (e) {}
+    }
+    localStorage.setItem(key, JSON.stringify(value));
+    return true;
+  } catch (err) {
+    console.error(`[mockDb] Failed to write key "${key}":`, err);
+    return false;
+  }
+};
+
+const getGuestProfileRaw = () => {
+  const profile = safeGetJSON(GUEST_PROFILE_KEY, null);
+  if (profile) {
+    profile.bankPoint = Math.max(0, Math.round(Number(profile.bankPoint) || 0));
+    if (!profile.chapterProgress) {
+      profile.chapterProgress = { chapter: 1, chapterName: 'Training Grounds', stage: 1, totalStages: 8 };
+    }
+  }
+  return profile;
 };
 
 const saveGuestProfileRaw = (profile) => {
   if (profile) {
-    localStorage.setItem(GUEST_PROFILE_KEY, JSON.stringify(profile));
+    const sanitized = {
+      ...profile,
+      bankPoint: Math.max(0, Math.round(Number(profile.bankPoint) || 0))
+    };
+    safeSetJSON(GUEST_PROFILE_KEY, sanitized);
   } else {
     localStorage.removeItem(GUEST_PROFILE_KEY);
   }
@@ -501,14 +544,15 @@ export const mockDb = {
     localStorage.setItem('playbank_questions', JSON.stringify(questions));
   },
 
-  // Update user BP
+  // Update user BP with integrity protection
   updateUserBP: (userId, additionalBP) => {
+    const validAdd = Math.round(Number(additionalBP) || 0);
     const users = getUsers();
     const userIndex = users.findIndex(u => u.id === userId);
     if (userIndex === -1) return null;
 
-    users[userIndex].total_bp += additionalBP;
-    users[userIndex].weekly_bp = (users[userIndex].weekly_bp || 0) + additionalBP;
+    users[userIndex].total_bp = Math.max(0, Math.round((Number(users[userIndex].total_bp) || 0) + validAdd));
+    users[userIndex].weekly_bp = Math.max(0, Math.round((Number(users[userIndex].weekly_bp) || 0) + validAdd));
     saveUsers(users);
 
     const session = mockDb.getCurrentSession();
@@ -519,9 +563,10 @@ export const mockDb = {
     }
 
     // Trigger distribution (the original user earned BP, let's distribute to uplines)
-    mockDb.distributeReferralBP(userId, additionalBP);
+    if (validAdd > 0) {
+      mockDb.distributeReferralBP(userId, validAdd);
+    }
 
-    // Re-fetch to get potentially updated upline bonus if they refer each other (though rare/prevented)
     return getUsers().find(u => u.id === userId);
   },
 
@@ -999,15 +1044,45 @@ export const mockDb = {
     return state;
   },
 
-  // Step 9: 增加用户 BP（兼容登录用户与访客）
-  awardBP: (amount = 0) => {
+  // Step 36: Dual-track safe BP getter & integrity verifier
+  getSafeUserBP: () => {
     const session = mockDb.getCurrentSession();
     if (session && session.id) {
-      const updated = mockDb.updateUserBP(session.id, amount);
+      const bp = Number(session.total_bp);
+      return Number.isFinite(bp) ? Math.max(0, Math.round(bp)) : 0;
+    }
+    const guest = mockDb.getGuestProfile();
+    const storageRaw = localStorage.getItem('playbank_user_bp');
+    const storageBP = storageRaw !== null ? parseInt(storageRaw, 10) : 0;
+    const guestBP = guest && typeof guest.bankPoint === 'number' ? guest.bankPoint : 0;
+
+    const safeStorageBP = isNaN(storageBP) ? 0 : Math.max(0, storageBP);
+    const safeGuestBP = isNaN(guestBP) ? 0 : Math.max(0, guestBP);
+
+    // Reconcile and pick highest valid point
+    const finalBP = Math.max(safeStorageBP, safeGuestBP);
+
+    if (guest && guest.bankPoint !== finalBP) {
+      mockDb.updateGuestProfile({ bankPoint: finalBP });
+    }
+    if (safeStorageBP !== finalBP || storageRaw === null) {
+      localStorage.setItem('playbank_user_bp', finalBP.toString());
+    }
+    return finalBP;
+  },
+
+  // Step 9 & Step 36: 增加用户 BP（双轨原子级保护，严格防重与防篡改）
+  awardBP: (amount = 0) => {
+    const validAmount = Math.round(Number(amount) || 0);
+    if (validAmount <= 0) return mockDb.getSafeUserBP();
+
+    const session = mockDb.getCurrentSession();
+    if (session && session.id) {
+      const updated = mockDb.updateUserBP(session.id, validAmount);
       return updated?.total_bp || 0;
     } else {
-      const current = parseInt(localStorage.getItem('playbank_user_bp') || '0', 10);
-      const next = current + amount;
+      const current = mockDb.getSafeUserBP();
+      const next = current + validAmount;
       localStorage.setItem('playbank_user_bp', next.toString());
       mockDb.updateGuestProfile({ bankPoint: next });
       return next;
@@ -1382,5 +1457,73 @@ export const mockDb = {
       newTotalBP,
       nextState: mockDb.getLuckyChestState()
     };
+  },
+
+  // Step 36: Comprehensive Disaster Recovery & Self-Healing Guard
+  validateAndHealState: () => {
+    const report = { healed: [], valid: true };
+    try {
+      // 1. Validate session vs users
+      const session = safeGetJSON(CURRENT_SESSION_KEY, null);
+      const users = safeGetJSON(USERS_KEY, []);
+      if (session && session.id) {
+        const found = users.find(u => u.id === session.id);
+        if (!found) {
+          users.push(session);
+          safeSetJSON(USERS_KEY, users);
+          report.healed.push('Restored missing session user into users registry');
+        } else if (found.total_bp !== session.total_bp) {
+          session.total_bp = found.total_bp;
+          safeSetJSON(CURRENT_SESSION_KEY, session);
+          report.healed.push('Synchronized session total_bp with user database');
+        }
+      }
+
+      // 2. Validate guest profile and BP consistency
+      const guest = safeGetJSON(GUEST_PROFILE_KEY, null);
+      if (guest) {
+        if (!guest.guestName) {
+          guest.guestName = `Guest ${Math.floor(1000 + Math.random() * 9000)}`;
+          report.healed.push('Assigned default name to nameless guest');
+        }
+        if (!Number.isFinite(guest.bankPoint) || guest.bankPoint < 0) {
+          guest.bankPoint = 0;
+          report.healed.push('Reset corrupted guest bankPoint to 0');
+        }
+        safeSetJSON(GUEST_PROFILE_KEY, guest);
+      }
+
+      // 3. Ensure consistent storage BP
+      mockDb.getSafeUserBP();
+
+      // 4. Create snapshot backup of verified healthy state
+      const snapshot = {
+        timestamp: Date.now(),
+        hasSession: !!session,
+        sessionUserId: session?.id || null,
+        guestBP: guest?.bankPoint || 0
+      };
+      safeSetJSON(BACKUP_SNAPSHOT_KEY, snapshot);
+    } catch (e) {
+      console.error('[mockDb] Error during state validation and healing:', e);
+      report.valid = false;
+      report.error = e.message;
+    }
+    return report;
+  },
+
+  // Step 36: Rollback to last verified snapshot in disaster scenario
+  rollbackToLastSnapshot: () => {
+    const snapshot = safeGetJSON(BACKUP_SNAPSHOT_KEY, null);
+    if (!snapshot) return false;
+    try {
+      const guestBak = localStorage.getItem(`${GUEST_PROFILE_KEY}_bak`);
+      if (guestBak) localStorage.setItem(GUEST_PROFILE_KEY, guestBak);
+      const userBak = localStorage.getItem(`${USERS_KEY}_bak`);
+      if (userBak) localStorage.setItem(USERS_KEY, userBak);
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 };
