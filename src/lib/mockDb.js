@@ -1521,5 +1521,67 @@ export const mockDb = {
     } catch (e) {
       return false;
     }
+  },
+
+  // =========================================================================
+  // Boss Battle Long-Term Learning & Question History (Step 9 / Future RECALL)
+  // =========================================================================
+  recordQuestionAnswer: ({ question, isCorrect, selectedOption, source = 'quiz' }) => {
+    if (!question) return;
+
+    try {
+      // 1. Log to overall answer history
+      const history = safeGetJSON('playbank_question_history', []);
+      history.push({
+        id: Date.now().toString() + '_' + Math.random().toString(36).substring(2, 6),
+        questionText: question.text || question.question,
+        subject: question.subject || 'general',
+        chapter: question.chapter || 1,
+        isCorrect: !!isCorrect,
+        selectedOption,
+        correctAnswer: question.correctAnswer,
+        source,
+        timestamp: new Date().toISOString()
+      });
+      // Cap at 200 items for healthy local storage
+      if (history.length > 200) history.shift();
+      safeSetJSON('playbank_question_history', history);
+
+      // 2. If wrong: register/update in wrong question bank (for RECALL / Memory Boss)
+      if (!isCorrect) {
+        const wrongBank = safeGetJSON('playbank_wrong_question_bank', []);
+        const existingIdx = wrongBank.findIndex(
+          item => (item.question.text || item.question.question) === (question.text || question.question)
+        );
+
+        if (existingIdx !== -1) {
+          wrongBank[existingIdx].wrongCount = (wrongBank[existingIdx].wrongCount || 1) + 1;
+          wrongBank[existingIdx].lastWrongAt = new Date().toISOString();
+          wrongBank[existingIdx].lastSelectedOption = selectedOption;
+        } else {
+          wrongBank.push({
+            id: question.id || 'wrong_' + Date.now(),
+            question,
+            wrongCount: 1,
+            lastWrongAt: new Date().toISOString(),
+            lastSelectedOption: selectedOption,
+            source
+          });
+        }
+        safeSetJSON('playbank_wrong_question_bank', wrongBank);
+      }
+    } catch (err) {
+      console.warn('[mockDb] Failed to record question history:', err);
+    }
+  },
+
+  // Get wrong question bank (specifically for future RECALL / Memory Boss Type)
+  getWrongQuestionBank: () => {
+    return safeGetJSON('playbank_wrong_question_bank', []);
+  },
+
+  // Get overall question learning history
+  getQuestionHistory: () => {
+    return safeGetJSON('playbank_question_history', []);
   }
 };

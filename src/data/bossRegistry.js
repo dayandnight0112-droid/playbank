@@ -25,10 +25,9 @@ export const createBossEncounter = (bossId = 'chrono_lynx', typeId = 'speed', cu
   const type = getBossType(typeId);
 
   // Derive initial combat state parameters strictly from type specification
-  const maxBossHp = customOverrides.bossHp || type.winCondition.bossTotalHp;
-  const maxPlayerHp = customOverrides.playerHp || type.winCondition.playerMaxHp;
-  const questionCount = customOverrides.questionCount || type.questionCount;
-  const timeLimit = customOverrides.timeLimit || type.timerRule.timeLimit;
+  const maxBossHp = customOverrides.bossHp || type.bossHp || 8;
+  const questionCount = customOverrides.questionCount || type.questionCount || 8;
+  const timeLimit = customOverrides.timeLimit || type.timeLimit || 7;
 
   return {
     // Pure audiovisual & lore identity
@@ -45,31 +44,28 @@ export const createBossEncounter = (bossId = 'chrono_lynx', typeId = 'speed', cu
 
     // Pure battle mechanics & calculation engine
     type: {
-      id: type.typeId,
-      name: type.typeName,
+      id: type.type,
+      name: type.displayName,
       description: type.description,
-      badge: type.badge,
       questionCount,
-      timerRule: {
-        ...type.timerRule,
-        timeLimit
-      },
+      bossHp: maxBossHp,
+      timerMode: type.timerMode,
+      timeLimit,
+      urgentThreshold: type.urgentThreshold || 3,
+      questionMode: type.questionMode,
+      battleModifier: type.battleModifier,
+      introBanner: type.introBanner || null,
+      cadence: type.cadence || null,
       damageRule: type.damageRule,
       comboRule: type.comboRule,
-      winCondition: {
-        ...type.winCondition,
-        bossTotalHp: maxBossHp,
-        playerMaxHp: maxPlayerHp
-      },
-      battleRules: type.battleRules
+      battleRules: type.battleRules,
+      isImplemented: type.isImplemented !== false
     },
 
     // Derived combat configuration
     initialState: {
-      bossHp: maxBossHp,
-      maxBossHp,
-      playerHp: maxPlayerHp,
-      maxPlayerHp,
+      bossHP: maxBossHp,
+      maxBossHP: maxBossHp,
       currentQuestionIndex: 0,
       totalQuestions: questionCount,
       combo: 0,

@@ -9,9 +9,54 @@
 
 export const BOSS_CHARACTERS = {
   /**
-   * 1. Chrono Lynx (时空灵猫)
-   * High-speed, neon cyber-fantasy predator
+   * 0. Boss Prototype / Training Dummy (Placeholder for Step 4 Engine Verification)
    */
+  placeholder_boss: {
+    bossId: 'placeholder_boss',
+    bossName: 'Boss Prototype',
+    title: '战斗核心测试假人',
+    lore: '专用于验证通用战斗状态机、时序锁定与伤害判定的训练机甲。',
+
+    artwork: {
+      avatarUrl: null,
+      fullArtUrl: null,
+      badgeIcon: '🤖',
+      characterEmoji: '🤖',
+      placeholderGradient: 'linear-gradient(135deg, #475569 0%, #334155 50%, #1E293B 100%)'
+    },
+
+    sprites: {
+      idle: 'animate-boss-hover',
+      attack: 'animate-boss-slash',
+      hit: 'animate-boss-shake',
+      block: 'animate-boss-block',
+      defeat: 'animate-boss-dissolve'
+    },
+
+    theme: {
+      primaryColor: '#38BDF8',       // Sky Blue
+      accentColor: '#F59E0B',        // Amber
+      dangerColor: '#EF4444',
+      glowColor: 'rgba(56, 189, 248, 0.4)',
+      arenaGradient: 'linear-gradient(180deg, #0F172A 0%, #1E293B 50%, #0F172A 100%)',
+      arenaFloorColor: '#1E293B',
+      particleType: 'sparks',
+
+      dialogues: {
+        intro: '战斗引擎自检就绪。请作答以启动打击测试！',
+        playerHit: '检测到有效命中，机体护盾 -1。',
+        bossBlock: '选项错误，格挡机制启动！',
+        defeat: '测试目标血量清零，全流程验证成功！'
+      }
+    },
+
+    sound: {
+      bgmKey: 'test_battle',
+      attackSfx: 'mech_whir',
+      hitSfx: 'metal_hit',
+      defeatSfx: 'power_down'
+    }
+  },
   chrono_lynx: {
     bossId: 'chrono_lynx',
     bossName: 'Chrono Lynx',

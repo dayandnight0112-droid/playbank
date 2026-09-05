@@ -2,194 +2,199 @@
  * Boss Type System (Battle Mechanics & Rules Engine)
  * 
  * DESIGN PRINCIPLE:
- * Boss Type governs pure gameplay rules, timing, scoring, and combat calculations.
- * It is completely decoupled from Boss Character names, lore, or art assets.
- * Any Boss Character can equip any Boss Type.
+ * Defines universal Boss Type configurations for the 5 confirmed battle mechanics:
+ * 1. SPEED (Fully realized)
+ * 2. SHIELD (Placeholder)
+ * 3. RECALL (Placeholder)
+ * 4. CHAOS (Placeholder)
+ * 5. FINAL (Placeholder)
+ * 
+ * Neutral code keys are used so UI labels can change at any time.
  */
 
-export const BOSS_TYPES = {
-  /**
-   * 1. Speed Type (极速突袭型)
-   * Core mechanics:
-   * - 8 rapid consecutive questions
-   * - Strict 7-second countdown per question
-   * - Faster correct answers deal massive critical speed bonus damage
-   * - Consecutive combos build up huge damage multipliers
-   * - Wrong answers or timeouts cause immediate player HP loss and combo reset
-   */
-  speed: {
-    typeId: 'speed',
-    typeName: 'Speed Rush (极速突袭)',
-    badge: '⚡',
-    description: '连续 8 道极速题，手速越快伤害越高！保持连击重创 Boss！',
-    
-    // Total questions in this battle
-    questionCount: 8,
+/**
+ * 5 Neutral Battle Type Keys
+ */
+export const BOSS_TYPE_KEYS = {
+  SPEED: 'SPEED',
+  SHIELD: 'SHIELD',
+  RECALL: 'RECALL',
+  CHAOS: 'CHAOS',
+  FINAL: 'FINAL'
+};
 
-    // Timer rules
-    timerRule: {
-      mode: 'per_question',        // Timer resets per question
-      timeLimit: 7,                // 7 seconds per question
-      urgentThreshold: 3,          // Enter tense heartbeat / red flash state when <= 3s
-      tickIntervalMs: 100          // 100ms smooth timer precision for UI bar & calculations
+/**
+ * @typedef {Object} BossTypeConfig
+ * @property {string} type - Neutral type key (from BOSS_TYPE_KEYS)
+ * @property {string} displayName - Human-readable name for UI
+ * @property {string} description - Brief summary of mechanics
+ * @property {boolean} isImplemented - Whether this type is fully playable
+ * @property {number} [questionCount] - Number of questions for this battle
+ * @property {number} [bossHp] - Boss health points (configured independently per Type)
+ * @property {string} [timerMode] - Timer pacing ('FAST' | 'STANDARD' | 'RELAXED' | etc.)
+ * @property {number} [timeLimit] - Seconds allocated per question
+ * @property {number} [urgentThreshold] - Seconds left before visual warning
+ * @property {string} [questionMode] - Question style ('QUICK_RECALL' | 'STANDARD' | etc.)
+ * @property {string} [battleModifier] - Combat modifier ('SPEED_PRESSURE' | 'NONE' | etc.)
+ * @property {Object} [battleRules] - Pacing and reveal settings
+ * @property {Object} [damageRule] - Damage formulas
+ * @property {Object} [comboRule] - Combo break rules
+ */
+
+/**
+ * Step 8: Speed Combo Visual Progression (Level 1 ~ Level 8)
+ * Pure visual & typography upgrade; does NOT affect 1-HP base damage.
+ */
+export const SPEED_COMBO_TIERS = {
+  1: { level: 1, label: 'HIT!', floatLabel: 'HIT! -1', color: '#F1F5F9', bg: 'rgba(255,255,255,0.12)', glow: 'none' },
+  2: { level: 2, label: 'COMBO x2', floatLabel: 'COMBO x2! -1', color: '#FDE047', bg: 'rgba(253, 224, 71, 0.2)', glow: '0 0 12px rgba(250, 204, 21, 0.5)' },
+  3: { level: 3, label: 'COMBO x3', floatLabel: 'COMBO x3! -1', color: '#F59E0B', bg: 'rgba(245, 158, 11, 0.25)', glow: '0 0 16px rgba(245, 158, 11, 0.6)' },
+  4: { level: 4, label: 'FAST STREAK!', floatLabel: '⚡ FAST STREAK! -1', color: '#FB923C', bg: 'rgba(251, 146, 60, 0.3)', glow: '0 0 20px rgba(251, 146, 60, 0.7)' },
+  5: { level: 5, label: 'ON FIRE!', floatLabel: '🔥 ON FIRE! -1', color: '#EF4444', bg: 'rgba(239, 68, 68, 0.35)', glow: '0 0 25px rgba(239, 68, 68, 0.8)' },
+  6: { level: 6, label: 'UNSTOPPABLE!', floatLabel: '⚡ UNSTOPPABLE! -1', color: '#EC4899', bg: 'rgba(236, 72, 153, 0.4)', glow: '0 0 30px rgba(236, 72, 153, 0.85)' },
+  7: { level: 7, label: 'MAX SPEED!', floatLabel: '🚀 MAX SPEED! -1', color: '#8B5CF6', bg: 'rgba(139, 92, 246, 0.45)', glow: '0 0 35px rgba(139, 92, 246, 0.9)' },
+  8: { level: 8, label: 'FINISHER!', floatLabel: '💥 FINISHER! -1', color: '#FFBC00', bg: 'linear-gradient(90deg, #EF4444, #F59E0B)', glow: '0 0 45px rgba(255, 188, 0, 1)' }
+};
+
+export const getSpeedComboTier = (combo = 0) => {
+  if (combo <= 0) return null;
+  const clamped = Math.min(combo, 8);
+  return SPEED_COMBO_TIERS[clamped] || SPEED_COMBO_TIERS[8];
+};
+
+export const BOSS_TYPE_CONFIGS = {
+  /**
+   * 1. SPEED Type (Fully Implemented)
+   * 8 rapid consecutive questions, strict 7s timer, fast reaction triggers visual crits
+   */
+  [BOSS_TYPE_KEYS.SPEED]: {
+    type: BOSS_TYPE_KEYS.SPEED,
+    displayName: 'Speed Battle',
+    description: '连续 8 道极速题，反应越快视觉反馈越强！',
+    isImplemented: true,
+
+    questionCount: 8,
+    bossHp: 8, // Configured per Type independently (not forced to match questionCount)
+
+    timerMode: 'FAST',
+    timeLimit: 10, // Configurable: currently 10s, can easily be changed to 8s or 6s
+    urgentThreshold: 3,
+
+    // Step 6: Dramatic intro banner text
+    introBanner: {
+      title: 'SPEED BATTLE',
+      subtitle: '8 QUESTIONS',
+      warning: "DON'T SLOW DOWN!"
     },
 
-    // Combat damage formulas
+    questionMode: 'QUICK_RECALL',
+    battleModifier: 'SPEED_PRESSURE',
+
+    // Step 7: Ultra-fast cadence for Speed Type (0.5s - 0.7s turnaround)
+    cadence: {
+      answerLockMs: 90,           // Near-instant lock (90ms)
+      playerAttackMs: 160,        // Quick dash slash (160ms)
+      bossReactionMs: 220,        // Crisp hit impact (220ms)
+      nextTransitionMs: 100,      // Immediate question swap (100ms)
+      accelerateWithCombo: true   // Dynamic acceleration: gets even faster with combo!
+    },
+
+    battleRules: {
+      revealAnswerMs: 800
+    },
+
     damageRule: {
-      basePlayerDamage: 100,       // Base damage dealt by correct answer
-      speedBonusMax: 60,           // Extra speed bonus for instant reaction
-      bossAttackDamage: 25,        // Damage dealt to player on wrong answer or timeout
+      basePlayerDamage: 1,
 
       /**
-       * Calculate damage dealt to Boss by player
-       * @param {Object} params
-       * @param {boolean} params.isCorrect - Whether player selected correct answer
-       * @param {number} params.timeTaken - Seconds taken to answer (e.g. 1.8)
-       * @param {number} params.timeLimit - Question time limit (7)
-       * @param {number} params.combo - Current combo streak before this hit
-       * @returns {Object} { damage, isCrit, speedBonus, comboMultiplier, floatLabel }
+       * V1: Every correct answer deals 1 damage.
+       * Speed & Combo drive animations, VFX, and float labels.
        */
-      calculatePlayerDamage: ({ isCorrect, timeTaken = 0, timeLimit = 7, combo = 0 }) => {
+      calculatePlayerDamage: ({ isCorrect, timeTaken = 0, combo = 0 }) => {
         if (!isCorrect) {
           return {
             damage: 0,
             isCrit: false,
-            speedBonus: 0,
-            comboMultiplier: 1,
-            floatLabel: 'MISS'
+            floatLabel: 'BLOCK!',
+            isBlock: true,
+            comboTier: null
           };
         }
 
-        // Speed Factor: remaining time ratio (0.0 ~ 1.0)
-        const timeRatio = Math.max(0, Math.min(1, (timeLimit - timeTaken) / timeLimit));
-        
-        // Speed bonus: up to +60 damage if answered instantly (< 2s)
-        const speedBonus = Math.round(timeRatio * 60);
-        
-        // Combo multiplier: +20% per combo streak (e.g. Combo 3 = 1.6x)
-        const comboMultiplier = 1 + Math.min(combo, 8) * 0.2;
-
-        // Is Critical Strike: answered in less than 2.5 seconds
         const isCrit = timeTaken <= 2.5;
-        const critMultiplier = isCrit ? 1.35 : 1.0;
-
-        const rawDamage = (100 + speedBonus) * comboMultiplier * critMultiplier;
-        const finalDamage = Math.round(rawDamage);
-
-        let floatLabel = `${finalDamage}`;
-        if (isCrit && combo >= 3) {
-          floatLabel = `⚡ ULTRA CRIT! -${finalDamage}`;
-        } else if (isCrit) {
-          floatLabel = `SPEED CRIT! -${finalDamage}`;
-        } else if (combo >= 3) {
-          floatLabel = `COMBO x${combo}! -${finalDamage}`;
-        } else {
-          floatLabel = `-${finalDamage}`;
-        }
+        const tier = getSpeedComboTier(combo);
+        const floatLabel = tier ? tier.floatLabel : '-1 HP';
 
         return {
-          damage: finalDamage,
+          damage: 1, // Fixed V1 damage: exactly 1
           isCrit,
-          speedBonus,
-          comboMultiplier: parseFloat(comboMultiplier.toFixed(2)),
-          floatLabel
+          floatLabel,
+          isBlock: false,
+          comboTier: tier
         };
       }
     },
 
-    // Combo streak rules
     comboRule: {
       breakOnWrong: true,
-      breakOnTimeout: true,
-      /**
-       * Returns multiplier formatted for display or calculations
-       */
-      getMultiplier: (combo) => 1 + Math.min(combo, 8) * 0.2
-    },
-
-    // Victory & Defeat conditions
-    winCondition: {
-      mode: 'deplete_boss_hp',     // Primary win condition: Boss HP drops to 0
-      bossTotalHp: 1000,           // Balanced so 8 solid hits KO the boss
-      playerMaxHp: 100,            // Player starts with 100 HP (can take 4 misses before KO)
-      allowTimeoutFail: true       // Timeout damages player HP
-    },
-
-    // Battle cadence & UI pacing
-    battleRules: {
-      allowSkip: false,
-      instantNext: false,
-      feedbackDelayMs: 650,        // 650ms punchy attack animation before next question
-      showSpeedometer: true        // Speed-type specific UI widget
+      breakOnTimeout: true
     }
   },
 
   /**
-   * Placeholder / Stubs for future Boss Types
-   * Ensuring the architecture is fully pluggable without structural changes.
+   * 2. SHIELD Type (Placeholder - parameters to be confirmed later)
    */
-  shield: {
-    typeId: 'shield',
-    typeName: 'Shield Guard (护盾破除型)',
-    badge: '🛡️',
-    description: 'Boss 拥有多层知识护盾，需在限定弱点科目连击破盾。',
-    questionCount: 10,
-    timerRule: { mode: 'per_question', timeLimit: 12, urgentThreshold: 3, tickIntervalMs: 100 },
-    damageRule: { basePlayerDamage: 80, bossAttackDamage: 20 },
-    comboRule: { breakOnWrong: true, breakOnTimeout: true, getMultiplier: (c) => 1 + c * 0.15 },
-    winCondition: { mode: 'deplete_boss_hp', bossTotalHp: 1200, playerMaxHp: 100 }
+  [BOSS_TYPE_KEYS.SHIELD]: {
+    type: BOSS_TYPE_KEYS.SHIELD,
+    displayName: 'Shield Battle',
+    description: '护盾与连击机制（待配置）',
+    isImplemented: false
   },
 
-  elemental: {
-    typeId: 'elemental',
-    typeName: 'Elemental Rift (属性共鸣型)',
-    badge: '🔮',
-    description: '不同题目对应水/火/雷属性，针对 Boss 弱点属性可打出 2 倍克制伤害。',
-    questionCount: 9,
-    timerRule: { mode: 'per_question', timeLimit: 10, urgentThreshold: 3, tickIntervalMs: 100 },
-    damageRule: { basePlayerDamage: 90, bossAttackDamage: 20 },
-    comboRule: { breakOnWrong: true, breakOnTimeout: true, getMultiplier: (c) => 1 + c * 0.2 },
-    winCondition: { mode: 'deplete_boss_hp', bossTotalHp: 1100, playerMaxHp: 100 }
+  /**
+   * 3. RECALL Type (Placeholder - parameters to be confirmed later)
+   */
+  [BOSS_TYPE_KEYS.RECALL]: {
+    type: BOSS_TYPE_KEYS.RECALL,
+    displayName: 'Recall Battle',
+    description: '错题温习与记忆机制（待配置）',
+    isImplemented: false
   },
 
-  puzzle: {
-    typeId: 'puzzle',
-    typeName: 'Mind Maze (迷宫心智型)',
-    badge: '🧩',
-    description: '连线与线索解谜战斗，限定步数内击破 Boss 核心。',
-    questionCount: 6,
-    timerRule: { mode: 'per_question', timeLimit: 15, urgentThreshold: 4, tickIntervalMs: 100 },
-    damageRule: { basePlayerDamage: 150, bossAttackDamage: 30 },
-    comboRule: { breakOnWrong: true, breakOnTimeout: true, getMultiplier: (c) => 1 + c * 0.25 },
-    winCondition: { mode: 'deplete_boss_hp', bossTotalHp: 900, playerMaxHp: 100 }
+  /**
+   * 4. CHAOS Type (Placeholder - parameters to be confirmed later)
+   */
+  [BOSS_TYPE_KEYS.CHAOS]: {
+    type: BOSS_TYPE_KEYS.CHAOS,
+    displayName: 'Chaos Battle',
+    description: '混乱干扰与多维机制（待配置）',
+    isImplemented: false
   },
 
-  endurance: {
-    typeId: 'endurance',
-    typeName: 'Endurance Marathon (极限耐力型)',
-    badge: '⏱️',
-    description: '无限答题波次， Boss 攻击频率逐渐加快，测试极限生存记录。',
-    questionCount: 15,
-    timerRule: { mode: 'per_question', timeLimit: 8, urgentThreshold: 2, tickIntervalMs: 100 },
-    damageRule: { basePlayerDamage: 70, bossAttackDamage: 15 },
-    comboRule: { breakOnWrong: true, breakOnTimeout: true, getMultiplier: (c) => 1 + c * 0.1 },
-    winCondition: { mode: 'deplete_boss_hp', bossTotalHp: 1500, playerMaxHp: 100 }
+  /**
+   * 5. FINAL Type (Placeholder - parameters to be confirmed later)
+   */
+  [BOSS_TYPE_KEYS.FINAL]: {
+    type: BOSS_TYPE_KEYS.FINAL,
+    displayName: 'Final Battle',
+    description: '章节大领主决战机制（待配置）',
+    isImplemented: false
   }
 };
 
 /**
- * Retrieve a Boss Type specification by its typeId
- * @param {string} typeId
- * @returns {Object} BossType specification (defaults to speed)
+ * Retrieve a Boss Type Config by key (case-insensitive)
+ * @param {string} [typeKey='SPEED']
+ * @returns {BossTypeConfig}
  */
-export const getBossType = (typeId = 'speed') => {
-  return BOSS_TYPES[typeId] || BOSS_TYPES.speed;
+export const getBossTypeConfig = (typeKey = 'SPEED') => {
+  const normalizedKey = (typeKey || 'SPEED').toString().toUpperCase();
+  return BOSS_TYPE_CONFIGS[normalizedKey] || BOSS_TYPE_CONFIGS[BOSS_TYPE_KEYS.SPEED];
 };
 
 /**
- * List all registered Boss Types
- * @returns {Array} List of Boss Type configurations
+ * Backward compatibility alias for existing calls
  */
-export const getAllBossTypes = () => {
-  return Object.values(BOSS_TYPES);
-};
+export const BOSS_TYPES = BOSS_TYPE_CONFIGS;
+export const getBossType = getBossTypeConfig;
+export const getAllBossTypes = () => Object.values(BOSS_TYPE_CONFIGS);
