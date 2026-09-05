@@ -502,7 +502,7 @@ export const mockDb = {
 
   getQuestions: () => {
     let q = JSON.parse(localStorage.getItem('playbank_questions'));
-    if (!q || q.length === 0) {
+    if (!q || q.length === 0 || q.length < defaultQuestions.length) {
       q = defaultQuestions;
       localStorage.setItem('playbank_questions', JSON.stringify(q));
     }
@@ -1583,5 +1583,55 @@ export const mockDb = {
   // Get overall question learning history
   getQuestionHistory: () => {
     return safeGetJSON('playbank_question_history', []);
+  },
+
+  // Log completed boss encounter attempt
+  logBossAttempt: ({
+    userId,
+    bossId = 'chrono_lynx',
+    bossType = 'SPEED',
+    subject = 'general',
+    form = 4,
+    chapter = 1,
+    correct = 0,
+    wrong = 0,
+    skipped = 0,
+    accuracy = 0,
+    maxCombo = 0,
+    bossResult = 'BOSS_ESCAPED',
+    earnedBP = 0
+  }) => {
+    try {
+      const logs = safeGetJSON('playbank_boss_logs', []);
+      const entry = {
+        id: 'boss_log_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+        userId: userId || 'guest',
+        bossId,
+        bossType,
+        subject,
+        form,
+        chapter,
+        correct: Number(correct) || 0,
+        wrong: Number(wrong) || 0,
+        skipped: Number(skipped) || 0,
+        accuracy: Number(accuracy) || 0,
+        maxCombo: Number(maxCombo) || 0,
+        bossResult,
+        earnedBP: Number(earnedBP) || 0,
+        timestamp: new Date().toISOString()
+      };
+      logs.push(entry);
+      if (logs.length > 100) logs.shift();
+      safeSetJSON('playbank_boss_logs', logs);
+      return entry;
+    } catch (err) {
+      console.warn('[mockDb] Failed to log boss attempt:', err);
+      return null;
+    }
+  },
+
+  // Get all recorded boss attempts
+  getBossAttempts: () => {
+    return safeGetJSON('playbank_boss_logs', []);
   }
 };

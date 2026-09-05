@@ -34,7 +34,13 @@ const SelectSubject = ({ onBack, onStartQuiz, openModal }) => {
 
   const handleStart = () => {
     if (selectedSubject && selectedForm) {
-      onStartQuiz({ subject: selectedSubject, form: selectedForm });
+      const subjectObj = subjects.find(s => s.id === selectedSubject);
+      onStartQuiz({ 
+        subject: selectedSubject, 
+        subjectTitle: subjectObj?.title || 'History',
+        form: selectedForm,
+        chapter: 1
+      });
     }
   };
 

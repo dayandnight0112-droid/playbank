@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ArrowLeft, Clock, Check, Trophy, Flame, ChevronRight, CheckCircle2, MinusCircle, XCircle } from 'lucide-react';
 import { mockDb } from '../lib/mockDb';
+import { getMatchingQuestions } from '../lib/bossTrigger';
 import Confetti from 'react-confetti';
 import { useWindowSize } from 'react-use';
 
@@ -97,7 +98,15 @@ function SummaryItem({ icon, color, label, value }) {
 
 const shuffleArray = (array) => [...array].sort(() => Math.random() - 0.5);
 
-const Quiz = ({ onComplete, onBack, currentBP, currentUser, onGoGarden }) => {
+const Quiz = ({
+  onComplete,
+  onBack,
+  currentBP,
+  currentUser,
+  onGoGarden,
+  quizParams = null,
+  onCheckBossTrigger = null
+}) => {
   const rawQuestions = mockDb.getQuestions();
   const { width, height } = useWindowSize();
   const multiplier = currentUser?.score_multiplier || 1;
@@ -128,9 +137,14 @@ const Quiz = ({ onComplete, onBack, currentBP, currentUser, onGoGarden }) => {
   const [animVars, setAnimVars] = useState({});
   const hasRecordedMissionsRef = useRef(false);
 
-  // Initialize quiz
+  // Initialize quiz with questions matching selected subject & form
   useEffect(() => {
-    const shuffledQ = shuffleArray(rawQuestions).slice(0, 10);
+    const matched = getMatchingQuestions(
+      quizParams?.subjectTitle || quizParams?.subject || 'History',
+      quizParams?.form || 4
+    );
+    const sourceQuestions = matched && matched.length >= 5 ? matched : rawQuestions;
+    const shuffledQ = shuffleArray(sourceQuestions).slice(0, 10);
     setQuestions(shuffledQ);
     setupQuestion(shuffledQ[0]);
     setStartTime(Date.now());
@@ -190,6 +204,14 @@ const Quiz = ({ onComplete, onBack, currentBP, currentUser, onGoGarden }) => {
     setFeedback('timeout');
     setSkippedCount(prev => prev + 1);
     setCombo(0);
+    if (questions[currentIndex]) {
+      mockDb.recordQuestionAnswer({
+        question: questions[currentIndex],
+        isCorrect: false,
+        selectedOption: null,
+        source: 'normal_quiz_timeout'
+      });
+    }
     scheduleNextQuestion();
   };
 
@@ -199,6 +221,14 @@ const Quiz = ({ onComplete, onBack, currentBP, currentUser, onGoGarden }) => {
     setSelectedOption(option);
     const question = questions[currentIndex];
     const isCorrect = option === question.correctAnswer;
+
+    // Record question answer for permanent history and wrong question bank
+    mockDb.recordQuestionAnswer({
+      question,
+      isCorrect,
+      selectedOption: option,
+      source: 'normal_quiz'
+    });
 
     if (isCorrect) {
       setFeedback('correct');
@@ -224,11 +254,31 @@ const Quiz = ({ onComplete, onBack, currentBP, currentUser, onGoGarden }) => {
         setCurrentIndex(nextIndex);
         setupQuestion(questions[nextIndex]);
       } else {
-        setTimeTaken(Math.floor((Date.now() - startTime) / 1000));
+        const totalDuration = Math.floor((Date.now() - startTime) / 1000);
+        setTimeTaken(totalDuration);
+
+        // Check if Boss should trigger upon completing challenge
+        if (onCheckBossTrigger) {
+          const stats = {
+            sessionBP,
+            correctCount,
+            wrongCount: questions.length - correctCount - skippedCount,
+            skippedCount,
+            accuracy: Math.round((correctCount / questions.length) * 100),
+            maxCombo,
+            timeTaken: totalDuration,
+            questions
+          };
+          const triggered = onCheckBossTrigger(stats);
+          if (triggered) {
+            return; // Handled by App.jsx to show Boss Encounter
+          }
+        }
+
         setStatus('result');
       }
     }, 2000);
-  }, [currentIndex, questions]);
+  }, [currentIndex, questions, startTime, onCheckBossTrigger, sessionBP, correctCount, skippedCount, maxCombo]);
 
   if (questions.length === 0) return <div className="view-content flex-center">Loading...</div>;
 

@@ -24,10 +24,14 @@ const shuffleArray = (array) => [...array].sort(() => Math.random() - 0.5);
 const BossBattle = ({
   encounter: customEncounter,
   questions: customQuestions,
+  subject,
+  form,
+  chapter,
   currentUser,
   onComplete,
   onBack
 }) => {
+  const hasClaimedRef = useRef(false);
   // 1. Prepare 8 Questions for Speed Battle
   const battleQuestions = useMemo(() => {
     const targetCount = customEncounter?.type?.questionCount || 8;
@@ -963,15 +967,23 @@ const BossBattle = ({
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
                 <button
                   onClick={() => {
+                    if (hasClaimedRef.current) return;
+                    hasClaimedRef.current = true;
                     if (onComplete) {
                       onComplete({
                         correct,
                         wrong,
                         skipped,
+                        accuracy: Math.round((correct / (totalQuestions || 8)) * 100),
                         maxCombo,
                         bossHP,
                         battleResult,
-                        earnedBP
+                        earnedBP,
+                        subject: subject || encounter?.metadata?.subject || 'History',
+                        form: form || encounter?.metadata?.form || 4,
+                        chapter: chapter || encounter?.metadata?.chapter || 1,
+                        bossId,
+                        bossType
                       });
                     } else if (onBack) {
                       onBack();
@@ -1002,15 +1014,23 @@ const BossBattle = ({
               // BOSS DEFEATED: Primary Claim & Return Home button
               <button
                 onClick={() => {
+                  if (hasClaimedRef.current) return;
+                  hasClaimedRef.current = true;
                   if (onComplete) {
                     onComplete({
                       correct,
                       wrong,
                       skipped,
+                      accuracy: Math.round((correct / (totalQuestions || 8)) * 100),
                       maxCombo,
                       bossHP,
                       battleResult,
-                      earnedBP
+                      earnedBP,
+                      subject: subject || encounter?.metadata?.subject || 'History',
+                      form: form || encounter?.metadata?.form || 4,
+                      chapter: chapter || encounter?.metadata?.chapter || 1,
+                      bossId,
+                      bossType
                     });
                   } else if (onBack) {
                     onBack();

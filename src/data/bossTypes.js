@@ -72,6 +72,8 @@ export const BOSS_TYPE_CONFIGS = {
     displayName: 'Speed Battle',
     description: '连续 8 道极速题，反应越快视觉反馈越强！',
     isImplemented: true,
+    enabled: true,
+    status: 'ENABLED',
 
     questionCount: 8,
     bossHp: 8, // Configured per Type independently (not forced to match questionCount)
@@ -148,7 +150,9 @@ export const BOSS_TYPE_CONFIGS = {
     type: BOSS_TYPE_KEYS.SHIELD,
     displayName: 'Shield Battle',
     description: '护盾与连击机制（待配置）',
-    isImplemented: false
+    isImplemented: false,
+    enabled: false,
+    status: 'DISABLED'
   },
 
   /**
@@ -158,7 +162,9 @@ export const BOSS_TYPE_CONFIGS = {
     type: BOSS_TYPE_KEYS.RECALL,
     displayName: 'Recall Battle',
     description: '错题温习与记忆机制（待配置）',
-    isImplemented: false
+    isImplemented: false,
+    enabled: false,
+    status: 'DISABLED'
   },
 
   /**
@@ -168,7 +174,9 @@ export const BOSS_TYPE_CONFIGS = {
     type: BOSS_TYPE_KEYS.CHAOS,
     displayName: 'Chaos Battle',
     description: '混乱干扰与多维机制（待配置）',
-    isImplemented: false
+    isImplemented: false,
+    enabled: false,
+    status: 'DISABLED'
   },
 
   /**
@@ -178,7 +186,9 @@ export const BOSS_TYPE_CONFIGS = {
     type: BOSS_TYPE_KEYS.FINAL,
     displayName: 'Final Battle',
     description: '章节大领主决战机制（待配置）',
-    isImplemented: false
+    isImplemented: false,
+    enabled: false,
+    status: 'DISABLED'
   }
 };
 
@@ -190,6 +200,13 @@ export const BOSS_TYPE_CONFIGS = {
 export const getBossTypeConfig = (typeKey = 'SPEED') => {
   const normalizedKey = (typeKey || 'SPEED').toString().toUpperCase();
   return BOSS_TYPE_CONFIGS[normalizedKey] || BOSS_TYPE_CONFIGS[BOSS_TYPE_KEYS.SPEED];
+};
+
+/**
+ * Get all currently enabled Boss Types (Production gating: strictly SPEED only)
+ */
+export const getEnabledBossTypes = () => {
+  return Object.values(BOSS_TYPE_CONFIGS).filter(t => t.enabled === true);
 };
 
 /**

@@ -21,12 +21,16 @@ import TutorialReward from './views/TutorialReward';
 import LoginModal from './components/LoginModal';
 import ExitRetentionModal from './components/home/ExitRetentionModal';
 import BossBattle from './views/BossBattle';
+import { evaluateBossTrigger } from './lib/bossTrigger';
 
 function App() {
   const [guestProfile, setGuestProfile] = useState(() => mockDb.getGuestProfile());
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showExitRetention, setShowExitRetention] = useState(false);
   const [tutorialStats, setTutorialStats] = useState({ earnedBP: 120, maxCombo: 6 });
+  const [quizParams, setQuizParams] = useState({ subject: 'History', subjectTitle: 'History', form: 4, chapter: 1 });
+  const [bossBattleParams, setBossBattleParams] = useState(null);
+  const [bossEncounterAlert, setBossEncounterAlert] = useState(false);
 
   const [currentView, setCurrentView] = useState(() => {
     const session = mockDb.getCurrentSession();
@@ -163,6 +167,10 @@ function App() {
 
   const startQuizFlow = (params) => {
     setPlaysToday(prev => prev + 1);
+    if (params) {
+      setQuizParams(prev => ({ ...prev, ...params }));
+    }
+    setBossBattleParams(null);
     setCurrentView('quiz');
   };
 
@@ -173,10 +181,49 @@ function App() {
       showCancel: true,
       confirmText: 'Quit',
       onConfirm: () => {
+        setBossBattleParams(null);
         setCurrentView('home');
         closeModal();
       }
     });
+  };
+
+  const handleCheckBossTrigger = (quizStats) => {
+    // 1. Bank Normal Quiz BP immediately so learning rewards are never lost
+    const normalBP = quizStats?.sessionBP || 0;
+    if (normalBP > 0) {
+      const effectiveQuizBP = playsToday > 5 ? Math.max(2, Math.round(normalBP * 0.2)) : normalBP;
+      if (currentUser) {
+        const updated = mockDb.updateUserBP(currentUser.id, effectiveQuizBP);
+        if (updated) setUserBP(updated.total_bp);
+        mockDb.logQuizAttempt(currentUser.id, quizParams.subjectTitle || 'History', normalBP);
+      } else {
+        const nextGuestBP = userBP + effectiveQuizBP;
+        setUserBP(nextGuestBP);
+        mockDb.updateGuestProfile({ bankPoint: nextGuestBP });
+      }
+    }
+
+    // 2. Evaluate Boss Trigger
+    const triggerResult = evaluateBossTrigger({
+      subject: quizParams.subjectTitle || quizParams.subject || 'History',
+      form: quizParams.form || 4,
+      chapter: quizParams.chapter || 1,
+      quizStats,
+      currentUser
+    });
+
+    if (triggerResult.shouldTrigger) {
+      setBossBattleParams(triggerResult);
+      setBossEncounterAlert(true);
+      setTimeout(() => {
+        setBossEncounterAlert(false);
+        setCurrentView('boss_battle');
+      }, 1400);
+      return true; // Boss encounter triggered!
+    }
+
+    return false; // Proceed to normal Quiz Result
   };
 
   const handleQuizComplete = (earnedBP) => {
@@ -210,6 +257,51 @@ function App() {
         setCurrentView('home');
       }
     }
+  };
+
+  const handleBossBattleComplete = (stats) => {
+    const earnedBP = stats?.earnedBP || 0;
+    const effectiveBP = playsToday > 5 ? Math.max(2, Math.round(earnedBP * 0.2)) : earnedBP;
+
+    // 1. Award Boss BP
+    if (effectiveBP > 0) {
+      if (currentUser) {
+        const updatedUser = mockDb.updateUserBP(currentUser.id, effectiveBP);
+        if (updatedUser) {
+          setUserBP(updatedUser.total_bp);
+          if (updatedUser.total_bp >= 200 && updatedUser.score_multiplier !== 3 && !localStorage.getItem(`playbank_booster_rejected_${updatedUser.id}`)) {
+            setShowBoosterOffer({ isFirstTimeOffer: true });
+          }
+        }
+      } else {
+        const newGuestBP = userBP + effectiveBP;
+        setUserBP(newGuestBP);
+        mockDb.updateGuestProfile({ bankPoint: newGuestBP });
+      }
+    }
+
+    // 2. Log boss attempt in mockDb
+    mockDb.logBossAttempt({
+      userId: currentUser?.id || 'guest',
+      bossId: stats?.bossId || 'chrono_lynx',
+      bossType: stats?.bossType || 'SPEED',
+      subject: stats?.subject || quizParams.subjectTitle || 'History',
+      form: stats?.form || quizParams.form || 4,
+      chapter: stats?.chapter || quizParams.chapter || 1,
+      correct: stats?.correct,
+      wrong: stats?.wrong,
+      skipped: stats?.skipped,
+      accuracy: stats?.accuracy,
+      maxCombo: stats?.maxCombo,
+      bossResult: stats?.battleResult,
+      earnedBP: effectiveBP
+    });
+
+    // 3. Clear transient encounter state
+    setBossBattleParams(null);
+
+    // 4. Return to normal study loop
+    setCurrentView('home');
   };
 
   // Toggle dark mode class on body
@@ -303,15 +395,31 @@ function App() {
       case 'select_subject':
         return <SelectSubject onBack={() => setCurrentView('home')} onStartQuiz={startQuizFlow} openModal={openModal} />;
       case 'quiz':
-        return <Quiz onComplete={handleQuizComplete} onBack={handleQuitQuiz} currentBP={userBP} currentUser={currentUser} onGoGarden={() => setCurrentView('garden')} />;
+        return (
+          <Quiz
+            onComplete={handleQuizComplete}
+            onBack={handleQuitQuiz}
+            currentBP={userBP}
+            currentUser={currentUser}
+            onGoGarden={() => setCurrentView('garden')}
+            quizParams={quizParams}
+            onCheckBossTrigger={handleCheckBossTrigger}
+          />
+        );
       case 'boss_battle':
         return (
           <BossBattle
+            encounter={bossBattleParams?.encounter}
+            questions={bossBattleParams?.questions}
+            subject={bossBattleParams?.subject || quizParams?.subjectTitle}
+            form={bossBattleParams?.form || quizParams?.form}
+            chapter={bossBattleParams?.chapter || quizParams?.chapter}
             currentUser={currentUser}
-            onComplete={(stats) => {
-              handleQuizComplete(stats.earnedBP || 0);
+            onComplete={handleBossBattleComplete}
+            onBack={() => {
+              setBossBattleParams(null);
+              setCurrentView('home');
             }}
-            onBack={() => setCurrentView('home')}
           />
         );
       case 'garden':
@@ -436,10 +544,22 @@ function App() {
         ↺
       </button>
 
-      {/* Temporary Dev Test Button for Boss Battle */}
-      {currentView === 'home' && (
+      {/* Dev Test Button for Boss Battle: strictly hidden in Production, only visible in Dev mode */}
+      {import.meta.env.DEV && currentView === 'home' && (
         <button
-          onClick={() => setCurrentView('boss_battle')}
+          onClick={() => {
+            const triggerResult = evaluateBossTrigger({
+              subject: quizParams.subjectTitle || 'History',
+              form: quizParams.form || 4,
+              chapter: 1,
+              currentUser,
+              forceTrigger: true
+            });
+            if (triggerResult.shouldTrigger) {
+              setBossBattleParams(triggerResult);
+              setCurrentView('boss_battle');
+            }
+          }}
           style={{
             position: 'absolute',
             bottom: '200px',
@@ -458,10 +578,50 @@ function App() {
             boxShadow: '0 4px 14px rgba(239, 68, 68, 0.5)',
             fontSize: '18px'
           }}
-          title="Play Boss Battle Prototype"
+          title="Play Boss Battle (Dev Mode Only)"
         >
           ⚔️
         </button>
+      )}
+
+      {/* Cinematic Boss Encounter Ambush Overlay */}
+      {bossEncounterAlert && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 99999,
+          background: 'rgba(5, 8, 16, 0.94)',
+          backdropFilter: 'blur(10px)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '24px'
+        }}>
+          <div style={{
+            textAlign: 'center',
+            maxWidth: '340px',
+            padding: '28px 24px',
+            borderRadius: '24px',
+            border: '2px solid #EF4444',
+            background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.25) 0%, rgba(15, 23, 42, 0.98) 100%)',
+            boxShadow: '0 0 60px rgba(239, 68, 68, 0.7)'
+          }}>
+            <div style={{ fontSize: '46px', marginBottom: '8px', animation: 'bounce 1s infinite' }}>⚠️</div>
+            <div style={{ fontSize: '12px', fontWeight: 900, color: '#10B981', letterSpacing: '1.2px', marginBottom: '6px' }}>
+              CHALLENGE CLEARED! (+BP SAVED)
+            </div>
+            <div style={{ fontSize: '22px', fontWeight: 900, color: '#EF4444', letterSpacing: '1px', textTransform: 'uppercase', lineHeight: 1.2 }}>
+              BOSS ENCOUNTER!
+            </div>
+            <div style={{ fontSize: '13px', color: '#F1F5F9', marginTop: '10px', fontWeight: 700 }}>
+              Speed Demon · Chrono Lynx
+            </div>
+            <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '4px', fontWeight: 500 }}>
+              Preparing Speed Battle arena...
+            </div>
+          </div>
+        </div>
       )}
 
       {renderView()}
