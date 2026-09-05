@@ -159,6 +159,13 @@ const BossBattle = ({
     let icon = null;
 
     if (isAnswerLocked) {
+      // Determine if current selected option is correct based on question data
+      const isSelectedCorrect = typeof currentQuestion?.correctIndex === 'number'
+        ? index === currentQuestion.correctIndex
+        : currentQuestion?.options
+          ? currentQuestion.options[index] === currentQuestion.correctAnswer
+          : index === currentQuestion?.correctAnswer;
+
       // Case 1: Option is the revealed correct answer (on wrong/timeout)
       if (isRevealedCorrect) {
         bg = 'rgba(34, 197, 94, 0.25)';
@@ -166,19 +173,19 @@ const BossBattle = ({
         color = '#4ADE80';
         icon = <Check size={18} color="#22C55E" strokeWidth={3} />;
       }
-      // Case 2: Option is the selected wrong answer
-      else if (isSelected && battlePhase !== BATTLE_PHASES.BOSS_HIT) {
+      // Case 2: Selected option that is CORRECT -> Immediately Green (青色)
+      else if (isSelected && isSelectedCorrect) {
+        bg = 'rgba(34, 197, 94, 0.25)';
+        border = '#22C55E';
+        color = '#4ADE80';
+        icon = <Check size={18} color="#22C55E" strokeWidth={3} />;
+      }
+      // Case 3: Selected option that is WRONG -> Red (红色)
+      else if (isSelected && !isSelectedCorrect) {
         bg = 'rgba(239, 68, 68, 0.25)';
         border = '#EF4444';
         color = '#F87171';
         icon = <X size={18} color="#EF4444" strokeWidth={3} />;
-      }
-      // Case 3: Option is the selected correct answer
-      else if (isSelected) {
-        bg = 'rgba(250, 204, 21, 0.25)';
-        border = '#FACC15';
-        color = '#FDE047';
-        icon = <Check size={18} color="#FACC15" strokeWidth={3} />;
       }
     }
 
