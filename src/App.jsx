@@ -19,10 +19,12 @@ import ChoosePath from './views/ChoosePath';
 import Tutorial from './views/Tutorial';
 import TutorialReward from './views/TutorialReward';
 import LoginModal from './components/LoginModal';
+import ExitRetentionModal from './components/home/ExitRetentionModal';
 
 function App() {
   const [guestProfile, setGuestProfile] = useState(() => mockDb.getGuestProfile());
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showExitRetention, setShowExitRetention] = useState(false);
   const [tutorialStats, setTutorialStats] = useState({ earnedBP: 120, maxCombo: 6 });
 
   const [currentView, setCurrentView] = useState(() => {
@@ -33,6 +35,26 @@ function App() {
     if (guest && guest.selectedPath && !guest.tutorialComplete) return 'tutorial';
     return 'welcome';
   });
+  // Step 34: Returning Guest Routing & Welcome Back Toast
+  const [welcomeBackToast, setWelcomeBackToast] = useState(() => {
+    const session = mockDb.getCurrentSession();
+    if (session) return `Welcome back, ${session.ic_name || session.email?.split('@')[0] || 'Player'}!`;
+    const guest = mockDb.getGuestProfile();
+    if (guest && guest.tutorialComplete) {
+      return `⚔️ 欢迎归来，${guest.guestName || 'Guest'}！已无缝恢复冒险存档`;
+    }
+    return null;
+  });
+
+  useEffect(() => {
+    if (welcomeBackToast) {
+      const timer = setTimeout(() => {
+        setWelcomeBackToast(null);
+      }, 3500);
+      return () => clearTimeout(timer);
+    }
+  }, [welcomeBackToast]);
+
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [showBoosterOffer, setShowBoosterOffer] = useState(false);
@@ -77,6 +99,7 @@ function App() {
   useEffect(() => {
     if (!currentUser) {
       localStorage.setItem('playbank_user_bp', (userBP || 0).toString());
+      mockDb.updateGuestProfile({ bankPoint: userBP || 0 });
     }
   }, [userBP, currentUser]);
 
@@ -97,14 +120,8 @@ function App() {
 
 
   const handleStartChallenge = () => {
-    if (playsToday >= 5) {
-      openModal({
-        title: 'Limit Reached',
-        message: 'You have reached your limit of 5 plays today. Come back tomorrow!',
-        confirmText: 'OK'
-      });
-      return;
-    }
+    // Step 32: Unlimited Practice Policy - Never block or expel players!
+    // Players can play infinitely. Plays 1-5 give 100% BP; plays > 5 give 20% practice BP.
     setCurrentView('select_subject');
   };
 
@@ -147,8 +164,11 @@ function App() {
   };
 
   const handleQuizComplete = (earnedBP) => {
+    // Step 32: Practice mode diminishing returns (Plays 1-5: 100% full rewards; Plays > 5: 20% practice reward)
+    const effectiveBP = playsToday > 5 ? Math.max(2, Math.round(earnedBP * 0.2)) : earnedBP;
+
     if (currentUser) {
-      const updatedUser = mockDb.updateUserBP(currentUser.id, earnedBP);
+      const updatedUser = mockDb.updateUserBP(currentUser.id, effectiveBP);
       if (updatedUser) {
         setUserBP(updatedUser.total_bp);
         
@@ -159,9 +179,9 @@ function App() {
       }
       setCurrentView('home');
     } else {
-      const newGuestBP = userBP + earnedBP;
+      const newGuestBP = userBP + effectiveBP;
       setUserBP(newGuestBP);
-      setCurrentView('marketplace'); // Guests jump to Redeem page
+      mockDb.updateGuestProfile({ bankPoint: newGuestBP });
 
       // Guest First Play OR Hit 200 BP
       if (!sessionStorage.getItem('guest_first_play_register')) {
@@ -170,6 +190,8 @@ function App() {
       } else if (newGuestBP >= 200 && !sessionStorage.getItem('guest_200_register')) {
         sessionStorage.setItem('guest_200_register', 'true');
         setShowSaveModal('guest_200');
+      } else {
+        setCurrentView('home');
       }
     }
   };
@@ -188,8 +210,18 @@ function App() {
       case 'welcome':
         return (
           <WelcomeScreen
-            onStart={() => setCurrentView('choose_path')}
+            onStart={() => {
+              if (guestProfile && guestProfile.tutorialComplete) {
+                setCurrentView('home');
+              } else if (guestProfile && guestProfile.selectedPath) {
+                setCurrentView('tutorial');
+              } else {
+                setCurrentView('choose_path');
+              }
+            }}
             onOpenLogin={() => setShowLoginModal(true)}
+            hasExistingProgress={!!(guestProfile && guestProfile.tutorialComplete)}
+            guestName={guestProfile?.guestName}
           />
         );
       case 'choose_path':
@@ -279,10 +311,14 @@ function App() {
             userBP={userBP} 
             onRequestBooster={() => setShowBoosterOffer({ isFirstTimeOffer: false })}
             onLogout={() => { 
-              mockDb.logoutUser(); 
-              setCurrentUser(null); 
-              setUserBP(parseInt(localStorage.getItem('playbank_user_bp')) || 0); 
-              setCurrentView('welcome');
+              if (!currentUser && userBP > 0) {
+                setShowExitRetention(true);
+              } else {
+                mockDb.logoutUser(); 
+                setCurrentUser(null); 
+                setUserBP(parseInt(localStorage.getItem('playbank_user_bp')) || 0); 
+                setCurrentView('welcome');
+              }
             }} 
             onRegister={() => setShowSaveModal('normal')} 
           />
@@ -300,11 +336,42 @@ function App() {
 
   return (
     <div className="app-container">
-
+      {/* Returning Player Welcome Back Toast */}
+      {welcomeBackToast && (
+        <div style={{
+          position: 'absolute',
+          top: '16px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 999,
+          background: 'linear-gradient(135deg, rgba(16, 26, 46, 0.96) 0%, rgba(26, 38, 66, 0.96) 100%)',
+          border: '1px solid #10b981',
+          boxShadow: '0 8px 24px rgba(0, 0, 0, 0.6), 0 0 16px rgba(16, 185, 129, 0.35)',
+          borderRadius: '24px',
+          padding: '8px 18px',
+          color: '#fff',
+          fontSize: '12px',
+          fontWeight: 'bold',
+          letterSpacing: '0.5px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          whiteSpace: 'nowrap',
+          pointerEvents: 'none'
+        }}>
+          {welcomeBackToast}
+        </div>
+      )}
 
       {/* Temporary Debug Button for Resetting Plays */}
       <button 
-        onClick={resetAttempts}
+        onClick={() => {
+          if (!currentUser && userBP > 0) {
+            setShowExitRetention(true);
+          } else {
+            resetAttempts();
+          }
+        }}
         style={{
           position: 'absolute',
           bottom: '150px',
@@ -451,6 +518,22 @@ function App() {
           }}
         />
       )}
+
+      {/* Exit & Progress Retention Modal for Guests (Step 31) */}
+      <ExitRetentionModal
+        isOpen={showExitRetention}
+        onClose={() => setShowExitRetention(false)}
+        onSaveAndLogin={() => {
+          setShowExitRetention(false);
+          setShowSaveModal('normal');
+        }}
+        onConfirmExit={() => {
+          setShowExitRetention(false);
+          resetAttempts();
+        }}
+        guestProfile={guestProfile}
+        userBP={userBP}
+      />
     </div>
   );
 }

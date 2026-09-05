@@ -1,11 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import PrimaryButton from '../components/common/PrimaryButton';
 import CurrencyBadge from '../components/common/CurrencyBadge';
 import AdventureScene from '../components/home/AdventureScene';
 import LobbySideAction from '../components/home/LobbySideAction';
 import DailyMissionModal from '../components/home/DailyMissionModal';
 import StreakRewardModal from '../components/home/StreakRewardModal';
+import LuckyChestModal from '../components/home/LuckyChestModal';
+import EventCardModal from '../components/home/EventCardModal';
+import BadgesModal from '../components/home/BadgesModal';
 import { getHomeScene } from '../data/homeScenes';
+import { mockDb } from '../lib/mockDb';
 
 const Home = ({
   currentUser,
@@ -32,6 +36,14 @@ const Home = ({
   const activeScene = getHomeScene(homeSceneId);
 
   const [activeModal, setActiveModal] = useState(null); // 'daily' | 'streak' | 'chest' | 'event' | 'achievements'
+  const [chestState, setChestState] = useState(() => mockDb.getLuckyChestState());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setChestState(mockDb.getLuckyChestState());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   return (
     <div
@@ -169,14 +181,14 @@ const Home = ({
             onClick={() => setActiveModal('streak')}
           />
 
-          {/* 3. 幸运宝箱 (显示 READY 状态) */}
+          {/* 3. 幸运宝箱 (动态显示 READY 或倒计时) */}
           <LobbySideAction
             icon="🎁"
             label="Chest"
             badgeType="pill"
-            badgeText="READY"
-            badgeColor="#10B981"
-            glowColor="rgba(16, 185, 129, 0.45)"
+            badgeText={chestState.isReady ? 'READY' : (chestState.shortFormatted || 'WAIT')}
+            badgeColor={chestState.isReady ? '#10B981' : '#3B82F6'}
+            glowColor={chestState.isReady ? 'rgba(16, 185, 129, 0.45)' : 'rgba(59, 130, 246, 0.35)'}
             onClick={() => setActiveModal('chest')}
           />
         </div>
@@ -253,8 +265,37 @@ const Home = ({
         onUpdateBP={onUpdateBP}
       />
 
-      {/* Dynamic Modal Container for Lobby Side Actions (Steps 28, etc.) */}
-      {activeModal && activeModal !== 'daily' && activeModal !== 'streak' && (
+      {/* Dedicated Lucky Chest Modal (Step 28) */}
+      <LuckyChestModal
+        isOpen={activeModal === 'chest'}
+        onClose={() => {
+          setActiveModal(null);
+          setChestState(mockDb.getLuckyChestState());
+        }}
+        userBP={userBP}
+        onUpdateBP={onUpdateBP}
+        onGoBattle={onGoBattle || onStartChallenge}
+      />
+
+      {/* Dedicated Event Card Modal (Step 29) */}
+      <EventCardModal
+        isOpen={activeModal === 'event'}
+        onClose={() => setActiveModal(null)}
+        userBP={userBP}
+        onUpdateBP={onUpdateBP}
+        onGoBattle={onGoBattle || onStartChallenge}
+      />
+
+      {/* Dedicated Badges & Trophy Modal (Step 30) */}
+      <BadgesModal
+        isOpen={activeModal === 'achievements'}
+        onClose={() => setActiveModal(null)}
+        userBP={userBP}
+        onUpdateBP={onUpdateBP}
+      />
+
+      {/* Dynamic Modal Container for Lobby Side Actions (Step 22 Boss Gate, etc.) */}
+      {activeModal && activeModal !== 'daily' && activeModal !== 'streak' && activeModal !== 'chest' && activeModal !== 'event' && activeModal !== 'achievements' && (
         <div
           onClick={() => setActiveModal(null)}
           style={{
@@ -282,23 +323,6 @@ const Home = ({
               textAlign: 'center'
             }}
           >
-            {activeModal === 'chest' && (
-              <>
-                <div style={{ fontSize: '40px', marginBottom: '8px' }}>🎁</div>
-                <h3 style={{ fontSize: '20px', fontWeight: 900, color: '#FFFFFF', margin: '0 0 8px 0' }}>Lucky Chest</h3>
-                <p style={{ fontSize: '13px', color: '#94A3B8', margin: '0 0 20px 0' }}>免费幸运宝箱已就绪（READY），随时可开启！</p>
-              </>
-            )}
-            {activeModal === 'event' && (
-              <>
-                <div style={{ fontSize: '40px', marginBottom: '8px' }}>⚡</div>
-                <h3 style={{ fontSize: '20px', fontWeight: 900, color: '#FFFFFF', margin: '0 0 8px 0' }}>Limited Event</h3>
-                <div style={{ background: 'rgba(168, 85, 247, 0.15)', border: '1.5px solid #A855F7', borderRadius: '14px', padding: '12px', marginBottom: '16px' }}>
-                  <div style={{ fontSize: '14px', fontWeight: 900, color: '#F3E8FF', marginBottom: '4px' }}>🔥 阶段狂欢：双倍 BP 掉落</div>
-                  <p style={{ fontSize: '12px', color: '#D8B4FE', margin: 0 }}>本周末通关任意主线关卡，可获得 200% BankPoint！</p>
-                </div>
-              </>
-            )}
             {activeModal === 'boss' && (
               <>
                 <div style={{ fontSize: '40px', marginBottom: '8px' }}>💀</div>
@@ -306,19 +330,6 @@ const Home = ({
                 <div style={{ background: 'rgba(239, 68, 68, 0.15)', border: '1.5px solid #EF4444', borderRadius: '14px', padding: '12px', marginBottom: '16px' }}>
                   <div style={{ fontSize: '14px', fontWeight: 900, color: '#FEE2E2', marginBottom: '4px' }}>🔒 状态：当前锁定中</div>
                   <p style={{ fontSize: '12px', color: '#FCA5A5', margin: 0 }}>需通关 Chapter 1「训练营地」全部 8 个 Stage 方可挑战守卫巨兽！</p>
-                </div>
-              </>
-            )}
-            {activeModal === 'achievements' && (
-              <>
-                <div style={{ fontSize: '40px', marginBottom: '8px' }}>🏆</div>
-                <h3 style={{ fontSize: '20px', fontWeight: 900, color: '#FFBC00', margin: '0 0 8px 0' }}>Achievements & Badges</h3>
-                <div style={{ background: 'rgba(234, 179, 8, 0.15)', border: '1.5px solid #FFBC00', borderRadius: '14px', padding: '12px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <span style={{ fontSize: '28px' }}>🎖️</span>
-                  <div style={{ textAlign: 'left' }}>
-                    <div style={{ fontSize: '13px', fontWeight: 900, color: '#FEF08A' }}>冒险启程者 (Starter Badge)</div>
-                    <div style={{ fontSize: '11px', color: '#CBD5E1' }}>已解锁 · 成功通过新手引导试炼</div>
-                  </div>
                 </div>
               </>
             )}

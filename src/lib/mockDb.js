@@ -939,6 +939,7 @@ export const mockDb = {
       const current = parseInt(localStorage.getItem('playbank_user_bp') || '0', 10);
       const next = current + amount;
       localStorage.setItem('playbank_user_bp', next.toString());
+      mockDb.updateGuestProfile({ bankPoint: next });
       return next;
     }
   },
@@ -1201,6 +1202,115 @@ export const mockDb = {
       isSuperChest: dayInCycle === 7,
       newTotalBP,
       state: updatedState
+    };
+  },
+
+  // Lucky Chest Management (Step 28 - 4-hour cooldown free chest)
+  getLuckyChestState: () => {
+    const CHEST_KEY = 'playbank_lucky_chest_data';
+    const COOLDOWN_MS = 4 * 60 * 60 * 1000; // 4 hours
+    try {
+      const raw = localStorage.getItem(CHEST_KEY);
+      const data = raw ? JSON.parse(raw) : null;
+      const now = Date.now();
+
+      if (!data || !data.lastOpenedAt) {
+        return {
+          isReady: true,
+          lastOpenedAt: null,
+          remainingMs: 0,
+          remainingFormatted: '00:00:00'
+        };
+      }
+
+      const elapsed = now - data.lastOpenedAt;
+      if (elapsed >= COOLDOWN_MS) {
+        return {
+          isReady: true,
+          lastOpenedAt: data.lastOpenedAt,
+          remainingMs: 0,
+          remainingFormatted: '00:00:00'
+        };
+      }
+
+      const remainingMs = COOLDOWN_MS - elapsed;
+      const hours = Math.floor(remainingMs / (1000 * 60 * 60));
+      const minutes = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((remainingMs % (1000 * 60)) / 1000);
+      const pad = (n) => String(n).padStart(2, '0');
+
+      return {
+        isReady: false,
+        lastOpenedAt: data.lastOpenedAt,
+        remainingMs,
+        remainingFormatted: `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`,
+        shortFormatted: `${pad(hours)}:${pad(minutes)}`
+      };
+    } catch (e) {
+      return {
+        isReady: true,
+        lastOpenedAt: null,
+        remainingMs: 0,
+        remainingFormatted: '00:00:00'
+      };
+    }
+  },
+
+  openLuckyChest: () => {
+    const CHEST_KEY = 'playbank_lucky_chest_data';
+    const state = mockDb.getLuckyChestState();
+
+    if (!state.isReady) {
+      return {
+        error: `Chest is on cooldown. Next available in ${state.remainingFormatted}`
+      };
+    }
+
+    // Weighted Probability Drop System:
+    // Common (50%): 20~35 BP + 1 Water
+    // Rare (35%): 40~65 BP + 2 Water
+    // Epic (15%): 70~100 BP + 2X Double Ticket + 2 Water
+    const rand = Math.random();
+    let tier = 'common';
+    let rewardBP = 25;
+    let rewardWater = 1;
+    let specialItem = null;
+
+    if (rand < 0.15) {
+      tier = 'epic';
+      rewardBP = Math.floor(70 + Math.random() * 31); // 70-100 BP
+      rewardWater = 2;
+      specialItem = '2X Double BP Scroll (双倍卷轴)';
+    } else if (rand < 0.50) {
+      tier = 'rare';
+      rewardBP = Math.floor(40 + Math.random() * 26); // 40-65 BP
+      rewardWater = 2;
+    } else {
+      tier = 'common';
+      rewardBP = Math.floor(20 + Math.random() * 16); // 20-35 BP
+      rewardWater = 1;
+    }
+
+    // Update cooldown
+    const updatedChest = {
+      lastOpenedAt: Date.now(),
+      totalOpened: (parseInt(localStorage.getItem('playbank_chests_opened') || '0', 10) + 1)
+    };
+    localStorage.setItem(CHEST_KEY, JSON.stringify(updatedChest));
+    localStorage.setItem('playbank_chests_opened', updatedChest.totalOpened.toString());
+
+    // Award BP & Water
+    const newTotalBP = mockDb.awardBP(rewardBP);
+    mockDb.addWater(rewardWater);
+
+    return {
+      success: true,
+      tier,
+      rewardBP,
+      rewardWater,
+      specialItem,
+      newTotalBP,
+      nextState: mockDb.getLuckyChestState()
     };
   }
 };
