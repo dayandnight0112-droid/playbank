@@ -1,4 +1,5 @@
 import React from 'react';
+import { playPunchyPopSound } from '../../lib/soundEffects';
 
 const PrimaryButton = ({
   children,
@@ -8,9 +9,20 @@ const PrimaryButton = ({
   variant = 'primary', // 'primary' | 'dark' | 'success'
   size = 'large', // 'normal' | 'large'
   style = {},
-  className = ''
+  className = '',
+  enableSound = true
 }) => {
   const isLarge = size === 'large';
+
+  const handleClick = (e) => {
+    if (disabled) return;
+    if (enableSound) {
+      playPunchyPopSound();
+    }
+    if (onClick) {
+      onClick(e);
+    }
+  };
 
   // Theme color maps
   const colorMap = {
@@ -38,7 +50,7 @@ const PrimaryButton = ({
 
   return (
     <button
-      onClick={onClick}
+      onClick={handleClick}
       disabled={disabled}
       className={`game-primary-btn ${className}`}
       style={{

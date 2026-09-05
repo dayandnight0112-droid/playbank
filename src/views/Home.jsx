@@ -11,6 +11,7 @@ import BadgesModal from '../components/home/BadgesModal';
 import TrainingCampArt from '../components/home/TrainingCampArt';
 import { getHomeScene } from '../data/homeScenes';
 import { mockDb } from '../lib/mockDb';
+import { playModalSwooshSound } from '../lib/soundEffects';
 
 const Home = ({
   currentUser,
@@ -39,6 +40,16 @@ const Home = ({
 
   const [activeModal, setActiveModal] = useState(null); // 'daily' | 'streak' | 'chest' | 'event' | 'achievements'
   const [chestState, setChestState] = useState(() => mockDb.getLuckyChestState());
+
+  const handleOpenModal = (modalName) => {
+    playModalSwooshSound(false);
+    setActiveModal(modalName);
+  };
+
+  const handleCloseModal = () => {
+    playModalSwooshSound(true);
+    setActiveModal(null);
+  };
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -228,7 +239,7 @@ const Home = ({
             badgeType="dot"
             badgeColor="#EF4444"
             glowColor="rgba(239, 68, 68, 0.4)"
-            onClick={() => setActiveModal('daily')}
+            onClick={() => handleOpenModal('daily')}
           />
 
           {/* 2. 连胜签到 (显示 Day 3) */}
@@ -239,7 +250,7 @@ const Home = ({
             badgeText={`Day ${streakDays}`}
             badgeColor="#F97316"
             glowColor="rgba(249, 115, 22, 0.4)"
-            onClick={() => setActiveModal('streak')}
+            onClick={() => handleOpenModal('streak')}
           />
 
           {/* 3. 幸运宝箱 (动态显示 READY 或倒计时) */}
@@ -250,7 +261,7 @@ const Home = ({
             badgeText={chestState.isReady ? 'READY' : (chestState.shortFormatted || 'WAIT')}
             badgeColor={chestState.isReady ? '#10B981' : '#3B82F6'}
             glowColor={chestState.isReady ? 'rgba(16, 185, 129, 0.45)' : 'rgba(59, 130, 246, 0.35)'}
-            onClick={() => setActiveModal('chest')}
+            onClick={() => handleOpenModal('chest')}
           />
         </div>
 
@@ -284,7 +295,7 @@ const Home = ({
             badgeText="HOT"
             badgeColor="#A855F7"
             glowColor="rgba(168, 85, 247, 0.4)"
-            onClick={() => setActiveModal('event')}
+            onClick={() => handleOpenModal('event')}
           />
 
           {/* 2. 领主封印巨门 (Boss Gate - 显示 LOCKED) */}
@@ -295,7 +306,7 @@ const Home = ({
             badgeText="LOCKED"
             badgeColor="#EF4444"
             glowColor="rgba(239, 68, 68, 0.35)"
-            onClick={() => setActiveModal('boss')}
+            onClick={() => handleOpenModal('boss')}
           />
 
           {/* 3. 成就勋章 (Achievements - 显示进度 1/12) */}
@@ -306,7 +317,7 @@ const Home = ({
             badgeText="1/12"
             badgeColor="#EAB308"
             glowColor="rgba(234, 179, 8, 0.4)"
-            onClick={() => setActiveModal('achievements')}
+            onClick={() => handleOpenModal('achievements')}
           />
         </div>
       </div>
@@ -314,7 +325,7 @@ const Home = ({
       {/* Dedicated Daily Missions Modal (Step 26) */}
       <DailyMissionModal
         isOpen={activeModal === 'daily'}
-        onClose={() => setActiveModal(null)}
+        onClose={handleCloseModal}
         userBP={userBP}
         onUpdateBP={onUpdateBP}
         onGoBattle={onGoBattle || onStartChallenge}
@@ -323,7 +334,7 @@ const Home = ({
       {/* Dedicated Streak Reward Modal (Step 27) */}
       <StreakRewardModal
         isOpen={activeModal === 'streak'}
-        onClose={() => setActiveModal(null)}
+        onClose={handleCloseModal}
         onUpdateBP={onUpdateBP}
       />
 
@@ -331,7 +342,7 @@ const Home = ({
       <LuckyChestModal
         isOpen={activeModal === 'chest'}
         onClose={() => {
-          setActiveModal(null);
+          handleCloseModal();
           setChestState(mockDb.getLuckyChestState());
         }}
         userBP={userBP}
@@ -342,7 +353,7 @@ const Home = ({
       {/* Dedicated Event Card Modal (Step 29) */}
       <EventCardModal
         isOpen={activeModal === 'event'}
-        onClose={() => setActiveModal(null)}
+        onClose={handleCloseModal}
         userBP={userBP}
         onUpdateBP={onUpdateBP}
         onGoBattle={onGoBattle || onStartChallenge}
@@ -351,7 +362,7 @@ const Home = ({
       {/* Dedicated Badges & Trophy Modal (Step 30) */}
       <BadgesModal
         isOpen={activeModal === 'achievements'}
-        onClose={() => setActiveModal(null)}
+        onClose={handleCloseModal}
         userBP={userBP}
         onUpdateBP={onUpdateBP}
       />
@@ -359,7 +370,7 @@ const Home = ({
       {/* Dynamic Modal Container for Lobby Side Actions (Step 22 Boss Gate, etc.) */}
       {activeModal && activeModal !== 'daily' && activeModal !== 'streak' && activeModal !== 'chest' && activeModal !== 'event' && activeModal !== 'achievements' && (
         <div
-          onClick={() => setActiveModal(null)}
+          onClick={handleCloseModal}
           style={{
             position: 'fixed',
             inset: 0,

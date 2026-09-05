@@ -1,5 +1,6 @@
 import React from 'react';
 import { Home, Swords, Sprout, Gift, User } from 'lucide-react';
+import { playTapSound } from '../lib/soundEffects';
 
 /**
  * BottomNav
@@ -50,7 +51,10 @@ const BottomNav = ({ currentView, setCurrentView }) => {
           <button
             key={item.id}
             type="button"
-            onClick={() => setCurrentView(item.id)}
+            onClick={() => {
+              playTapSound();
+              setCurrentView(item.id);
+            }}
             style={{
               flex: 1,
               background: 'none',

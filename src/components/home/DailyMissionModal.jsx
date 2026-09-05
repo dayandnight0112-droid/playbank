@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Check, Gift, Sparkles, Clock } from 'lucide-react';
 import PrimaryButton from '../common/PrimaryButton';
 import { mockDb, getTimeUntilMalaysiaMidnight } from '../../lib/mockDb';
+import { playLootSparkleSound } from '../../lib/soundEffects';
 
 /**
  * DailyMissionModal
@@ -87,6 +88,9 @@ const DailyMissionModal = ({
     mockDb.claimMissionReward(missionKey);
     const updatedMissions = mockDb.getDailyMissions();
     setMissionsState(updatedMissions);
+
+    // Play sparkle reward audio
+    playLootSparkleSound();
 
     // Award BP
     const newTotalBP = mockDb.awardBP(rewardBP);

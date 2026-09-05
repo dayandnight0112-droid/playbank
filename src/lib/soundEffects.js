@@ -1,4 +1,4 @@
-﻿// Web Audio API pure synthesizer for PlayBank Garden
+// Web Audio API pure synthesizer for PlayBank Garden
 // Zero external files, zero latency, works offline and across all browsers
 
 let audioCtx = null;
@@ -144,3 +144,117 @@ export const playPlantSwitchSound = () => {
     // Ignore audio error
   }
 };
+
+// 5. 轻巧 UI 点击触感音 (Light Tactile Tap - Side Action / Nav / Small Pills)
+export const playTapSound = () => {
+  if (!isSoundEnabled()) return;
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const now = ctx.currentTime;
+
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(600, now);
+    osc.frequency.exponentialRampToValueAtTime(880, now + 0.04);
+    osc.frequency.exponentialRampToValueAtTime(300, now + 0.08);
+
+    gain.gain.setValueAtTime(0.18, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start(now);
+    osc.stop(now + 0.085);
+  } catch (e) {}
+};
+
+// 6. 重度按压回弹感大按钮音效 (Punchy Tactile Pop - Continue / Primary Buttons)
+export const playPunchyPopSound = () => {
+  if (!isSoundEnabled()) return;
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const now = ctx.currentTime;
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(260, now);
+    osc.frequency.exponentialRampToValueAtTime(520, now + 0.05);
+    osc.frequency.exponentialRampToValueAtTime(140, now + 0.14);
+
+    gain.gain.setValueAtTime(0.35, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start(now);
+    osc.stop(now + 0.15);
+  } catch (e) {}
+};
+
+// 7. 弹窗打开/关闭风切音 (Smooth Modal Swoosh)
+export const playModalSwooshSound = (isClosing = false) => {
+  if (!isSoundEnabled()) return;
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const now = ctx.currentTime;
+
+    osc.type = 'sine';
+    if (isClosing) {
+      osc.frequency.setValueAtTime(480, now);
+      osc.frequency.exponentialRampToValueAtTime(240, now + 0.12);
+    } else {
+      osc.frequency.setValueAtTime(280, now);
+      osc.frequency.exponentialRampToValueAtTime(560, now + 0.12);
+    }
+
+    gain.gain.setValueAtTime(0.2, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start(now);
+    osc.stop(now + 0.13);
+  } catch (e) {}
+};
+
+// 8. 奖励/宝箱开启动效音 (Chest / Loot Sparkle)
+export const playLootSparkleSound = () => {
+  if (!isSoundEnabled()) return;
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    const pitches = [587.33, 739.99, 880.00, 1174.66]; // D5, F#5, A5, D6
+    pitches.forEach((freq, idx) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const startTime = ctx.currentTime + idx * 0.06;
+
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, startTime);
+
+      gain.gain.setValueAtTime(0.22, startTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.16);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(startTime);
+      osc.stop(startTime + 0.18);
+    });
+  } catch (e) {}
+};
+

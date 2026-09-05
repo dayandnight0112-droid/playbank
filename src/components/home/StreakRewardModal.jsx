@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, Check, Flame, Gift, Sparkles } from 'lucide-react';
 import PrimaryButton from '../common/PrimaryButton';
 import { mockDb } from '../../lib/mockDb';
+import { playCelebrationSound } from '../../lib/soundEffects';
 
 /**
  * StreakRewardModal
@@ -41,6 +42,7 @@ const StreakRewardModal = ({
 
     const res = mockDb.claimDailyStreak();
     if (res.success) {
+      playCelebrationSound();
       setStreakData(res.state);
       if (onUpdateBP) {
         onUpdateBP(res.newTotalBP);

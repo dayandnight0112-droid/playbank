@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Sparkles, Clock, Check, Lock } from 'lucide-react';
 import PrimaryButton from '../common/PrimaryButton';
 import { mockDb } from '../../lib/mockDb';
+import { playLootSparkleSound, playPunchyPopSound } from '../../lib/soundEffects';
 
 /**
  * LuckyChestModal
@@ -48,6 +49,7 @@ const LuckyChestModal = ({
     setTimeout(() => {
       const res = mockDb.openLuckyChest();
       if (res.success) {
+        playLootSparkleSound();
         setRewardResult(res);
         setAnimationStage('revealed');
         setChestState(res.nextState);

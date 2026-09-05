@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { playTapSound } from '../../lib/soundEffects';
 
 /**
  * LobbySideAction
@@ -19,10 +20,15 @@ const LobbySideAction = ({
 }) => {
   const [isPressed, setIsPressed] = useState(false);
 
+  const handleClick = (e) => {
+    playTapSound();
+    if (onClick) onClick(e);
+  };
+
   return (
     <button
       type="button"
-      onClick={onClick}
+      onClick={handleClick}
       onMouseDown={() => setIsPressed(true)}
       onMouseUp={() => setIsPressed(false)}
       onMouseLeave={() => setIsPressed(false)}
