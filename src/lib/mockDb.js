@@ -736,10 +736,6 @@ export const mockDb = {
     };
   },
 
-  logoutUser: () => {
-    localStorage.removeItem(CURRENT_SESSION_KEY);
-  },
-
   getSubjects: () => {
     let subjects = JSON.parse(localStorage.getItem('playbank_subjects'));
     if (!subjects) {

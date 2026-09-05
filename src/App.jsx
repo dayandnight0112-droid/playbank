@@ -20,7 +20,6 @@ import Tutorial from './views/Tutorial';
 import TutorialReward from './views/TutorialReward';
 import LoginModal from './components/LoginModal';
 import ExitRetentionModal from './components/home/ExitRetentionModal';
-import BossBattle from './views/BossBattle';
 
 function App() {
   const [guestProfile, setGuestProfile] = useState(() => mockDb.getGuestProfile());
@@ -304,16 +303,6 @@ function App() {
         return <SelectSubject onBack={() => setCurrentView('home')} onStartQuiz={startQuizFlow} openModal={openModal} />;
       case 'quiz':
         return <Quiz onComplete={handleQuizComplete} onBack={handleQuitQuiz} currentBP={userBP} currentUser={currentUser} onGoGarden={() => setCurrentView('garden')} />;
-      case 'boss_battle':
-        return (
-          <BossBattle
-            currentUser={currentUser}
-            onComplete={(stats) => {
-              handleQuizComplete(stats.earnedBP || 0);
-            }}
-            onBack={() => setCurrentView('home')}
-          />
-        );
       case 'garden':
         return <Garden userBP={userBP} onUpdateBP={(newBP) => setUserBP(newBP)} onGoQuiz={() => setCurrentView('select_subject')} />;
       case 'marketplace':
@@ -372,7 +361,7 @@ function App() {
     return <AdminDashboard onLogout={() => { mockDb.logoutUser(); setCurrentUser(null); }} />;
   }
 
-  const hideBottomNav = ['welcome', 'choose_path', 'tutorial', 'tutorial_reward', 'quiz', 'boss_battle'].includes(currentView);
+  const hideBottomNav = ['welcome', 'choose_path', 'tutorial', 'tutorial_reward', 'quiz'].includes(currentView);
 
   return (
     <div className={`app-container ${currentView === 'home' ? 'home-active' : ''}`}>
@@ -435,34 +424,6 @@ function App() {
       >
         ↺
       </button>
-
-      {/* Temporary Dev Test Button for Step 4 Boss Battle Prototype */}
-      {currentView === 'home' && (
-        <button
-          onClick={() => setCurrentView('boss_battle')}
-          style={{
-            position: 'absolute',
-            bottom: '200px',
-            right: '20px',
-            zIndex: 100,
-            background: 'linear-gradient(135deg, #EF4444, #F59E0B)',
-            color: '#FFF',
-            border: '2px solid #FFF',
-            borderRadius: '50%',
-            width: '42px',
-            height: '42px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            boxShadow: '0 4px 14px rgba(239, 68, 68, 0.5)',
-            fontSize: '18px'
-          }}
-          title="Play Boss Battle Prototype (5 Questions)"
-        >
-          ⚔️
-        </button>
-      )}
 
       {renderView()}
       
