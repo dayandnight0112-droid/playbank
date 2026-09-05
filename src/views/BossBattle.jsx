@@ -245,7 +245,29 @@ const BossBattle = ({
 
           {/* Boss identity banner */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '20px' }}>{encounter.character.artwork.badgeIcon || '🤖'}</span>
+            {encounter.character.artwork.avatarUrl ? (
+              <div
+                style={{
+                  width: '28px',
+                  height: '28px',
+                  borderRadius: '8px',
+                  background: 'rgba(6, 182, 212, 0.2)',
+                  border: '1px solid rgba(6, 182, 212, 0.4)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  overflow: 'hidden'
+                }}
+              >
+                <img
+                  src={encounter.character.artwork.avatarUrl}
+                  alt={encounter.character.name}
+                  style={{ width: '90%', height: '90%', objectFit: 'contain' }}
+                />
+              </div>
+            ) : (
+              <span style={{ fontSize: '20px' }}>{encounter.character.artwork.badgeIcon || '🤖'}</span>
+            )}
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
               <span style={{ fontSize: '13px', fontWeight: 900, letterSpacing: '0.5px' }}>
                 {encounter.character.name}
@@ -351,21 +373,29 @@ const BossBattle = ({
           {/* Boss Encounter Avatar */}
           <div
             style={{
-              width: '86px',
-              height: '86px',
-              borderRadius: '24px',
+              width: '96px',
+              height: '96px',
+              borderRadius: '28px',
               background: encounter.character.theme.glowColor || 'rgba(6, 182, 212, 0.45)',
               border: '2.5px solid #FFD54F',
               boxShadow: '0 0 35px rgba(255, 188, 0, 0.5)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: '42px',
               marginBottom: '16px',
+              overflow: 'hidden',
               animation: 'popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
             }}
           >
-            {encounter.character.artwork.characterEmoji || encounter.character.artwork.badgeIcon || '😼'}
+            {encounter.character.artwork.avatarUrl ? (
+              <img
+                src={encounter.character.artwork.avatarUrl}
+                alt={encounter.character.name}
+                style={{ width: '90%', height: '90%', objectFit: 'contain' }}
+              />
+            ) : (
+              <span style={{ fontSize: '42px' }}>{encounter.character.artwork.characterEmoji || '😼'}</span>
+            )}
           </div>
 
           <div style={{ fontSize: '11px', fontWeight: 800, color: '#38BDF8', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '4px' }}>
@@ -571,7 +601,7 @@ const BossBattle = ({
             VS
           </div>
 
-          {/* Boss Sprite Presentation (Placeholder Dummy) */}
+          {/* Boss Sprite Presentation */}
           <div
             style={{
               display: 'flex',
@@ -581,40 +611,83 @@ const BossBattle = ({
               transform: bossAnimation === BOSS_ANIMATIONS.HIT
                 ? 'translateX(18px) scale(0.92)'
                 : bossAnimation === BOSS_ANIMATIONS.BLOCK
-                  ? 'translateX(-12px) scale(1.08)'
+                  ? 'translateX(-12px) scale(1.1)'
                   : bossAnimation === BOSS_ANIMATIONS.DEFEAT
-                    ? 'scale(0.6) rotate(15deg) opacity(0.2)'
+                    ? 'scale(0.85) rotate(6deg) opacity(0.9)'
                     : bossAnimation === BOSS_ANIMATIONS.ESCAPE
                       ? 'scale(0.5) translateY(-30px) opacity(0.2)'
                       : 'translate(0, 0) scale(1)'
             }}
           >
-            {/* Boss 2D Prototype Card */}
+            {/* Boss 2D Dynamic Sprite Card */}
             <div
               style={{
-                width: '92px',
-                height: '92px',
+                width: '100px',
+                height: '100px',
                 borderRadius: '24px',
                 background: bossAnimation === BOSS_ANIMATIONS.HIT
-                  ? '#FFFFFF'
+                  ? 'rgba(255, 255, 255, 0.9)'
                   : bossAnimation === BOSS_ANIMATIONS.BLOCK
-                    ? 'linear-gradient(135deg, #1E40AF 0%, #3B82F6 100%)'
-                    : 'linear-gradient(135deg, #334155 0%, #0F172A 100%)',
+                    ? 'linear-gradient(135deg, rgba(30, 64, 175, 0.6) 0%, rgba(59, 130, 246, 0.6) 100%)'
+                    : 'linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.8) 100%)',
                 border: bossAnimation === BOSS_ANIMATIONS.BLOCK
-                  ? '3px solid #60A5FA'
-                  : '3px solid rgba(255, 255, 255, 0.25)',
+                  ? '2.5px solid #60A5FA'
+                  : '2.5px solid rgba(255, 255, 255, 0.2)',
                 boxShadow: bossAnimation === BOSS_ANIMATIONS.BLOCK
                   ? '0 0 28px rgba(59, 130, 246, 0.8)'
                   : '0 8px 24px rgba(0, 0, 0, 0.6)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                fontSize: '44px',
                 position: 'relative',
+                overflow: 'hidden',
                 animation: bossAnimation === BOSS_ANIMATIONS.IDLE ? 'floatBob 2.4s ease-in-out infinite' : 'none'
               }}
             >
-              {bossAnimation === BOSS_ANIMATIONS.BLOCK ? '🛡️' : (encounter.character.artwork.characterEmoji || '🤖')}
+              {/* Dynamic Sprite Image switching based on battle states */}
+              {(() => {
+                const sprites = encounter.character.sprites;
+                let activeImg = sprites?.idle || '/bosses/speed_demon/idle.png';
+
+                if (bossAnimation === BOSS_ANIMATIONS.BLOCK) {
+                  activeImg = sprites?.block || sprites?.taunt || '/bosses/speed_demon/taunt.png';
+                } else if (bossAnimation === BOSS_ANIMATIONS.DEFEAT) {
+                  activeImg = sprites?.defeat || '/bosses/speed_demon/defeat.png';
+                }
+
+                return (
+                  <img
+                    key={activeImg}
+                    src={activeImg}
+                    alt={encounter.character.name}
+                    style={{
+                      width: '90%',
+                      height: '90%',
+                      objectFit: 'contain',
+                      filter: bossAnimation === BOSS_ANIMATIONS.HIT ? 'brightness(1.8) contrast(1.2)' : 'none',
+                      transition: 'all 0.15s ease-out'
+                    }}
+                  />
+                );
+              })()}
+
+              {/* Block Shield overlay icon */}
+              {bossAnimation === BOSS_ANIMATIONS.BLOCK && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '6px',
+                    right: '6px',
+                    background: '#2563EB',
+                    borderRadius: '50%',
+                    padding: '4px',
+                    boxShadow: '0 0 10px #60A5FA',
+                    fontSize: '12px'
+                  }}
+                >
+                  🛡️
+                </div>
+              )}
             </div>
             <span style={{ fontSize: '11px', fontWeight: 800, marginTop: '8px', color: '#94A3B8' }}>
               {encounter.character.name}

@@ -64,18 +64,18 @@ export const BOSS_CHARACTERS = {
     lore: '游弋于 SPM 题库时空裂隙的敏捷领主，以超越光速的答题反射考验每一位试炼者。',
     
     artwork: {
-      avatarUrl: null, // Will use custom SVG / dynamic canvas avatar
-      fullArtUrl: null,
+      avatarUrl: '/bosses/speed_demon/idle.png',
+      fullArtUrl: '/bosses/speed_demon/idle.png',
       badgeIcon: '🐱⚡',
       characterEmoji: '😼',
       placeholderGradient: 'linear-gradient(135deg, #06B6D4 0%, #3B82F6 50%, #4F46E5 100%)'
     },
 
     sprites: {
-      idle: 'animate-boss-hover',
-      attack: 'animate-boss-slash',
-      hit: 'animate-boss-shake',
-      defeat: 'animate-boss-dissolve'
+      idle: '/bosses/speed_demon/idle.png',
+      taunt: '/bosses/speed_demon/taunt.png',
+      block: '/bosses/speed_demon/taunt.png',
+      defeat: '/bosses/speed_demon/defeat.png'
     },
 
     theme: {
