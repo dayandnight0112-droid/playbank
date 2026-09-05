@@ -8,6 +8,7 @@ import StreakRewardModal from '../components/home/StreakRewardModal';
 import LuckyChestModal from '../components/home/LuckyChestModal';
 import EventCardModal from '../components/home/EventCardModal';
 import BadgesModal from '../components/home/BadgesModal';
+import TrainingCampArt from '../components/home/TrainingCampArt';
 import { getHomeScene } from '../data/homeScenes';
 import { mockDb } from '../lib/mockDb';
 
@@ -56,12 +57,40 @@ const Home = ({
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'space-between',
-        background: '#0F172A', // Deep atmospheric gaming background
+        background: '#0B132B',
         padding: '16px 16px calc(80px + env(safe-area-inset-bottom, 0px))',
         boxSizing: 'border-box',
         overflow: 'hidden'
       }}
     >
+      {/* 0. FULL-BLEED ADVENTURE SCENE BACKGROUND (Spans entire Home Screen) */}
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          width: '100%',
+          height: '100%',
+          overflow: 'hidden',
+          pointerEvents: 'none',
+          zIndex: 0,
+          background: activeScene?.skyGradient || activeScene?.background || 'linear-gradient(180deg, #0B132B 0%, #1C2541 35%, #1F3A3B 70%, #0D2818 100%)'
+        }}
+      >
+        {(!activeScene?.id || activeScene?.id === 'trainingCamp') && (
+          <TrainingCampArt />
+        )}
+
+        {/* Ambient lighting & vignette for optimal contrast with HUD and side buttons */}
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background: 'linear-gradient(180deg, rgba(11, 19, 43, 0.45) 0%, transparent 20%, transparent 70%, rgba(5, 16, 11, 0.65) 100%), radial-gradient(circle at 50% 35%, rgba(255, 188, 0, 0.12) 0%, transparent 65%)',
+            pointerEvents: 'none'
+          }}
+        />
+      </div>
+
       {/* 1. TOP STATUS BAR (HUD - Step 16) */}
       <header
         style={{

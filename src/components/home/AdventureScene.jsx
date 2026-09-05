@@ -1,11 +1,10 @@
 import React from 'react';
 import PrimaryButton from '../common/PrimaryButton';
-import TrainingCampArt from './TrainingCampArt';
 
 /**
  * AdventureScene
- * The central hero visual of PlayBank Lobby.
- * RULE: Strictly an environmental Adventure Scene (World/Stage), NOT a character Mascot!
+ * The central hero stage info overlay of PlayBank Lobby.
+ * Floats gracefully over the full-bleed Adventure Scene background.
  */
 const AdventureScene = ({
   scene,
@@ -22,35 +21,15 @@ const AdventureScene = ({
       style={{
         flex: 1,
         position: 'relative',
-        margin: '0 8px',
-        borderRadius: '24px',
-        overflow: 'hidden',
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'flex-end',
         alignItems: 'center',
-        padding: '20px 14px',
-        background: scene?.skyGradient || scene?.background || 'linear-gradient(180deg, #0B132B 0%, #1C2541 35%, #1F3A3B 70%, #0D2818 100%)',
-        border: '2px solid rgba(255, 255, 255, 0.12)',
-        boxShadow: '0 8px 30px rgba(0, 0, 0, 0.5), inset 0 0 40px rgba(0, 0, 0, 0.6)',
-        userSelect: 'none'
+        padding: '16px 4px 6px',
+        userSelect: 'none',
+        zIndex: 10
       }}
     >
-      {/* 1. Theme Specific Art Layer */}
-      {(!scene?.id || scene?.id === 'trainingCamp') && (
-        <TrainingCampArt />
-      )}
-
-      {/* 2. Background Ambience & World Depth Glow */}
-      <div
-        style={{
-          position: 'absolute',
-          inset: 0,
-          pointerEvents: 'none',
-          zIndex: 2,
-          background: `radial-gradient(circle at 50% 30%, ${scene?.ambientColor ? scene.ambientColor + '25' : 'rgba(255, 188, 0, 0.15)'} 0%, transparent 60%)`
-        }}
-      />
 
       {/* Chapter Badge, Title & Progress Overlay (Overlaid on the bottom-center of the Adventure World) */}
       <div
