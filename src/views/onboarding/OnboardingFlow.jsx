@@ -5,6 +5,7 @@ import Step3GreetingView from './Step3GreetingView';
 import Step4CommitmentView from './Step4CommitmentView';
 import Step6AttributionView from './Step6AttributionView';
 import Step7SubjectView from './Step7SubjectView';
+import Step8AssessmentView from './Step8AssessmentView';
 import PlayBankMascot from '../../components/common/PlayBankMascot';
 import PrimaryButton from '../../components/common/PrimaryButton';
 import { mockDb } from '../../lib/mockDb';
@@ -17,8 +18,9 @@ import { mockDb } from '../../lib/mockDb';
  * Step 3: Step3GreetingView
  * Step 4: Step4CommitmentView
  * Step 6: Step6AttributionView
- * Step 7: Step7SubjectView ("你最想学会什么科目？")
- * Step 8: Step8AssessmentView ("你的【科目】怎么样？")
+ * Step 7: Step7SubjectView
+ * Step 8: Step8AssessmentView ("你的【科目】怎么样？" + Dynamic Reactions)
+ * Step 9: Step9MotivationView ("学好这门科目，你就是这个科目的主宰！")
  */
 const OnboardingFlow = ({ onComplete, onOpenLogin }) => {
   // Current step state in onboarding flow
@@ -43,10 +45,8 @@ const OnboardingFlow = ({ onComplete, onOpenLogin }) => {
     if (onComplete) onComplete(userProfileData);
   };
 
-  // Step 8 placeholder (Ready for Self-Assessment & Dynamic PB Reactions)
-  if (currentStep === 'step8_assessment') {
-    const subjName = userProfileData.selectedSubject?.displayName || userProfileData.selectedSubject?.name || '所选科目';
-
+  // Step 9 placeholder (Ready for Mastery Motivation)
+  if (currentStep === 'step9_motivation') {
     return (
       <div
         className="onboarding-flow-container"
@@ -62,16 +62,16 @@ const OnboardingFlow = ({ onComplete, onOpenLogin }) => {
           boxSizing: 'border-box'
         }}
       >
-        <PlayBankMascot variant="stand" size={180} speechBubble={`你的【${subjName}】怎么样？🐾`} />
+        <PlayBankMascot variant="cheer" size={200} speechBubble="学好这门科目，你就是这个科目的主宰！🏆" />
         <h2 style={{ fontSize: '22px', fontWeight: 900, marginTop: '20px', marginBottom: '8px' }}>
-          第 8 步就绪：科目自评与动态表情反馈
+          第 9 步就绪：科目主宰激励
         </h2>
         <p style={{ fontSize: '13px', color: '#6B7280', marginBottom: '24px', textAlign: 'center' }}>
-          已选目标科目：<strong>{subjName}</strong>，等待执行第 8 步
+          水平自评已完成：<strong>{userProfileData.subjectProficiency?.label}</strong>，等待执行第 9 步
         </p>
         <div style={{ display: 'flex', gap: '12px' }}>
           <button
-            onClick={() => setCurrentStep('step7_subject')}
+            onClick={() => setCurrentStep('step8_assessment')}
             style={{
               padding: '10px 20px',
               borderRadius: '14px',
@@ -82,7 +82,7 @@ const OnboardingFlow = ({ onComplete, onOpenLogin }) => {
               cursor: 'pointer'
             }}
           >
-            ← 返回第 7 步
+            ← 返回第 8 步
           </button>
           <PrimaryButton
             onClick={handleFinishOnboarding}
@@ -93,6 +93,21 @@ const OnboardingFlow = ({ onComplete, onOpenLogin }) => {
           </PrimaryButton>
         </div>
       </div>
+    );
+  }
+
+  // Step 8: Subject Self-Assessment with Dynamic PB Reactions
+  if (currentStep === 'step8_assessment') {
+    return (
+      <Step8AssessmentView
+        selectedSubject={userProfileData.selectedSubject}
+        initialProficiency={userProfileData.subjectProficiency}
+        onNext={(proficiency) => {
+          setUserProfileData(prev => ({ ...prev, subjectProficiency: proficiency }));
+          setCurrentStep('step9_motivation');
+        }}
+        onBack={() => setCurrentStep('step7_subject')}
+      />
     );
   }
 
