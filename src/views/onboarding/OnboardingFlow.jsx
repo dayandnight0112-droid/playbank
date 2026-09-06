@@ -3,6 +3,7 @@ import WelcomeLandingView from './WelcomeLandingView';
 import Step2AgeView from './Step2AgeView';
 import Step3GreetingView from './Step3GreetingView';
 import Step4CommitmentView from './Step4CommitmentView';
+import Step6AttributionView from './Step6AttributionView';
 import PlayBankMascot from '../../components/common/PlayBankMascot';
 import PrimaryButton from '../../components/common/PrimaryButton';
 import { mockDb } from '../../lib/mockDb';
@@ -13,8 +14,9 @@ import { mockDb } from '../../lib/mockDb';
  * Step 1: WelcomeLandingView
  * Step 2: Step2AgeView
  * Step 3: Step3GreetingView
- * Step 4: Step4CommitmentView ("很高兴见到你，我会陪你学到中学")
+ * Step 4: Step4CommitmentView
  * Step 6: Step6AttributionView ("你是从哪里认识我们的？")
+ * Step 7: Step7SubjectView ("你最想学会什么科目？")
  */
 const OnboardingFlow = ({ onComplete, onOpenLogin }) => {
   // Current step state in onboarding flow
@@ -39,8 +41,8 @@ const OnboardingFlow = ({ onComplete, onOpenLogin }) => {
     if (onComplete) onComplete(userProfileData);
   };
 
-  // Step 6 placeholder (Ready for Source Attribution)
-  if (currentStep === 'step6_attribution') {
+  // Step 7 placeholder (Ready for Subject Preference)
+  if (currentStep === 'step7_subject') {
     return (
       <div
         className="onboarding-flow-container"
@@ -56,16 +58,16 @@ const OnboardingFlow = ({ onComplete, onOpenLogin }) => {
           boxSizing: 'border-box'
         }}
       >
-        <PlayBankMascot variant="stand" size={180} speechBubble="你是从哪里认识我们的？🐾" />
+        <PlayBankMascot variant="stand" size={180} speechBubble="你最想学会什么科目？🐾" />
         <h2 style={{ fontSize: '22px', fontWeight: 900, marginTop: '20px', marginBottom: '8px' }}>
-          第 6 步就绪：渠道来源选择
+          第 7 步就绪：目标科目选择
         </h2>
         <p style={{ fontSize: '13px', color: '#6B7280', marginBottom: '24px', textAlign: 'center' }}>
-          第 4 步（陪伴承诺）已顺利完成，等待执行第 6 步
+          渠道已选：<strong>{userProfileData.sourceChannel?.title}</strong>，等待执行第 7 步（根据年龄匹配学科）
         </p>
         <div style={{ display: 'flex', gap: '12px' }}>
           <button
-            onClick={() => setCurrentStep('step4_commitment')}
+            onClick={() => setCurrentStep('step6_attribution')}
             style={{
               padding: '10px 20px',
               borderRadius: '14px',
@@ -76,7 +78,7 @@ const OnboardingFlow = ({ onComplete, onOpenLogin }) => {
               cursor: 'pointer'
             }}
           >
-            ← 返回第 4 步
+            ← 返回第 6 步
           </button>
           <PrimaryButton
             onClick={handleFinishOnboarding}
@@ -87,6 +89,20 @@ const OnboardingFlow = ({ onComplete, onOpenLogin }) => {
           </PrimaryButton>
         </div>
       </div>
+    );
+  }
+
+  // Step 6: Marketing Channel Attribution
+  if (currentStep === 'step6_attribution') {
+    return (
+      <Step6AttributionView
+        initialChannel={userProfileData.sourceChannel}
+        onNext={(channel) => {
+          setUserProfileData(prev => ({ ...prev, sourceChannel: channel }));
+          setCurrentStep('step7_subject');
+        }}
+        onBack={() => setCurrentStep('step4_commitment')}
+      />
     );
   }
 
