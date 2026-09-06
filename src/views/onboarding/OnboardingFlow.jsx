@@ -4,24 +4,24 @@ import PrimaryButton from '../../components/common/PrimaryButton';
 import { mockDb } from '../../lib/mockDb';
 
 /**
- * OnboardingFlow (Step 2.1 Mascot Animation Showcase & Welcome Screen)
- * Displays PlayBank Tiger Mascot with 2-Frame Run & Cheer Animations + Welcome CTAs.
+ * OnboardingFlow
+ * Master coordinator for PlayBank Onboarding.
+ * Step 2: Clean Welcome Screen with Official Logo, Mascot, Slogan, GET STARTED & "已有账户" Button.
  */
 const OnboardingFlow = ({ onComplete, onOpenLogin }) => {
-  // Active animation pose: 'wave' | 'run' | 'cheer' | 'stand'
-  const [activePose, setActivePose] = useState('wave');
-  const [bubbleText, setBubbleText] = useState('Welcome to PlayBank! 🐾');
+  // Current step in onboarding: 'welcome' | 'intro' | 'age' | 'celebration'
+  const [currentStep, setCurrentStep] = useState('welcome');
+  const [speechText, setSpeechText] = useState('一起来冒险吧！🐾');
 
-  const poses = [
-    { id: 'wave', label: '👋 迎宾招手', bubble: '欢迎来到 PlayBank！' },
-    { id: 'run', label: '🏃 极速奔跑 (双帧)', bubble: '冲冲冲！一起去冒险！' },
-    { id: 'cheer', label: '🎉 胜利欢呼 (双帧)', bubble: '太棒了！冒险就要开始啦！' },
-    { id: 'stand', label: '🧍 准备待机', bubble: '随时准备出发！' }
-  ];
+  // Check if player has existing saved progress
+  const hasExistingProgress = !!(
+    mockDb.getCurrentSession() ||
+    (mockDb.getGuestProfile() && mockDb.getGuestProfile().tutorialComplete)
+  );
 
-  const handleSelectPose = (p) => {
-    setActivePose(p.id);
-    setBubbleText(p.bubble);
+  const handleStart = () => {
+    // Advance to Step 3 (Game Introduction)
+    setCurrentStep('intro');
   };
 
   const handleFinishOnboarding = () => {
@@ -29,28 +29,89 @@ const OnboardingFlow = ({ onComplete, onOpenLogin }) => {
     if (onComplete) onComplete();
   };
 
+  // If already advanced past welcome (for upcoming steps)
+  if (currentStep === 'intro') {
+    return (
+      <div
+        className="onboarding-flow-container"
+        style={{
+          width: '100%',
+          minHeight: '100dvh',
+          background: '#FFFFFF',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '24px',
+          boxSizing: 'border-box'
+        }}
+      >
+        <PlayBankMascot variant="run" size={180} speechBubble="Step 3 即将呈现！" />
+        <h2 style={{ fontSize: '20px', fontWeight: 900, marginTop: '20px', marginBottom: '8px' }}>
+          游戏介绍页面就绪
+        </h2>
+        <p style={{ fontSize: '13px', color: '#6B7280', marginBottom: '24px' }}>
+          点击下方按钮可返回欢迎页，等待执行 Step 3
+        </p>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <button
+            onClick={() => setCurrentStep('welcome')}
+            style={{
+              padding: '10px 20px',
+              borderRadius: '14px',
+              border: '2px solid #000',
+              background: '#F3F4F6',
+              fontWeight: 800,
+              fontSize: '14px',
+              cursor: 'pointer'
+            }}
+          >
+            ← 返回欢迎页
+          </button>
+          <button
+            onClick={handleFinishOnboarding}
+            style={{
+              padding: '10px 20px',
+              borderRadius: '14px',
+              border: '2px solid #000',
+              background: 'var(--brand-primary, #FFBC00)',
+              fontWeight: 900,
+              fontSize: '14px',
+              cursor: 'pointer',
+              boxShadow: '0 3px 0 #000'
+            }}
+          >
+            进入大厅 ▶
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Step 2: Welcome Screen
   return (
     <div
       className="onboarding-flow-container"
       style={{
         width: '100%',
+        height: '100%',
         minHeight: '100dvh',
-        background: 'linear-gradient(180deg, #FFFDF5 0%, #FFF8E1 50%, #FEF3C7 100%)',
+        background: 'linear-gradient(180deg, #FFFDF5 0%, #FFF8E1 45%, #FEF3C7 100%)',
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'space-between',
         alignItems: 'center',
-        padding: '32px 20px calc(24px + env(safe-area-inset-bottom, 0px))',
+        padding: 'max(24px, env(safe-area-inset-top, 24px)) 20px calc(28px + env(safe-area-inset-bottom, 0px))',
         boxSizing: 'border-box',
         position: 'relative',
         overflow: 'hidden'
       }}
     >
-      {/* Background Subtle Radial Sunburst */}
+      {/* Ambient Radial Golden Glow */}
       <div
         style={{
           position: 'absolute',
-          top: '-10%',
+          top: '-15%',
           left: '50%',
           transform: 'translateX(-50%)',
           width: '560px',
@@ -61,43 +122,46 @@ const OnboardingFlow = ({ onComplete, onOpenLogin }) => {
         }}
       />
 
-      {/* Top Section: PlayBank Official Logo & Slogan */}
-      <div
+      {/* Top Header: Official Logo + Slogan */}
+      <header
         style={{
           position: 'relative',
           zIndex: 10,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          textAlign: 'center'
+          textAlign: 'center',
+          marginTop: '8px'
         }}
       >
         <img
           src="/playbanklogo.png"
           alt="PlayBank Logo"
           style={{
-            height: '42px',
+            height: '46px',
             width: 'auto',
             objectFit: 'contain',
-            marginBottom: '8px',
-            filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.12))'
+            marginBottom: '10px',
+            filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.12))'
           }}
         />
+
+        {/* Short Slogan Pill: Learn. Play. Level Up. */}
         <div
           style={{
             display: 'inline-flex',
             alignItems: 'center',
-            gap: '6px',
-            background: 'rgba(0, 0, 0, 0.06)',
+            background: 'rgba(0, 0, 0, 0.05)',
+            border: '1px solid rgba(0, 0, 0, 0.08)',
             borderRadius: '9999px',
-            padding: '4px 14px'
+            padding: '5px 16px'
           }}
         >
           <span
             style={{
               fontSize: '13px',
               fontWeight: 900,
-              color: '#374151',
+              color: '#1F2937',
               letterSpacing: '1px',
               textTransform: 'uppercase'
             }}
@@ -105,10 +169,10 @@ const OnboardingFlow = ({ onComplete, onOpenLogin }) => {
             Learn. Play. Level Up.
           </span>
         </div>
-      </div>
+      </header>
 
-      {/* Center Section: PlayBank Tiger Mascot with Animation Switcher */}
-      <div
+      {/* Center Stage: PlayBank Tiger Mascot (Welcoming Waving Pose) */}
+      <main
         style={{
           position: 'relative',
           zIndex: 10,
@@ -116,59 +180,29 @@ const OnboardingFlow = ({ onComplete, onOpenLogin }) => {
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          margin: '20px 0'
+          margin: 'auto 0'
         }}
       >
         <PlayBankMascot
-          variant={activePose}
+          variant="wave"
           size={230}
-          speechBubble={bubbleText}
+          speechBubble={speechText}
           interactive={true}
-        />
-
-        {/* Animation Pose Switcher Pills */}
-        <div
-          style={{
-            display: 'flex',
-            gap: '8px',
-            flexWrap: 'wrap',
-            justifyContent: 'center',
-            marginTop: '20px',
-            maxWidth: '340px'
+          onClick={() => {
+            const bubbles = [
+              '一起来冒险吧！🐾',
+              '答题升级，冲向巅峰！⚡',
+              '挑战 Boss 拿金币！🪙',
+              '出发！准备好了吗？🎉'
+            ];
+            const next = bubbles[(bubbles.indexOf(speechText) + 1) % bubbles.length];
+            setSpeechText(next);
           }}
-        >
-          {poses.map((p) => {
-            const isSelected = activePose === p.id;
-            return (
-              <button
-                key={p.id}
-                onClick={() => handleSelectPose(p)}
-                style={{
-                  background: isSelected ? 'var(--brand-primary, #FFBC00)' : '#FFFFFF',
-                  color: '#000000',
-                  border: `2px solid ${isSelected ? '#000000' : 'rgba(0,0,0,0.15)'}`,
-                  borderRadius: '9999px',
-                  padding: '6px 14px',
-                  fontSize: '12px',
-                  fontWeight: 900,
-                  cursor: 'pointer',
-                  boxShadow: isSelected ? '0 3px 0 #000000' : '0 2px 4px rgba(0,0,0,0.05)',
-                  transform: isSelected ? 'translateY(-2px)' : 'none',
-                  transition: 'all 0.15s ease'
-                }}
-              >
-                {p.label}
-              </button>
-            );
-          })}
-        </div>
-        <span style={{ fontSize: '11px', color: '#9CA3AF', marginTop: '8px', fontWeight: 600 }}>
-          💡 点击小老虎或上方按钮切换双帧连贯动作
-        </span>
-      </div>
+        />
+      </main>
 
-      {/* Bottom Section: GET STARTED + 4-letter "已有账户" Button */}
-      <div
+      {/* Bottom Action Area: GET STARTED / CONTINUE + 4-letter "已有账户" Button */}
+      <footer
         style={{
           position: 'relative',
           zIndex: 10,
@@ -180,47 +214,61 @@ const OnboardingFlow = ({ onComplete, onOpenLogin }) => {
           gap: '12px'
         }}
       >
-        {/* Main CTA Button */}
+        {/* Main CTA: GET STARTED (or CONTINUE for existing players) */}
         <PrimaryButton
-          onClick={handleFinishOnboarding}
+          onClick={handleStart}
           size="large"
           variant="primary"
           style={{ width: '100%' }}
         >
-          GET STARTED
+          {hasExistingProgress ? 'CONTINUE' : 'GET STARTED'}
         </PrimaryButton>
 
-        {/* 4-character Button as requested: "已有账户" */}
+        {/* 4-character Button: "已有账户" */}
         <button
+          type="button"
+          className="account-login-btn"
           onClick={() => {
             if (onOpenLogin) onOpenLogin();
           }}
           style={{
-            background: 'transparent',
-            border: '2px solid #000000',
+            width: '100%',
+            background: '#FFFFFF',
+            border: '2.5px solid #000000',
             borderRadius: '16px',
-            padding: '10px 24px',
-            fontSize: '14px',
+            padding: '12px 24px',
+            fontSize: '15px',
             fontWeight: 900,
-            color: '#111827',
+            color: '#000000',
             cursor: 'pointer',
-            boxShadow: '0 3px 0 #000000',
+            boxShadow: '0 4px 0 #000000',
             transition: 'transform 0.08s ease, box-shadow 0.08s ease',
             outline: 'none',
-            letterSpacing: '0.5px'
+            letterSpacing: '1px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
           }}
           onMouseDown={(e) => {
-            e.currentTarget.style.transform = 'translateY(2px)';
+            e.currentTarget.style.transform = 'translateY(3px)';
             e.currentTarget.style.boxShadow = '0 1px 0 #000000';
           }}
           onMouseUp={(e) => {
             e.currentTarget.style.transform = 'none';
-            e.currentTarget.style.boxShadow = '0 3px 0 #000000';
+            e.currentTarget.style.boxShadow = '0 4px 0 #000000';
+          }}
+          onTouchStart={(e) => {
+            e.currentTarget.style.transform = 'translateY(3px)';
+            e.currentTarget.style.boxShadow = '0 1px 0 #000000';
+          }}
+          onTouchEnd={(e) => {
+            e.currentTarget.style.transform = 'none';
+            e.currentTarget.style.boxShadow = '0 4px 0 #000000';
           }}
         >
           已有账户
         </button>
-      </div>
+      </footer>
     </div>
   );
 };
