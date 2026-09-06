@@ -1,12 +1,14 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import PlayBankMascot from '../../components/common/PlayBankMascot';
 import PrimaryButton from '../../components/common/PrimaryButton';
+import GameIntroView from './GameIntroView';
 import { mockDb } from '../../lib/mockDb';
 
 /**
  * OnboardingFlow
  * Master coordinator for PlayBank Onboarding.
- * Step 2: Clean Welcome Screen with Official Logo, Mascot, Slogan, GET STARTED & "已有账户" Button.
+ * Step 2: Clean Welcome Screen.
+ * Step 3: Scrollable Duolingo-style Game Introduction.
  */
 const OnboardingFlow = ({ onComplete, onOpenLogin }) => {
   // Current step in onboarding: 'welcome' | 'intro' | 'age' | 'celebration'
@@ -29,8 +31,18 @@ const OnboardingFlow = ({ onComplete, onOpenLogin }) => {
     if (onComplete) onComplete();
   };
 
-  // If already advanced past welcome (for upcoming steps)
+  // Step 3: Game Introduction Screen
   if (currentStep === 'intro') {
+    return (
+      <GameIntroView
+        onNext={() => setCurrentStep('age')}
+        onBack={() => setCurrentStep('welcome')}
+      />
+    );
+  }
+
+  // Ready for Step 4 (Age Selection)
+  if (currentStep === 'age') {
     return (
       <div
         className="onboarding-flow-container"
@@ -46,16 +58,16 @@ const OnboardingFlow = ({ onComplete, onOpenLogin }) => {
           boxSizing: 'border-box'
         }}
       >
-        <PlayBankMascot variant="run" size={180} speechBubble="Step 3 即将呈现！" />
-        <h2 style={{ fontSize: '20px', fontWeight: 900, marginTop: '20px', marginBottom: '8px' }}>
-          游戏介绍页面就绪
+        <PlayBankMascot variant="stand" size={180} speechBubble="How old are you? 🐾" />
+        <h2 style={{ fontSize: '22px', fontWeight: 900, marginTop: '20px', marginBottom: '8px' }}>
+          Step 4：年龄选择就绪
         </h2>
         <p style={{ fontSize: '13px', color: '#6B7280', marginBottom: '24px' }}>
-          点击下方按钮可返回欢迎页，等待执行 Step 3
+          游戏介绍已成功浏览，等待执行 Step 4
         </p>
         <div style={{ display: 'flex', gap: '12px' }}>
           <button
-            onClick={() => setCurrentStep('welcome')}
+            onClick={() => setCurrentStep('intro')}
             style={{
               padding: '10px 20px',
               borderRadius: '14px',
@@ -66,7 +78,7 @@ const OnboardingFlow = ({ onComplete, onOpenLogin }) => {
               cursor: 'pointer'
             }}
           >
-            ← 返回欢迎页
+            ← 返回游戏介绍
           </button>
           <button
             onClick={handleFinishOnboarding}
