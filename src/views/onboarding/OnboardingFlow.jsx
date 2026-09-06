@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import WelcomeLandingView from './WelcomeLandingView';
+import Step2AgeView from './Step2AgeView';
 import PlayBankMascot from '../../components/common/PlayBankMascot';
 import PrimaryButton from '../../components/common/PrimaryButton';
 import { mockDb } from '../../lib/mockDb';
@@ -8,8 +9,8 @@ import { mockDb } from '../../lib/mockDb';
  * OnboardingFlow
  * Master coordinator for PlayBank 11-step Duolingo-style Onboarding.
  * Step 1: WelcomeLandingView (Hero + Scrollable Game Introduction Cards + "已有账户")
- * Steps 2-10: Guided questionnaire with PB mascot
- * Step 11: Part A Tutorial Game trial
+ * Step 2: Step2AgeView (Age selection with Duolingo progress bar)
+ * Step 3: PB Mascot Greeting ("你好呀，我是PB！")
  */
 const OnboardingFlow = ({ onComplete, onOpenLogin }) => {
   // Current step state in onboarding flow
@@ -29,18 +30,13 @@ const OnboardingFlow = ({ onComplete, onOpenLogin }) => {
     (mockDb.getGuestProfile() && mockDb.getGuestProfile().tutorialComplete)
   );
 
-  const handleStart = () => {
-    // Step 1 completed -> Proceed to Step 2 (Age Selection)
-    setCurrentStep('step2_age');
-  };
-
   const handleFinishOnboarding = () => {
     mockDb.setOnboardingComplete(true);
     if (onComplete) onComplete(userProfileData);
   };
 
-  // Step 2 placeholder (Ready for Step 2 instruction)
-  if (currentStep === 'step2_age') {
+  // Step 3 placeholder (Ready for Step 3: Mascot Greeting)
+  if (currentStep === 'step3_greeting') {
     return (
       <div
         className="onboarding-flow-container"
@@ -56,16 +52,16 @@ const OnboardingFlow = ({ onComplete, onOpenLogin }) => {
           boxSizing: 'border-box'
         }}
       >
-        <PlayBankMascot variant="stand" size={180} speechBubble="How old are you? 🐾" />
+        <PlayBankMascot variant="wave" size={200} speechBubble="你好呀，我是PB！🐾" />
         <h2 style={{ fontSize: '22px', fontWeight: 900, marginTop: '20px', marginBottom: '8px' }}>
-          第 2 步：年龄选择就绪
+          第 3 步就绪：PB 挥手打招呼
         </h2>
         <p style={{ fontSize: '13px', color: '#6B7280', marginBottom: '24px', textAlign: 'center' }}>
-          第 1 步（欢迎页与游戏介绍一体化）已顺利完成，等待执行第 2 步
+          已选择年龄：<strong>{userProfileData.ageGroup?.label}</strong>，等待执行第 3 步
         </p>
         <div style={{ display: 'flex', gap: '12px' }}>
           <button
-            onClick={() => setCurrentStep('welcome')}
+            onClick={() => setCurrentStep('step2_age')}
             style={{
               padding: '10px 20px',
               borderRadius: '14px',
@@ -76,7 +72,7 @@ const OnboardingFlow = ({ onComplete, onOpenLogin }) => {
               cursor: 'pointer'
             }}
           >
-            ← 返回欢迎页
+            ← 返回年龄选择
           </button>
           <PrimaryButton
             onClick={handleFinishOnboarding}
@@ -90,10 +86,24 @@ const OnboardingFlow = ({ onComplete, onOpenLogin }) => {
     );
   }
 
+  // Step 2: Age Selection Screen
+  if (currentStep === 'step2_age') {
+    return (
+      <Step2AgeView
+        initialAge={userProfileData.ageGroup}
+        onNext={(ageOption) => {
+          setUserProfileData(prev => ({ ...prev, ageGroup: ageOption }));
+          setCurrentStep('step3_greeting');
+        }}
+        onBack={() => setCurrentStep('welcome')}
+      />
+    );
+  }
+
   // Step 1: Duolingo-style unified Welcome Landing View
   return (
     <WelcomeLandingView
-      onStart={handleStart}
+      onStart={() => setCurrentStep('step2_age')}
       onOpenLogin={onOpenLogin}
       hasExistingProgress={hasExistingProgress}
     />

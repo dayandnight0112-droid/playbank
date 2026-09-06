@@ -539,50 +539,6 @@ const WelcomeLandingView = ({ onStart, onOpenLogin, hasExistingProgress = false 
             </div>
           </div>
         </div>
-
-        {/* Bottom Repeated CTA Area */}
-        <div
-          style={{
-            marginTop: '12px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '12px',
-            alignItems: 'center'
-          }}
-        >
-          <PrimaryButton
-            onClick={onStart}
-            size="large"
-            variant="primary"
-            style={{ width: '100%' }}
-          >
-            {hasExistingProgress ? 'CONTINUE' : 'GET STARTED'}
-          </PrimaryButton>
-
-          <button
-            type="button"
-            onClick={onOpenLogin}
-            style={{
-              width: '100%',
-              background: '#FFFFFF',
-              border: '2.5px solid #000000',
-              borderRadius: '16px',
-              padding: '12px 24px',
-              fontSize: '15px',
-              fontWeight: 900,
-              color: '#000000',
-              cursor: 'pointer',
-              boxShadow: '0 4px 0 #000000',
-              outline: 'none',
-              letterSpacing: '1px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
-          >
-            已有账户
-          </button>
-        </div>
       </section>
 
       {/* Floating subtle animation keyframe */}
