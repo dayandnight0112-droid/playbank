@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowLeft } from 'lucide-react';
+import OnboardingBackButton from './OnboardingBackButton';
 import PlayBankMascot from '../../components/common/PlayBankMascot';
 import PrimaryButton from '../../components/common/PrimaryButton';
 
@@ -8,6 +8,7 @@ import PrimaryButton from '../../components/common/PrimaryButton';
  * Duolingo-style Character Introduction Screen.
  * PB waves enthusiastically and introduces himself:
  * "你好呀，我是PB！"
+ * Features circular 3D back button in top-left corner.
  */
 const Step3GreetingView = ({ onNext, onBack }) => {
   return (
@@ -21,74 +22,12 @@ const Step3GreetingView = ({ onNext, onBack }) => {
         display: 'flex',
         flexDirection: 'column',
         position: 'relative',
-        boxSizing: 'border-box'
+        boxSizing: 'border-box',
+        overflow: 'hidden'
       }}
     >
-      {/* ============================================================ */}
-      {/* Top Header: Back Button + Progress Bar (~22%)                 */}
-      {/* ============================================================ */}
-      <header
-        style={{
-          position: 'sticky',
-          top: 0,
-          left: 0,
-          right: 0,
-          zIndex: 50,
-          background: 'rgba(255, 255, 255, 0.96)',
-          backdropFilter: 'blur(8px)',
-          borderBottom: '1px solid #F3F4F6',
-          padding: 'max(14px, env(safe-area-inset-top, 14px)) 16px 12px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '14px'
-        }}
-      >
-        {/* Back Button */}
-        <button
-          type="button"
-          onClick={onBack}
-          style={{
-            background: '#FFFFFF',
-            border: '2px solid #000000',
-            borderRadius: '50%',
-            width: '38px',
-            height: '38px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            boxShadow: '0 2px 0 #000000',
-            outline: 'none',
-            flexShrink: 0
-          }}
-          aria-label="Back"
-        >
-          <ArrowLeft size={18} strokeWidth={3} color="#000000" />
-        </button>
-
-        {/* Duolingo Progress Bar */}
-        <div
-          style={{
-            flex: 1,
-            height: '12px',
-            background: '#E5E7EB',
-            borderRadius: '9999px',
-            border: '2px solid #000000',
-            overflow: 'hidden',
-            position: 'relative'
-          }}
-        >
-          <div
-            style={{
-              width: '22%',
-              height: '100%',
-              background: 'var(--brand-primary, #FFBC00)',
-              borderRadius: '9999px',
-              transition: 'width 0.4s cubic-bezier(0.16, 1, 0.3, 1)'
-            }}
-          />
-        </div>
-      </header>
+      {/* Top Left Circular 3D Back Button */}
+      <OnboardingBackButton onClick={onBack} />
 
       {/* ============================================================ */}
       {/* Center Stage: PB Waving + Duolingo Speech Bubble             */}
@@ -99,7 +38,7 @@ const Step3GreetingView = ({ onNext, onBack }) => {
           width: '100%',
           maxWidth: '460px',
           margin: '0 auto',
-          padding: '24px 20px calc(110px + env(safe-area-inset-bottom, 0px))',
+          padding: 'max(70px, env(safe-area-inset-top, 70px)) 20px calc(110px + env(safe-area-inset-bottom, 0px))',
           boxSizing: 'border-box',
           display: 'flex',
           flexDirection: 'column',

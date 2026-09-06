@@ -13,9 +13,9 @@ import { playPunchyPopSound } from '../../lib/soundEffects';
  *  - 13–15 岁 (初中)
  *  - 16–17 岁 (高中 / SPM)
  * Features:
- *  - Top progress bar (10%)
- *  - PB Mascot asking the age
- *  - High contrast card selection
+ *  - Fixed header + progress bar
+ *  - Fixed PB mascot prompt
+ *  - Scrollable options list ("只把选择可以做滑动")
  *  - Sticky bottom "继续" button
  */
 const Step2AgeView = ({ onNext, onBack, initialAge = null }) => {
@@ -67,51 +67,64 @@ const Step2AgeView = ({ onNext, onBack, initialAge = null }) => {
       className="step2-age-container"
       style={{
         width: '100%',
-        height: '100%',
-        minHeight: '100dvh',
+        height: '100dvh',
         background: '#FFFFFF',
         display: 'flex',
         flexDirection: 'column',
         position: 'relative',
-        boxSizing: 'border-box'
+        boxSizing: 'border-box',
+        overflow: 'hidden'
       }}
     >
       {/* ============================================================ */}
-      {/* Top Header: Back Button + Minimal Progress Bar (10%)          */}
+      {/* Top Header: Back Button + Progress Bar (12%)                  */}
       {/* ============================================================ */}
       <header
         style={{
-          position: 'sticky',
-          top: 0,
-          left: 0,
-          right: 0,
-          zIndex: 50,
-          background: 'rgba(255, 255, 255, 0.96)',
-          backdropFilter: 'blur(8px)',
+          flexShrink: 0,
+          background: '#FFFFFF',
           borderBottom: '1px solid #F3F4F6',
           padding: 'max(14px, env(safe-area-inset-top, 14px)) 16px 12px',
           display: 'flex',
           alignItems: 'center',
-          gap: '14px'
+          gap: '14px',
+          zIndex: 20
         }}
       >
-        {/* Back Button */}
+        {/* Circular 3D Back Button */}
         <button
           type="button"
           onClick={onBack}
           style={{
             background: '#FFFFFF',
-            border: '2px solid #000000',
+            border: '2.5px solid #000000',
             borderRadius: '50%',
-            width: '38px',
-            height: '38px',
+            width: '40px',
+            height: '40px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             cursor: 'pointer',
-            boxShadow: '0 2px 0 #000000',
+            boxShadow: '0 3px 0 #000000',
             outline: 'none',
-            flexShrink: 0
+            flexShrink: 0,
+            transition: 'transform 0.08s ease, box-shadow 0.08s ease'
+          }}
+          onMouseDown={(e) => {
+            e.currentTarget.style.transform = 'translateY(2px)';
+            e.currentTarget.style.boxShadow = '0 1px 0 #000000';
+          }}
+          onMouseUp={(e) => {
+            e.currentTarget.style.transform = 'none';
+            e.currentTarget.style.boxShadow = '0 3px 0 #000000';
+          }}
+          onTouchStart={(e) => {
+            e.currentTarget.style.transform = 'translateY(2px)';
+            e.currentTarget.style.boxShadow = '0 1px 0 #000000';
+          }}
+          onTouchEnd={(e) => {
+            e.currentTarget.style.transform = 'none';
+            e.currentTarget.style.boxShadow = '0 3px 0 #000000';
           }}
           aria-label="Back"
         >
@@ -151,25 +164,26 @@ const Step2AgeView = ({ onNext, onBack, initialAge = null }) => {
           width: '100%',
           maxWidth: '460px',
           margin: '0 auto',
-          padding: '16px 20px calc(100px + env(safe-area-inset-bottom, 0px))',
-          boxSizing: 'border-box',
           display: 'flex',
-          flexDirection: 'column'
+          flexDirection: 'column',
+          overflow: 'hidden',
+          boxSizing: 'border-box'
         }}
       >
-        {/* Mascot Prompt Section */}
+        {/* Fixed Mascot Prompt Section (Does not scroll) */}
         <div
           style={{
+            flexShrink: 0,
             display: 'flex',
             alignItems: 'center',
             gap: '14px',
-            marginBottom: '22px',
-            marginTop: '8px'
+            padding: '16px 20px 12px',
+            boxSizing: 'border-box'
           }}
         >
           <PlayBankMascot
             variant="stand"
-            size={88}
+            size={82}
             interactive={true}
           />
           {/* Duolingo Speech Bubble */}
@@ -214,7 +228,7 @@ const Step2AgeView = ({ onNext, onBack, initialAge = null }) => {
             />
             <h1
               style={{
-                fontSize: '18px',
+                fontSize: '17px',
                 fontWeight: 900,
                 color: '#111827',
                 margin: 0,
@@ -229,12 +243,18 @@ const Step2AgeView = ({ onNext, onBack, initialAge = null }) => {
           </div>
         </div>
 
-        {/* 4 Age Selection Cards */}
+        {/* Scrollable Options List: "只把选择可以做滑动" */}
         <div
+          className="scrollable-age-options"
           style={{
+            flex: 1,
+            overflowY: 'auto',
+            WebkitOverflowScrolling: 'touch',
+            padding: '4px 20px calc(115px + env(safe-area-inset-bottom, 0px))',
             display: 'flex',
             flexDirection: 'column',
-            gap: '12px'
+            gap: '12px',
+            boxSizing: 'border-box'
           }}
         >
           {ageOptions.map((opt) => {
@@ -256,7 +276,8 @@ const Step2AgeView = ({ onNext, onBack, initialAge = null }) => {
                   boxShadow: isSelected ? '0 5px 0 #000000' : '0 2px 0 rgba(0,0,0,0.04)',
                   transform: isSelected ? 'translateY(-2px)' : 'none',
                   transition: 'all 0.15s cubic-bezier(0.16, 1, 0.3, 1)',
-                  userSelect: 'none'
+                  userSelect: 'none',
+                  flexShrink: 0
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
