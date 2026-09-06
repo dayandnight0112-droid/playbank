@@ -4,6 +4,7 @@ import Step2AgeView from './Step2AgeView';
 import Step3GreetingView from './Step3GreetingView';
 import Step4CommitmentView from './Step4CommitmentView';
 import Step6AttributionView from './Step6AttributionView';
+import Step7SubjectView from './Step7SubjectView';
 import PlayBankMascot from '../../components/common/PlayBankMascot';
 import PrimaryButton from '../../components/common/PrimaryButton';
 import { mockDb } from '../../lib/mockDb';
@@ -15,8 +16,9 @@ import { mockDb } from '../../lib/mockDb';
  * Step 2: Step2AgeView
  * Step 3: Step3GreetingView
  * Step 4: Step4CommitmentView
- * Step 6: Step6AttributionView ("你是从哪里认识我们的？")
+ * Step 6: Step6AttributionView
  * Step 7: Step7SubjectView ("你最想学会什么科目？")
+ * Step 8: Step8AssessmentView ("你的【科目】怎么样？")
  */
 const OnboardingFlow = ({ onComplete, onOpenLogin }) => {
   // Current step state in onboarding flow
@@ -41,8 +43,10 @@ const OnboardingFlow = ({ onComplete, onOpenLogin }) => {
     if (onComplete) onComplete(userProfileData);
   };
 
-  // Step 7 placeholder (Ready for Subject Preference)
-  if (currentStep === 'step7_subject') {
+  // Step 8 placeholder (Ready for Self-Assessment & Dynamic PB Reactions)
+  if (currentStep === 'step8_assessment') {
+    const subjName = userProfileData.selectedSubject?.displayName || userProfileData.selectedSubject?.name || '所选科目';
+
     return (
       <div
         className="onboarding-flow-container"
@@ -58,16 +62,16 @@ const OnboardingFlow = ({ onComplete, onOpenLogin }) => {
           boxSizing: 'border-box'
         }}
       >
-        <PlayBankMascot variant="stand" size={180} speechBubble="你最想学会什么科目？🐾" />
+        <PlayBankMascot variant="stand" size={180} speechBubble={`你的【${subjName}】怎么样？🐾`} />
         <h2 style={{ fontSize: '22px', fontWeight: 900, marginTop: '20px', marginBottom: '8px' }}>
-          第 7 步就绪：目标科目选择
+          第 8 步就绪：科目自评与动态表情反馈
         </h2>
         <p style={{ fontSize: '13px', color: '#6B7280', marginBottom: '24px', textAlign: 'center' }}>
-          渠道已选：<strong>{userProfileData.sourceChannel?.title}</strong>，等待执行第 7 步（根据年龄匹配学科）
+          已选目标科目：<strong>{subjName}</strong>，等待执行第 8 步
         </p>
         <div style={{ display: 'flex', gap: '12px' }}>
           <button
-            onClick={() => setCurrentStep('step6_attribution')}
+            onClick={() => setCurrentStep('step7_subject')}
             style={{
               padding: '10px 20px',
               borderRadius: '14px',
@@ -78,7 +82,7 @@ const OnboardingFlow = ({ onComplete, onOpenLogin }) => {
               cursor: 'pointer'
             }}
           >
-            ← 返回第 6 步
+            ← 返回第 7 步
           </button>
           <PrimaryButton
             onClick={handleFinishOnboarding}
@@ -89,6 +93,21 @@ const OnboardingFlow = ({ onComplete, onOpenLogin }) => {
           </PrimaryButton>
         </div>
       </div>
+    );
+  }
+
+  // Step 7: Goal Subject Selection
+  if (currentStep === 'step7_subject') {
+    return (
+      <Step7SubjectView
+        ageGroup={userProfileData.ageGroup}
+        initialSubject={userProfileData.selectedSubject}
+        onNext={(subject) => {
+          setUserProfileData(prev => ({ ...prev, selectedSubject: subject }));
+          setCurrentStep('step8_assessment');
+        }}
+        onBack={() => setCurrentStep('step6_attribution')}
+      />
     );
   }
 
