@@ -22,6 +22,7 @@ import LoginModal from './components/LoginModal';
 import ExitRetentionModal from './components/home/ExitRetentionModal';
 import BossBattle from './views/BossBattle';
 import { evaluateBossTrigger } from './lib/bossTrigger';
+import OnboardingFlow from './views/onboarding/OnboardingFlow';
 
 function App() {
   const [guestProfile, setGuestProfile] = useState(() => mockDb.getGuestProfile());
@@ -33,12 +34,19 @@ function App() {
   const [bossEncounterAlert, setBossEncounterAlert] = useState(false);
 
   const [currentView, setCurrentView] = useState(() => {
+    // Step 1: First-visit detection
+    // If player has not completed Onboarding, route to 'onboarding'
+    const isOnboardingComplete = mockDb.isOnboardingComplete();
+    if (!isOnboardingComplete) {
+      return 'onboarding';
+    }
+    // Completed onboarding: Direct to Home Page (or restore existing session)
     const session = mockDb.getCurrentSession();
     if (session) return 'home';
     const guest = mockDb.getGuestProfile();
     if (guest && guest.tutorialComplete) return 'home';
     if (guest && guest.selectedPath && !guest.tutorialComplete) return 'tutorial';
-    return 'welcome';
+    return 'home';
   });
   // Step 34: Returning Guest Routing & Welcome Back Toast
   const [welcomeBackToast, setWelcomeBackToast] = useState(() => {
@@ -133,11 +141,18 @@ function App() {
       }
     };
 
+    // Step 10: Developer console reset helper (does not appear in player UI)
+    window.__resetOnboarding = () => {
+      mockDb.resetOnboarding();
+      window.location.reload();
+    };
+
     window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      delete window.__resetOnboarding;
+    };
   }, []);
-
-
 
   const handleStartChallenge = () => {
     // Step 32: Unlimited Practice Policy - Never block or expel players!
@@ -150,6 +165,7 @@ function App() {
     setUserBP(0);
     setCurrentUser(null);
     mockDb.clearGuestProfile();
+    mockDb.resetOnboarding();
     setGuestProfile(null);
     localStorage.removeItem(`playbank_plays_today_${currentUser ? currentUser.id : 'guest'}`);
     localStorage.removeItem(`playbank_last_play_date_${currentUser ? currentUser.id : 'guest'}`);
@@ -157,10 +173,10 @@ function App() {
     sessionStorage.removeItem('guest_first_play_register');
     sessionStorage.removeItem('guest_200_register');
     sessionStorage.removeItem('user_200_booster_shown');
-    setCurrentView('welcome');
+    setCurrentView('onboarding');
     openModal({
       title: 'Reset Successful',
-      message: 'You are now a brand new player! All data wiped, starting from Welcome Screen.',
+      message: 'You are now a brand new player! All data wiped, starting from Onboarding.',
       confirmText: 'Awesome'
     });
   };
@@ -315,6 +331,16 @@ function App() {
 
   const renderView = () => {
     switch (currentView) {
+      case 'onboarding':
+        return (
+          <OnboardingFlow
+            onComplete={() => {
+              mockDb.setOnboardingComplete(true);
+              setCurrentView('home');
+            }}
+            onOpenLogin={() => setShowLoginModal(true)}
+          />
+        );
       case 'welcome':
         return (
           <WelcomeScreen
@@ -480,7 +506,7 @@ function App() {
     return <AdminDashboard onLogout={() => { mockDb.logoutUser(); setCurrentUser(null); }} />;
   }
 
-  const hideBottomNav = ['welcome', 'choose_path', 'tutorial', 'tutorial_reward', 'quiz', 'boss_battle'].includes(currentView);
+  const hideBottomNav = ['onboarding', 'welcome', 'choose_path', 'tutorial', 'tutorial_reward', 'quiz', 'boss_battle'].includes(currentView);
 
   return (
     <div className={`app-container ${currentView === 'home' ? 'home-active' : ''}`}>

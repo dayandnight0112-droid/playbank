@@ -8,6 +8,8 @@ const GARDEN_STATE_KEY = 'playbank_garden_state';
 const GUEST_PROFILE_KEY = 'playbank_guest_profile';
 
 const BACKUP_SNAPSHOT_KEY = 'playbank_data_backup_snapshot';
+const ONBOARDING_COMPLETE_KEY = 'playbank_onboarding_complete';
+const PLAYER_PROFILE_KEY = 'playbank_player_profile';
 
 export const safeGetJSON = (key, fallback = null) => {
   try {
@@ -1633,5 +1635,53 @@ export const mockDb = {
   // Get all recorded boss attempts
   getBossAttempts: () => {
     return safeGetJSON('playbank_boss_logs', []);
+  },
+
+  // Step 1: Check if player has completed first-time onboarding
+  isOnboardingComplete: () => {
+    try {
+      return localStorage.getItem(ONBOARDING_COMPLETE_KEY) === 'true';
+    } catch (e) {
+      return false;
+    }
+  },
+
+  // Step 1: Set onboarding completed state in localStorage
+  setOnboardingComplete: (completed = true) => {
+    try {
+      if (completed) {
+        localStorage.setItem(ONBOARDING_COMPLETE_KEY, 'true');
+      } else {
+        localStorage.removeItem(ONBOARDING_COMPLETE_KEY);
+      }
+      return true;
+    } catch (e) {
+      console.error('[mockDb] Failed to set onboarding state:', e);
+      return false;
+    }
+  },
+
+  // Step 5: Get player profile (ageGroup, etc.)
+  getPlayerProfile: () => {
+    return safeGetJSON(PLAYER_PROFILE_KEY, { ageGroup: null });
+  },
+
+  // Step 5: Update player profile
+  updatePlayerProfile: (updates) => {
+    const current = safeGetJSON(PLAYER_PROFILE_KEY, { ageGroup: null });
+    const merged = { ...current, ...updates };
+    safeSetJSON(PLAYER_PROFILE_KEY, merged);
+    return merged;
+  },
+
+  // Step 10: Reset onboarding for testing
+  resetOnboarding: () => {
+    try {
+      localStorage.removeItem(ONBOARDING_COMPLETE_KEY);
+      localStorage.removeItem(PLAYER_PROFILE_KEY);
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 };
