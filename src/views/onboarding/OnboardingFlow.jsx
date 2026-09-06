@@ -8,23 +8,21 @@ import Step7SubjectView from './Step7SubjectView';
 import Step8AssessmentView from './Step8AssessmentView';
 import Step9MotivationView from './Step9MotivationView';
 import Step10DailyGoalView from './Step10DailyGoalView';
-import PlayBankMascot from '../../components/common/PlayBankMascot';
-import PrimaryButton from '../../components/common/PrimaryButton';
 import { mockDb } from '../../lib/mockDb';
 
 /**
  * OnboardingFlow
  * Master coordinator for PlayBank 11-step Duolingo-style Onboarding.
- * Step 1: WelcomeLandingView
- * Step 2: Step2AgeView
- * Step 3: Step3GreetingView
- * Step 4: Step4CommitmentView
- * Step 6: Step6AttributionView
- * Step 7: Step7SubjectView
- * Step 8: Step8AssessmentView
- * Step 9: Step9MotivationView
- * Step 10: Step10DailyGoalView ("来定个每日学习的目标吧！")
- * Step 11: Enter Part A Tutorial Game trial
+ * Step 1: WelcomeLandingView (Hero + Scrollable Game Introduction Cards + "已有账户")
+ * Step 2: Step2AgeView (Age selection with independent scrollable options)
+ * Step 3: Step3GreetingView (PB Mascot wave: "你好呀，我是PB！")
+ * Step 4: Step4CommitmentView (PB Mascot commitment: "很高兴见到你，我会陪你学到中学")
+ * Step 6: Step6AttributionView (Source discovery: "你是从哪里认识我们的？")
+ * Step 7: Step7SubjectView (Target subject dynamically matched to age)
+ * Step 8: Step8AssessmentView (Subject self-assessment with real-time dynamic PB reaction)
+ * Step 9: Step9MotivationView (Mastery motivation: "学好这门科目，你就是这个科目的主宰！")
+ * Step 10: Step10DailyGoalView (Daily goal setting: 5/10/15/20 min)
+ * Step 11: Seamless handoff to Part A Tutorial Game Screen
  */
 const OnboardingFlow = ({ onComplete, onOpenLogin }) => {
   // Current step state in onboarding flow
@@ -44,72 +42,18 @@ const OnboardingFlow = ({ onComplete, onOpenLogin }) => {
     (mockDb.getGuestProfile() && mockDb.getGuestProfile().tutorialComplete)
   );
 
-  const handleFinishToStep11 = () => {
-    // Mark questionnaire complete and hand off to Step 11 (Part A Tutorial)
-    if (onComplete) {
-      onComplete(userProfileData);
-    }
-  };
-
-  // Step 11 placeholder (Ready for Part A Tutorial game transition)
-  if (currentStep === 'step11_tutorial_ready') {
-    return (
-      <div
-        className="onboarding-flow-container"
-        style={{
-          width: '100%',
-          minHeight: '100dvh',
-          background: '#FFFFFF',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '24px',
-          boxSizing: 'border-box'
-        }}
-      >
-        <PlayBankMascot variant="run" size={190} speechBubble="新手试炼开始！出发！🐾⚡" />
-        <h2 style={{ fontSize: '22px', fontWeight: 900, marginTop: '20px', marginBottom: '8px' }}>
-          第 11 步就绪：进入 Part A 教导游戏
-        </h2>
-        <p style={{ fontSize: '13px', color: '#6B7280', marginBottom: '24px', textAlign: 'center', maxWidth: '320px' }}>
-          问卷引导流程（1~10步）全部完成！等待执行第 11 步无缝切入新手实战试炼
-        </p>
-        <div style={{ display: 'flex', gap: '12px' }}>
-          <button
-            onClick={() => setCurrentStep('step10_daily_goal')}
-            style={{
-              padding: '10px 20px',
-              borderRadius: '14px',
-              border: '2px solid #000',
-              background: '#F3F4F6',
-              fontWeight: 800,
-              fontSize: '14px',
-              cursor: 'pointer'
-            }}
-          >
-            ← 返回第 10 步
-          </button>
-          <PrimaryButton
-            onClick={handleFinishToStep11}
-            size="medium"
-            variant="primary"
-          >
-            开启实战试炼 ▶
-          </PrimaryButton>
-        </div>
-      </div>
-    );
-  }
-
   // Step 10: Daily Learning Goal (Duolingo 1:1)
+  // Completing Step 10 triggers Step 11 (Part A Tutorial Game Screen)
   if (currentStep === 'step10_daily_goal') {
     return (
       <Step10DailyGoalView
         initialGoalMinutes={userProfileData.dailyGoal?.minutes || 10}
         onNext={(goal) => {
-          setUserProfileData(prev => ({ ...prev, dailyGoal: goal }));
-          setCurrentStep('step11_tutorial_ready');
+          const finalData = { ...userProfileData, dailyGoal: goal };
+          setUserProfileData(finalData);
+          if (onComplete) {
+            onComplete(finalData);
+          }
         }}
         onBack={() => setCurrentStep('step9_motivation')}
       />

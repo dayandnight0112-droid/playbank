@@ -334,9 +334,43 @@ function App() {
       case 'onboarding':
         return (
           <OnboardingFlow
-            onComplete={() => {
+            onComplete={(userProfileData) => {
               mockDb.setOnboardingComplete(true);
-              setCurrentView('home');
+
+              // Map selected subject to tutorial path
+              let tutorialPath = 'chinese';
+              const subjId = (userProfileData?.selectedSubject?.id || '').toLowerCase();
+              const subjName = (userProfileData?.selectedSubject?.name || '').toLowerCase();
+              if (subjId.includes('english') || subjName.includes('english')) {
+                tutorialPath = 'english';
+              } else if (subjId.includes('chinese') || subjName.includes('华文')) {
+                tutorialPath = 'chinese';
+              } else {
+                tutorialPath = 'mixed';
+              }
+
+              // Create or update guest profile with onboarding choices
+              let guest = mockDb.getGuestProfile();
+              if (!guest) {
+                guest = mockDb.createGuest(tutorialPath);
+              }
+              const updatedGuest = mockDb.updateGuestProfile({
+                selectedPath: tutorialPath,
+                ageGroup: userProfileData?.ageGroup,
+                sourceChannel: userProfileData?.sourceChannel,
+                selectedSubject: userProfileData?.selectedSubject,
+                subjectProficiency: userProfileData?.subjectProficiency,
+                dailyGoal: userProfileData?.dailyGoal,
+                tutorialComplete: false,
+                tutorialProgress: 1,
+                tutorialStep: 1
+              });
+
+              setGuestProfile(updatedGuest || guest);
+              setUserBP(0);
+
+              // Step 11: Route directly into Part A Tutorial Game trial
+              setCurrentView('tutorial');
             }}
             onOpenLogin={() => setShowLoginModal(true)}
           />
