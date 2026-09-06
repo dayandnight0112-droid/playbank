@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import WelcomeLandingView from './WelcomeLandingView';
 import Step2AgeView from './Step2AgeView';
+import Step3GreetingView from './Step3GreetingView';
 import PlayBankMascot from '../../components/common/PlayBankMascot';
 import PrimaryButton from '../../components/common/PrimaryButton';
 import { mockDb } from '../../lib/mockDb';
@@ -9,8 +10,9 @@ import { mockDb } from '../../lib/mockDb';
  * OnboardingFlow
  * Master coordinator for PlayBank 11-step Duolingo-style Onboarding.
  * Step 1: WelcomeLandingView (Hero + Scrollable Game Introduction Cards + "已有账户")
- * Step 2: Step2AgeView (Age selection with Duolingo progress bar)
- * Step 3: PB Mascot Greeting ("你好呀，我是PB！")
+ * Step 2: Step2AgeView (Age selection)
+ * Step 3: Step3GreetingView (PB waves: "你好呀，我是PB！")
+ * Step 4/5: PB Commitment ("很高兴见到你，我会陪你学到中学")
  */
 const OnboardingFlow = ({ onComplete, onOpenLogin }) => {
   // Current step state in onboarding flow
@@ -35,8 +37,8 @@ const OnboardingFlow = ({ onComplete, onOpenLogin }) => {
     if (onComplete) onComplete(userProfileData);
   };
 
-  // Step 3 placeholder (Ready for Step 3: Mascot Greeting)
-  if (currentStep === 'step3_greeting') {
+  // Step 4/5 placeholder (Ready for Mascot Commitment)
+  if (currentStep === 'step4_commitment') {
     return (
       <div
         className="onboarding-flow-container"
@@ -52,16 +54,16 @@ const OnboardingFlow = ({ onComplete, onOpenLogin }) => {
           boxSizing: 'border-box'
         }}
       >
-        <PlayBankMascot variant="wave" size={200} speechBubble="你好呀，我是PB！🐾" />
+        <PlayBankMascot variant="stand" size={200} speechBubble="很高兴见到你，我会陪你学到中学 🐾" />
         <h2 style={{ fontSize: '22px', fontWeight: 900, marginTop: '20px', marginBottom: '8px' }}>
-          第 3 步就绪：PB 挥手打招呼
+          第 4 / 5 步就绪：PB 陪伴承诺
         </h2>
         <p style={{ fontSize: '13px', color: '#6B7280', marginBottom: '24px', textAlign: 'center' }}>
-          已选择年龄：<strong>{userProfileData.ageGroup?.label}</strong>，等待执行第 3 步
+          第 3 步已顺利完成，等待执行第 4 / 5 步
         </p>
         <div style={{ display: 'flex', gap: '12px' }}>
           <button
-            onClick={() => setCurrentStep('step2_age')}
+            onClick={() => setCurrentStep('step3_greeting')}
             style={{
               padding: '10px 20px',
               borderRadius: '14px',
@@ -72,7 +74,7 @@ const OnboardingFlow = ({ onComplete, onOpenLogin }) => {
               cursor: 'pointer'
             }}
           >
-            ← 返回年龄选择
+            ← 返回第 3 步
           </button>
           <PrimaryButton
             onClick={handleFinishOnboarding}
@@ -83,6 +85,16 @@ const OnboardingFlow = ({ onComplete, onOpenLogin }) => {
           </PrimaryButton>
         </div>
       </div>
+    );
+  }
+
+  // Step 3: PB Greeting
+  if (currentStep === 'step3_greeting') {
+    return (
+      <Step3GreetingView
+        onNext={() => setCurrentStep('step4_commitment')}
+        onBack={() => setCurrentStep('step2_age')}
+      />
     );
   }
 
