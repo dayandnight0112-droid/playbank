@@ -6,6 +6,7 @@ import Step4CommitmentView from './Step4CommitmentView';
 import Step6AttributionView from './Step6AttributionView';
 import Step7SubjectView from './Step7SubjectView';
 import Step8AssessmentView from './Step8AssessmentView';
+import Step9MotivationView from './Step9MotivationView';
 import PlayBankMascot from '../../components/common/PlayBankMascot';
 import PrimaryButton from '../../components/common/PrimaryButton';
 import { mockDb } from '../../lib/mockDb';
@@ -19,8 +20,10 @@ import { mockDb } from '../../lib/mockDb';
  * Step 4: Step4CommitmentView
  * Step 6: Step6AttributionView
  * Step 7: Step7SubjectView
- * Step 8: Step8AssessmentView ("你的【科目】怎么样？" + Dynamic Reactions)
+ * Step 8: Step8AssessmentView
  * Step 9: Step9MotivationView ("学好这门科目，你就是这个科目的主宰！")
+ * Step 10: Step10DailyGoalView ("来定个每日学习的目标吧！")
+ * Step 11: Part A Tutorial Game trial
  */
 const OnboardingFlow = ({ onComplete, onOpenLogin }) => {
   // Current step state in onboarding flow
@@ -45,8 +48,8 @@ const OnboardingFlow = ({ onComplete, onOpenLogin }) => {
     if (onComplete) onComplete(userProfileData);
   };
 
-  // Step 9 placeholder (Ready for Mastery Motivation)
-  if (currentStep === 'step9_motivation') {
+  // Step 10 placeholder (Ready for Daily Goal Setting)
+  if (currentStep === 'step10_daily_goal') {
     return (
       <div
         className="onboarding-flow-container"
@@ -62,16 +65,16 @@ const OnboardingFlow = ({ onComplete, onOpenLogin }) => {
           boxSizing: 'border-box'
         }}
       >
-        <PlayBankMascot variant="cheer" size={200} speechBubble="学好这门科目，你就是这个科目的主宰！🏆" />
+        <PlayBankMascot variant="stand" size={180} speechBubble="来定个每日学习的目标吧！🐾" />
         <h2 style={{ fontSize: '22px', fontWeight: 900, marginTop: '20px', marginBottom: '8px' }}>
-          第 9 步就绪：科目主宰激励
+          第 10 步就绪：设定每日学习目标
         </h2>
         <p style={{ fontSize: '13px', color: '#6B7280', marginBottom: '24px', textAlign: 'center' }}>
-          水平自评已完成：<strong>{userProfileData.subjectProficiency?.label}</strong>，等待执行第 9 步
+          激励已点燃，等待执行第 10 步（5/10/15/20分钟学习目标选择）
         </p>
         <div style={{ display: 'flex', gap: '12px' }}>
           <button
-            onClick={() => setCurrentStep('step8_assessment')}
+            onClick={() => setCurrentStep('step9_motivation')}
             style={{
               padding: '10px 20px',
               borderRadius: '14px',
@@ -82,7 +85,7 @@ const OnboardingFlow = ({ onComplete, onOpenLogin }) => {
               cursor: 'pointer'
             }}
           >
-            ← 返回第 8 步
+            ← 返回第 9 步
           </button>
           <PrimaryButton
             onClick={handleFinishOnboarding}
@@ -93,6 +96,17 @@ const OnboardingFlow = ({ onComplete, onOpenLogin }) => {
           </PrimaryButton>
         </div>
       </div>
+    );
+  }
+
+  // Step 9: Mastery Motivation
+  if (currentStep === 'step9_motivation') {
+    return (
+      <Step9MotivationView
+        selectedSubject={userProfileData.selectedSubject}
+        onNext={() => setCurrentStep('step10_daily_goal')}
+        onBack={() => setCurrentStep('step8_assessment')}
+      />
     );
   }
 
