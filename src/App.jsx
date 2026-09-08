@@ -355,6 +355,7 @@ function App() {
                 guest = mockDb.createGuest(tutorialPath);
               }
               const updatedGuest = mockDb.updateGuestProfile({
+                guestName: userProfileData?.nickname?.trim() || '冒险家',
                 selectedPath: tutorialPath,
                 ageGroup: userProfileData?.ageGroup,
                 sourceChannel: userProfileData?.sourceChannel,

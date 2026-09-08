@@ -10,7 +10,7 @@ import PrimaryButton from '../../components/common/PrimaryButton';
  * "你好呀，我是PB！"
  * Features circular 3D back button in top-left corner.
  */
-const Step3GreetingView = ({ onNext, onBack }) => {
+const Step3GreetingView = ({ onNext, onBack, nickname = '' }) => {
   return (
     <div
       className="step3-greeting-container"
@@ -70,7 +70,7 @@ const Step3GreetingView = ({ onNext, onBack }) => {
               letterSpacing: '0.5px'
             }}
           >
-            你好呀，我是PB！👋
+            {nickname ? `你好呀 ${nickname}，我是PB！👋` : '你好呀，我是PB！👋'}
           </h1>
           <p
             style={{
