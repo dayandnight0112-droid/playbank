@@ -252,7 +252,7 @@ const WelcomeLandingView = ({ onStart, onOpenLogin, hasExistingProgress = false 
           boxSizing: 'border-box',
           display: 'flex',
           flexDirection: 'column',
-          gap: '24px'
+          gap: '36px'
         }}
       >
         {/* Section Divider / Title */}
@@ -279,19 +279,16 @@ const WelcomeLandingView = ({ onStart, onOpenLogin, hasExistingProgress = false 
           </h2>
         </div>
 
-        {/* Feature Card 1: Learn through games */}
+        {/* Feature 1: Learn through games */}
         <div
           style={{
-            background: '#FFFFFF',
-            border: '3px solid #000000',
-            borderRadius: '24px',
-            padding: '28px 20px',
-            boxShadow: '0 6px 0 #000000',
+            width: '100%',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
             textAlign: 'center',
-            boxSizing: 'border-box'
+            boxSizing: 'border-box',
+            padding: '12px 8px'
           }}
         >
           <div
@@ -359,19 +356,16 @@ const WelcomeLandingView = ({ onStart, onOpenLogin, hasExistingProgress = false 
           </div>
         </div>
 
-        {/* Feature Card 2: Earn BankPoint */}
+        {/* Feature 2: Earn BankPoint */}
         <div
           style={{
-            background: '#FFFFFF',
-            border: '3px solid #000000',
-            borderRadius: '24px',
-            padding: '28px 20px',
-            boxShadow: '0 6px 0 #000000',
+            width: '100%',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
             textAlign: 'center',
-            boxSizing: 'border-box'
+            boxSizing: 'border-box',
+            padding: '12px 8px'
           }}
         >
           <div
@@ -442,19 +436,16 @@ const WelcomeLandingView = ({ onStart, onOpenLogin, hasExistingProgress = false 
           </div>
         </div>
 
-        {/* Feature Card 3: Grow stronger */}
+        {/* Feature 3: Grow stronger */}
         <div
           style={{
-            background: '#FFFFFF',
-            border: '3px solid #000000',
-            borderRadius: '24px',
-            padding: '28px 20px',
-            boxShadow: '0 6px 0 #000000',
+            width: '100%',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
             textAlign: 'center',
-            boxSizing: 'border-box'
+            boxSizing: 'border-box',
+            padding: '12px 8px'
           }}
         >
           <div
