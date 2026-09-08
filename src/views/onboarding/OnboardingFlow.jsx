@@ -8,6 +8,7 @@ import Step7SubjectView from './Step7SubjectView';
 import Step8AssessmentView from './Step8AssessmentView';
 import Step9MotivationView from './Step9MotivationView';
 import Step10DailyGoalView from './Step10DailyGoalView';
+import Step11ReadyPromptView from './Step11ReadyPromptView';
 import { mockDb } from '../../lib/mockDb';
 
 /**
@@ -22,7 +23,8 @@ import { mockDb } from '../../lib/mockDb';
  * Step 8: Step8AssessmentView (Subject self-assessment with real-time dynamic PB reaction)
  * Step 9: Step9MotivationView (Mastery motivation: "学好这门科目，你就是这个科目的主宰！")
  * Step 10: Step10DailyGoalView (Daily goal setting: 5/10/15/20 min)
- * Step 11: Seamless handoff to Part A Tutorial Game Screen
+ * Step 11: Step11ReadyPromptView (Pre-game mascot cheering: "准备好！我们一起进入游戏了哟~")
+ * Step 12: Seamless handoff to Part A Tutorial Game Screen
  */
 const OnboardingFlow = ({ onComplete, onOpenLogin }) => {
   // Current step state in onboarding flow
@@ -42,8 +44,22 @@ const OnboardingFlow = ({ onComplete, onOpenLogin }) => {
     (mockDb.getGuestProfile() && mockDb.getGuestProfile().tutorialComplete)
   );
 
+  // Step 11: Pre-Game Cheering & Transition Prompt Screen
+  if (currentStep === 'step11_ready') {
+    return (
+      <Step11ReadyPromptView
+        onStartGame={() => {
+          if (onComplete) {
+            onComplete(userProfileData);
+          }
+        }}
+        onBack={() => setCurrentStep('step10_daily_goal')}
+      />
+    );
+  }
+
   // Step 10: Daily Learning Goal (Duolingo 1:1)
-  // Completing Step 10 triggers Step 11 (Part A Tutorial Game Screen)
+  // Completing Step 10 transitions to Step 11 Ready Prompt
   if (currentStep === 'step10_daily_goal') {
     return (
       <Step10DailyGoalView
@@ -51,9 +67,7 @@ const OnboardingFlow = ({ onComplete, onOpenLogin }) => {
         onNext={(goal) => {
           const finalData = { ...userProfileData, dailyGoal: goal };
           setUserProfileData(finalData);
-          if (onComplete) {
-            onComplete(finalData);
-          }
+          setCurrentStep('step11_ready');
         }}
         onBack={() => setCurrentStep('step9_motivation')}
       />
