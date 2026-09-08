@@ -131,7 +131,7 @@ const WelcomeLandingView = ({ onStart, onOpenLogin, hasExistingProgress = false 
           </div>
         </header>
 
-        {/* Center: PB Tiger Mascot with Running Animation */}
+        {/* Center: PB Tiger Mascot with Static High-Res Image (image-removebg-preview (8)) */}
         <main
           style={{
             position: 'relative',
@@ -145,7 +145,7 @@ const WelcomeLandingView = ({ onStart, onOpenLogin, hasExistingProgress = false 
           }}
         >
           <PlayBankMascot
-            variant="run"
+            variant="welcome"
             size={175}
             speechBubble={speechText}
             interactive={true}

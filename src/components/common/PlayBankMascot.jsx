@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { playPunchyPopSound, playLootSparkleSound } from '../../lib/soundEffects';
 
 /**
@@ -11,7 +11,8 @@ import { playPunchyPopSound, playLootSparkleSound } from '../../lib/soundEffects
  *  - 'stand': Neutral alert posture.
  */
 const PlayBankMascot = ({
-  variant = 'wave', // 'wave' | 'run' | 'cheer' | 'stand'
+  variant = 'wave', // 'wave' | 'run' | 'cheer' | 'stand' | 'welcome'
+  src = null,
   size = 220,
   speechBubble = null,
   interactive = true,
@@ -25,15 +26,16 @@ const PlayBankMascot = ({
   // Preload all mascot assets to prevent frame switching flicker
   useEffect(() => {
     const images = [
+      '/mascot/tiger_welcome.png',
       '/mascot/tiger_wave.png',
       '/mascot/tiger_run_1.png',
       '/mascot/tiger_run_2.png',
       '/mascot/tiger_stand.png',
       '/mascot/tiger_cheer.png'
     ];
-    images.forEach(src => {
+    images.forEach(s => {
       const img = new Image();
-      img.src = src;
+      img.src = s;
     });
   }, []);
 
@@ -64,7 +66,13 @@ const PlayBankMascot = ({
   let currentSrc = '/mascot/tiger_wave.png';
   let animationClass = 'mascot-float';
 
-  if (variant === 'run') {
+  if (src) {
+    currentSrc = src;
+    animationClass = 'mascot-wave';
+  } else if (variant === 'welcome') {
+    currentSrc = '/mascot/tiger_welcome.png';
+    animationClass = 'mascot-wave';
+  } else if (variant === 'run') {
     currentSrc = frameIndex === 0 ? '/mascot/tiger_run_1.png' : '/mascot/tiger_run_2.png';
     animationClass = frameIndex === 0 ? 'mascot-run-a' : 'mascot-run-b';
   } else if (variant === 'cheer') {
