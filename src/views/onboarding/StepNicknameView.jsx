@@ -6,17 +6,19 @@ import { playPunchyPopSound } from '../../lib/soundEffects';
 
 /**
  * StepNicknameView
- * Duolingo-style Nickname Input Screen (placed right after GET STARTED).
+ * Duolingo-style Nickname Input Screen (Step 2, directly following GET STARTED).
  * PB Mascot asks:
  * "欢迎来到 Playbank，你叫什么名字？"
  * Features:
- *  - Fixed header + progress bar (~10%)
+ *  - Top header with circular 3D back button + Duolingo progress bar (~8%)
  *  - PB Mascot with Duolingo speech bubble
- *  - Prominent 3D tactile text input box with character limit
- *  - Sticky bottom "继续" button (disabled if empty)
+ *  - 3D tactile text input box with focus ring and clear button
+ *  - Mobile keyboard safe layout (positioned in upper area)
+ *  - Sticky bottom "继续" button with disabled / active state
  */
 const StepNicknameView = ({ onNext, onBack, initialNickname = '' }) => {
   const [nickname, setNickname] = useState(initialNickname || '');
+  const [isFocused, setIsFocused] = useState(false);
   const inputRef = useRef(null);
 
   useEffect(() => {
@@ -25,9 +27,11 @@ const StepNicknameView = ({ onNext, onBack, initialNickname = '' }) => {
       if (inputRef.current) {
         inputRef.current.focus();
       }
-    }, 200);
+    }, 250);
     return () => clearTimeout(timer);
   }, []);
+
+  const isValid = nickname.trim().length > 0;
 
   const handleContinue = () => {
     const trimmed = nickname.trim();
@@ -37,12 +41,10 @@ const StepNicknameView = ({ onNext, onBack, initialNickname = '' }) => {
   };
 
   const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && nickname.trim()) {
+    if (e.key === 'Enter' && isValid) {
       handleContinue();
     }
   };
-
-  const isValid = nickname.trim().length > 0;
 
   return (
     <div
@@ -145,12 +147,12 @@ const StepNicknameView = ({ onNext, onBack, initialNickname = '' }) => {
           width: '100%',
           maxWidth: '460px',
           margin: '0 auto',
-          padding: '24px 20px calc(100px + env(safe-area-inset-bottom, 0px))',
+          padding: 'max(24px, 4vh) 20px calc(100px + env(safe-area-inset-bottom, 0px))',
           boxSizing: 'border-box',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          justifyContent: 'center',
+          justifyContent: 'flex-start',
           overflowY: 'auto'
         }}
       >
@@ -161,7 +163,8 @@ const StepNicknameView = ({ onNext, onBack, initialNickname = '' }) => {
             alignItems: 'center',
             gap: '14px',
             width: '100%',
-            marginBottom: '32px'
+            marginBottom: '28px',
+            animation: 'bubbleBounce 0.35s cubic-bezier(0.16, 1, 0.3, 1)'
           }}
         >
           {/* PB Mascot (wave pose) */}
@@ -238,13 +241,13 @@ const StepNicknameView = ({ onNext, onBack, initialNickname = '' }) => {
           </div>
         </div>
 
-        {/* Nickname Input Field */}
+        {/* Nickname Input Field Box */}
         <div
           style={{
             width: '100%',
             display: 'flex',
             flexDirection: 'column',
-            gap: '8px'
+            gap: '10px'
           }}
         >
           <div
@@ -258,27 +261,37 @@ const StepNicknameView = ({ onNext, onBack, initialNickname = '' }) => {
               type="text"
               value={nickname}
               onChange={(e) => setNickname(e.target.value.slice(0, 14))}
+              onFocus={() => setIsFocused(true)}
+              onBlur={() => setIsFocused(false)}
               onKeyDown={handleKeyDown}
               placeholder="输入你的名字 / 昵称"
               maxLength={14}
               style={{
                 width: '100%',
                 boxSizing: 'border-box',
-                background: '#F9FAFB',
-                border: isValid ? '2.5px solid #FFBC00' : '2.5px solid #000000',
+                background: isFocused ? '#FFFDF5' : '#F9FAFB',
+                border: isFocused
+                  ? '2.5px solid #FFBC00'
+                  : isValid
+                  ? '2.5px solid #000000'
+                  : '2.5px solid #D1D5DB',
                 borderRadius: '16px',
-                padding: '16px 20px',
+                padding: '16px 48px 16px 20px',
                 fontSize: '18px',
                 fontWeight: 800,
                 color: '#111827',
                 outline: 'none',
-                boxShadow: isValid ? '0 4px 0 #FFBC00' : '0 4px 0 #000000',
+                boxShadow: isFocused
+                  ? '0 4px 0 #E5A800, 0 0 0 4px rgba(255, 188, 0, 0.2)'
+                  : isValid
+                  ? '0 4px 0 #000000'
+                  : '0 2px 0 #E5E7EB',
                 transition: 'all 0.15s ease',
                 letterSpacing: '0.5px'
               }}
             />
 
-            {/* Clear button if text exists */}
+            {/* Clear Button (✕) */}
             {nickname && (
               <button
                 type="button"
@@ -303,27 +316,32 @@ const StepNicknameView = ({ onNext, onBack, initialNickname = '' }) => {
                   fontSize: '12px',
                   fontWeight: 900,
                   color: '#4B5563',
-                  outline: 'none'
+                  outline: 'none',
+                  transition: 'background 0.1s ease'
                 }}
+                onMouseDown={(e) => e.preventDefault()}
               >
                 ✕
               </button>
             )}
           </div>
 
-          {/* Character counter / hint */}
+          {/* Character counter & Hint */}
           <div
             style={{
               display: 'flex',
               justifyContent: 'space-between',
-              padding: '0 4px',
+              alignItems: 'center',
+              padding: '0 6px',
               fontSize: '12px',
-              fontWeight: 600,
+              fontWeight: 700,
               color: '#9CA3AF'
             }}
           >
-            <span>最多 14 个字符</span>
-            <span>{nickname.length} / 14</span>
+            <span>💡 稍后也可以在个人中心随时修改</span>
+            <span style={{ color: nickname.length >= 14 ? '#EF4444' : '#9CA3AF' }}>
+              {nickname.length} / 14
+            </span>
           </div>
         </div>
       </main>
@@ -359,13 +377,28 @@ const StepNicknameView = ({ onNext, onBack, initialNickname = '' }) => {
             style={{
               width: '100%',
               opacity: isValid ? 1 : 0.45,
-              cursor: isValid ? 'pointer' : 'not-allowed'
+              cursor: isValid ? 'pointer' : 'not-allowed',
+              transition: 'all 0.15s ease'
             }}
           >
             继续
           </PrimaryButton>
         </div>
       </footer>
+
+      {/* Bubble Entrance Animation Keyframes */}
+      <style>{`
+        @keyframes bubbleBounce {
+          0% {
+            opacity: 0;
+            transform: scale(0.92) translateY(6px);
+          }
+          100% {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+          }
+        }
+      `}</style>
     </div>
   );
 };
