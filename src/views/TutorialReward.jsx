@@ -93,11 +93,22 @@ const TutorialReward = ({ guest, stats = {}, onEnterLobby, onLoginAndSave }) => 
               fontSize: '32px',
               fontWeight: 900,
               color: '#000000',
-              margin: '0 0 12px 0',
+              margin: '0 0 8px 0',
               letterSpacing: '-0.5px'
             }}>
               TRAINING COMPLETE
             </h1>
+
+            {guest?.guestName && (
+              <p style={{
+                fontSize: '15px',
+                fontWeight: 800,
+                color: '#4B5563',
+                margin: '0 0 16px 0'
+              }}>
+                太棒了，{guest.guestName}！初战大捷！🎉
+              </p>
+            )}
 
             {/* 3 Animated Stars */}
             <div style={{ display: 'flex', justifyContent: 'center', gap: '10px', marginBottom: '20px' }}>

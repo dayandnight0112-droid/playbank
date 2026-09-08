@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Trophy, Medal, Award, Flame, Users, Calendar, Crown } from 'lucide-react';
 import { mockDb } from '../lib/mockDb';
 
-const Leaderboard = ({ currentUser }) => {
+const Leaderboard = ({ currentUser, guestProfile }) => {
   const [activeTab, setActiveTab] = useState('overall'); // overall | weekly | referral
   const [leaders, setLeaders] = useState([]);
 
@@ -115,6 +115,51 @@ const Leaderboard = ({ currentUser }) => {
           })
         )}
       </div>
+
+      {/* Current Guest Standing Card */}
+      {!currentUser && guestProfile && (
+        <div style={{
+          marginTop: '24px',
+          background: 'rgba(255, 188, 0, 0.12)',
+          border: '2px solid var(--brand-primary, #FFBC00)',
+          borderRadius: '20px',
+          padding: '14px 18px',
+          display: 'flex',
+          alignItems: 'center',
+          boxShadow: '0 4px 12px rgba(255, 188, 0, 0.15)'
+        }}>
+          <div style={{
+            width: '42px',
+            height: '42px',
+            borderRadius: '50%',
+            background: 'var(--brand-primary, #FFBC00)',
+            border: '2px solid #000000',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '17px',
+            fontWeight: 900,
+            marginRight: '14px',
+            color: '#000000'
+          }}>
+            {(guestProfile.guestName || '冒险家').charAt(0).toUpperCase()}
+          </div>
+          <div style={{ flex: 1 }}>
+            <p style={{ fontSize: '15px', fontWeight: 900, color: '#000000', margin: 0 }}>
+              {guestProfile.guestName || '冒险家'} (You)
+            </p>
+            <p style={{ fontSize: '11px', fontWeight: 700, color: '#6B7280', margin: '2px 0 0' }}>
+              游客模式 • 答题升级冲榜中
+            </p>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <p style={{ fontSize: '16px', fontWeight: 900, color: '#000000', margin: 0 }}>
+              {formatBP(guestProfile.bankPoint || 0)}
+            </p>
+            <p style={{ fontSize: '11px', color: '#888', fontWeight: 600, margin: 0 }}>BP</p>
+          </div>
+        </div>
+      )}
 
     </div>
   );

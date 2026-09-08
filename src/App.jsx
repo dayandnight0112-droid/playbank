@@ -350,12 +350,13 @@ function App() {
               }
 
               // Create or update guest profile with onboarding choices
+              const guestName = userProfileData?.nickname?.trim() || '冒险家';
               let guest = mockDb.getGuestProfile();
               if (!guest) {
-                guest = mockDb.createGuest(tutorialPath);
+                guest = mockDb.createGuest(tutorialPath, guestName);
               }
               const updatedGuest = mockDb.updateGuestProfile({
-                guestName: userProfileData?.nickname?.trim() || '冒险家',
+                guestName,
                 selectedPath: tutorialPath,
                 ageGroup: userProfileData?.ageGroup,
                 sourceChannel: userProfileData?.sourceChannel,
@@ -498,11 +499,12 @@ function App() {
           />
         );
       case 'leaderboard':
-        return <Leaderboard currentUser={currentUser} />;
+        return <Leaderboard currentUser={currentUser} guestProfile={guestProfile} />;
       case 'profile':
         return (
           <Profile 
             currentUser={currentUser} 
+            guestProfile={guestProfile}
             userBP={userBP} 
             onRequestBooster={() => setShowBoosterOffer({ isFirstTimeOffer: false })}
             onLogout={() => { 

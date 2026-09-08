@@ -1222,12 +1222,12 @@ export const mockDb = {
   // Guest Management
   getGuestProfile: () => getGuestProfileRaw(),
   saveGuestProfile: (profile) => saveGuestProfileRaw(profile),
-  createGuest: (selectedPath = 'chinese') => {
+  createGuest: (selectedPath = 'chinese', guestName = null) => {
     const randomId = Math.floor(1000 + Math.random() * 9000);
     const guest = {
       playerId: `guest_${randomId}`,
       id: `guest_${randomId}`,
-      guestName: `Guest ${randomId}`,
+      guestName: guestName || `Guest ${randomId}`,
       selectedPath, // 'chinese' | 'english' | 'mixed'
       tutorialProgress: 1,
       tutorialStep: 1,

@@ -49,7 +49,7 @@ function ProgressSubjectCard({ icon, title, percent }) {
   );
 }
 
-const Profile = ({ currentUser, userBP, onLogout, onRegister, onRequestBooster }) => {
+const Profile = ({ currentUser, guestProfile, userBP, onLogout, onRegister, onRequestBooster }) => {
   const [showSettings, setShowSettings] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -89,17 +89,62 @@ const Profile = ({ currentUser, userBP, onLogout, onRegister, onRequestBooster }
   const referrals = currentUser ? mockDb.getReferralList(currentUser.id) : [];
 
   if (!currentUser) {
+    const displayName = guestProfile?.guestName || '冒险家';
     return (
-      <div className="view-content flex-center flex-column" style={{ padding: '24px', textAlign: 'center', backgroundColor: '#F5F5F5' }}>
-        <h2 className="text-h2" style={{ marginBottom: '16px' }}>Guest Profile</h2>
-        <p style={{ marginBottom: '24px' }}>You are playing as a guest. Register to unlock your full profile and save your progress permanently.</p>
-        <button className="btn btn-primary" onClick={onRegister} style={{ width: '100%', marginBottom: '12px', padding: '16px' }}>Register Now</button>
+      <div className="view-content flex-center flex-column" style={{ padding: '32px 20px', textAlign: 'center', backgroundColor: '#F9FAFB' }}>
+        {/* Avatar initial badge */}
+        <div style={{
+          width: '76px',
+          height: '76px',
+          borderRadius: '50%',
+          background: 'var(--brand-primary, #FFBC00)',
+          border: '3px solid #000000',
+          boxShadow: '0 4px 0 #000000',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '32px',
+          fontWeight: 900,
+          color: '#000000',
+          marginBottom: '14px'
+        }}>
+          {displayName.charAt(0).toUpperCase()}
+        </div>
+
+        <h2 className="text-h2" style={{ marginBottom: '6px', fontSize: '22px', fontWeight: 900, color: '#111827' }}>
+          {displayName}
+        </h2>
+        <div style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '6px',
+          background: '#FEF3C7',
+          border: '1.5px solid #F59E0B',
+          borderRadius: '9999px',
+          padding: '4px 14px',
+          fontSize: '12px',
+          fontWeight: 800,
+          color: '#B45309',
+          marginBottom: '18px'
+        }}>
+          <span>🎮 游客体验模式</span>
+          <span>•</span>
+          <span>{formatBP(userBP)} BP</span>
+        </div>
+
+        <p style={{ marginBottom: '24px', color: '#6B7280', fontSize: '13.5px', lineHeight: 1.5, maxWidth: '320px' }}>
+          当前以 <strong style={{ color: '#111827' }}>{displayName}</strong> 的身份体验。免费注册即可永久保存你的答题战绩、积分与勋章！
+        </p>
+
+        <button className="btn btn-primary" onClick={onRegister} style={{ width: '100%', maxWidth: '340px', marginBottom: '12px', padding: '16px', fontSize: '15px', fontWeight: 900 }}>
+          立即免费注册并保存进度
+        </button>
         <button 
           onClick={() => setShowLoginModal(true)}
           className="btn"
-          style={{ width: '100%', padding: '16px', background: '#000', color: '#FFF', border: 'none', cursor: 'pointer' }}
+          style={{ width: '100%', maxWidth: '340px', padding: '14px', background: '#000', color: '#FFF', border: 'none', borderRadius: '16px', cursor: 'pointer', fontWeight: 800 }}
         >
-          Log In
+          已有账户？登录
         </button>
 
         {/* Login Modal */}
