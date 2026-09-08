@@ -141,12 +141,12 @@ const WelcomeLandingView = ({ onStart, onOpenLogin, hasExistingProgress = false 
             alignItems: 'center',
             justifyContent: 'center',
             flexShrink: 1,
-            margin: 'auto 0'
+            margin: 'auto 0 4px'
           }}
         >
           <PlayBankMascot
             variant="welcome"
-            size={175}
+            size={205}
             speechBubble={speechText}
             interactive={true}
             onClick={handleMascotTap}
@@ -162,19 +162,19 @@ const WelcomeLandingView = ({ onStart, onOpenLogin, hasExistingProgress = false 
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
-            gap: '3px',
-            margin: '2px 0 8px',
+            gap: '4px',
+            margin: '4px 0 12px',
             flexShrink: 0,
             userSelect: 'none'
           }}
         >
           <h2
             style={{
-              fontSize: 'clamp(19px, 4.8vw, 22px)',
-              fontWeight: 900,
+              fontSize: 'clamp(23px, 6.2vw, 27px)',
+              fontWeight: 700,
               color: '#111827',
               margin: 0,
-              letterSpacing: '-0.2px',
+              letterSpacing: '-0.3px',
               lineHeight: 1.25
             }}
           >
@@ -182,8 +182,8 @@ const WelcomeLandingView = ({ onStart, onOpenLogin, hasExistingProgress = false 
           </h2>
           <p
             style={{
-              fontSize: 'clamp(12px, 3.2vw, 13.5px)',
-              fontWeight: 800,
+              fontSize: 'clamp(13.5px, 3.8vw, 15.5px)',
+              fontWeight: 600,
               color: '#B45309',
               margin: 0,
               letterSpacing: '0.4px',
