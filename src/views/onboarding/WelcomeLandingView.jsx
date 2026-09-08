@@ -53,14 +53,17 @@ const WelcomeLandingView = ({ onStart, onOpenLogin, hasExistingProgress = false 
       {/* ============================================================ */}
       <section
         style={{
+          height: '100dvh',
           minHeight: '100dvh',
+          maxHeight: '100dvh',
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'space-between',
           alignItems: 'center',
-          padding: 'max(24px, env(safe-area-inset-top, 24px)) 20px calc(20px + env(safe-area-inset-bottom, 0px))',
+          padding: 'max(14px, env(safe-area-inset-top, 14px)) 20px calc(10px + env(safe-area-inset-bottom, 0px))',
           boxSizing: 'border-box',
-          position: 'relative'
+          position: 'relative',
+          overflow: 'hidden'
         }}
       >
         {/* Ambient Radial Golden Glow */}
@@ -87,17 +90,18 @@ const WelcomeLandingView = ({ onStart, onOpenLogin, hasExistingProgress = false 
             flexDirection: 'column',
             alignItems: 'center',
             textAlign: 'center',
-            marginTop: '8px'
+            marginTop: '2px',
+            flexShrink: 0
           }}
         >
           <img
             src="/playbanklogo.png"
             alt="PlayBank Logo"
             style={{
-              height: '46px',
+              height: '40px',
               width: 'auto',
               objectFit: 'contain',
-              marginBottom: '10px',
+              marginBottom: '6px',
               filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.12))'
             }}
           />
@@ -110,12 +114,12 @@ const WelcomeLandingView = ({ onStart, onOpenLogin, hasExistingProgress = false 
               background: 'rgba(0, 0, 0, 0.05)',
               border: '1px solid rgba(0, 0, 0, 0.08)',
               borderRadius: '9999px',
-              padding: '5px 16px'
+              padding: '3px 14px'
             }}
           >
             <span
               style={{
-                fontSize: '13px',
+                fontSize: '11px',
                 fontWeight: 900,
                 color: '#1F2937',
                 letterSpacing: '1px',
@@ -136,17 +140,59 @@ const WelcomeLandingView = ({ onStart, onOpenLogin, hasExistingProgress = false 
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
+            flexShrink: 1,
             margin: 'auto 0'
           }}
         >
           <PlayBankMascot
             variant="run"
-            size={225}
+            size={175}
             speechBubble={speechText}
             interactive={true}
             onClick={handleMascotTap}
           />
         </main>
+
+        {/* Bilingual Core Slogan */}
+        <div
+          style={{
+            position: 'relative',
+            zIndex: 10,
+            textAlign: 'center',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '3px',
+            margin: '2px 0 8px',
+            flexShrink: 0,
+            userSelect: 'none'
+          }}
+        >
+          <h2
+            style={{
+              fontSize: 'clamp(19px, 4.8vw, 22px)',
+              fontWeight: 900,
+              color: '#111827',
+              margin: 0,
+              letterSpacing: '-0.2px',
+              lineHeight: 1.25
+            }}
+          >
+            让学习变得有趣！
+          </h2>
+          <p
+            style={{
+              fontSize: 'clamp(12px, 3.2vw, 13.5px)',
+              fontWeight: 800,
+              color: '#B45309',
+              margin: 0,
+              letterSpacing: '0.4px',
+              lineHeight: 1.2
+            }}
+          >
+            Let Learning Get Awesome！
+          </p>
+        </div>
 
         {/* Bottom Hero Action Area */}
         <div
@@ -158,7 +204,8 @@ const WelcomeLandingView = ({ onStart, onOpenLogin, hasExistingProgress = false 
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
-            gap: '12px'
+            gap: '8px',
+            flexShrink: 0
           }}
         >
           {/* Main CTA: GET STARTED */}
@@ -166,7 +213,7 @@ const WelcomeLandingView = ({ onStart, onOpenLogin, hasExistingProgress = false 
             onClick={onStart}
             size="large"
             variant="primary"
-            style={{ width: '100%' }}
+            style={{ width: '100%', padding: '12px 20px' }}
           >
             {hasExistingProgress ? 'CONTINUE' : 'GET STARTED'}
           </PrimaryButton>
@@ -181,12 +228,12 @@ const WelcomeLandingView = ({ onStart, onOpenLogin, hasExistingProgress = false 
               background: '#FFFFFF',
               border: '2.5px solid #000000',
               borderRadius: '16px',
-              padding: '12px 24px',
-              fontSize: '15px',
+              padding: '10px 20px',
+              fontSize: '14.5px',
               fontWeight: 900,
               color: '#000000',
               cursor: 'pointer',
-              boxShadow: '0 4px 0 #000000',
+              boxShadow: '0 3.5px 0 #000000',
               transition: 'transform 0.08s ease, box-shadow 0.08s ease',
               outline: 'none',
               letterSpacing: '1px',
@@ -195,20 +242,20 @@ const WelcomeLandingView = ({ onStart, onOpenLogin, hasExistingProgress = false 
               justifyContent: 'center'
             }}
             onMouseDown={(e) => {
-              e.currentTarget.style.transform = 'translateY(3px)';
+              e.currentTarget.style.transform = 'translateY(2px)';
               e.currentTarget.style.boxShadow = '0 1px 0 #000000';
             }}
             onMouseUp={(e) => {
               e.currentTarget.style.transform = 'none';
-              e.currentTarget.style.boxShadow = '0 4px 0 #000000';
+              e.currentTarget.style.boxShadow = '0 3.5px 0 #000000';
             }}
             onTouchStart={(e) => {
-              e.currentTarget.style.transform = 'translateY(3px)';
+              e.currentTarget.style.transform = 'translateY(2px)';
               e.currentTarget.style.boxShadow = '0 1px 0 #000000';
             }}
             onTouchEnd={(e) => {
               e.currentTarget.style.transform = 'none';
-              e.currentTarget.style.boxShadow = '0 4px 0 #000000';
+              e.currentTarget.style.boxShadow = '0 3.5px 0 #000000';
             }}
           >
             已有账户
@@ -226,15 +273,15 @@ const WelcomeLandingView = ({ onStart, onOpenLogin, hasExistingProgress = false 
               alignItems: 'center',
               gap: '4px',
               color: '#6B7280',
-              fontSize: '12px',
+              fontSize: '11.5px',
               fontWeight: 700,
-              marginTop: '4px',
-              padding: '4px 8px',
+              marginTop: '1px',
+              padding: '2px 8px',
               outline: 'none'
             }}
           >
             <span>向下了解更多</span>
-            <ChevronDown size={14} className="bounce-subtle" />
+            <ChevronDown size={13} className="bounce-subtle" />
           </button>
         </div>
       </section>
