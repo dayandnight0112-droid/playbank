@@ -303,7 +303,7 @@ const WelcomeLandingView = ({ onStart, onOpenLogin, hasExistingProgress = false 
               border: '1.5px solid #10B981',
               borderRadius: '9999px',
               padding: '4px 14px',
-              marginBottom: '14px'
+              marginBottom: '46px'
             }}
           >
             <BookOpen size={12} color="#10B981" />
@@ -383,7 +383,7 @@ const WelcomeLandingView = ({ onStart, onOpenLogin, hasExistingProgress = false 
               border: '1.5px solid #D97706',
               borderRadius: '9999px',
               padding: '4px 14px',
-              marginBottom: '14px'
+              marginBottom: '46px'
             }}
           >
             <Coins size={12} color="#D97706" />
@@ -466,7 +466,7 @@ const WelcomeLandingView = ({ onStart, onOpenLogin, hasExistingProgress = false 
               border: '1.5px solid #DC2626',
               borderRadius: '9999px',
               padding: '4px 14px',
-              marginBottom: '14px'
+              marginBottom: '46px'
             }}
           >
             <Trophy size={12} color="#DC2626" />
