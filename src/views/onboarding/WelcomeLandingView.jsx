@@ -131,7 +131,7 @@ const WelcomeLandingView = ({ onStart, onOpenLogin, hasExistingProgress = false 
           </div>
         </header>
 
-        {/* Center: PB Tiger Mascot with Static High-Res Image (image-removebg-preview (8)) */}
+        {/* Center: PB Tiger Mascot with Static High-Res Image & Bilingual Slogan */}
         <main
           style={{
             position: 'relative',
@@ -141,7 +141,8 @@ const WelcomeLandingView = ({ onStart, onOpenLogin, hasExistingProgress = false 
             alignItems: 'center',
             justifyContent: 'center',
             flexShrink: 1,
-            margin: 'auto 0 4px'
+            margin: 'auto 0',
+            width: '100%'
           }}
         >
           <PlayBankMascot
@@ -151,48 +152,46 @@ const WelcomeLandingView = ({ onStart, onOpenLogin, hasExistingProgress = false 
             interactive={true}
             onClick={handleMascotTap}
           />
-        </main>
 
-        {/* Bilingual Core Slogan */}
-        <div
-          style={{
-            position: 'relative',
-            zIndex: 10,
-            textAlign: 'center',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: '4px',
-            margin: '4px 0 12px',
-            flexShrink: 0,
-            userSelect: 'none'
-          }}
-        >
-          <h2
+          {/* Bilingual Core Slogan */}
+          <div
             style={{
-              fontSize: 'clamp(23px, 6.2vw, 27px)',
-              fontWeight: 700,
-              color: '#111827',
-              margin: 0,
-              letterSpacing: '-0.3px',
-              lineHeight: 1.25
+              textAlign: 'center',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '4px',
+              marginTop: '10px',
+              flexShrink: 0,
+              userSelect: 'none'
             }}
           >
-            让学习变得有趣！
-          </h2>
-          <p
-            style={{
-              fontSize: 'clamp(13.5px, 3.8vw, 15.5px)',
-              fontWeight: 600,
-              color: '#B45309',
-              margin: 0,
-              letterSpacing: '0.4px',
-              lineHeight: 1.2
-            }}
-          >
-            Let Learning Get Awesome！
-          </p>
-        </div>
+            <h2
+              style={{
+                fontSize: 'clamp(23px, 6.2vw, 27px)',
+                fontWeight: 700,
+                color: '#111827',
+                margin: 0,
+                letterSpacing: '-0.3px',
+                lineHeight: 1.25
+              }}
+            >
+              让学习变得有趣！
+            </h2>
+            <p
+              style={{
+                fontSize: 'clamp(13.5px, 3.8vw, 15.5px)',
+                fontWeight: 600,
+                color: '#B45309',
+                margin: 0,
+                letterSpacing: '0.4px',
+                lineHeight: 1.2
+              }}
+            >
+              Let Learning Get Awesome！
+            </p>
+          </div>
+        </main>
 
         {/* Bottom Hero Action Area */}
         <div
@@ -215,7 +214,7 @@ const WelcomeLandingView = ({ onStart, onOpenLogin, hasExistingProgress = false 
             variant="primary"
             style={{ width: '100%', padding: '12px 20px' }}
           >
-            {hasExistingProgress ? 'CONTINUE' : 'GET STARTED'}
+            GET STARTED
           </PrimaryButton>
 
           {/* 4-character Button: '已有账户' */}
