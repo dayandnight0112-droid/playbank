@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { ArrowLeft, Clock, Check, Trophy, Flame, ChevronRight, CheckCircle2, MinusCircle, XCircle } from 'lucide-react';
 import { mockDb } from '../lib/mockDb';
 import { getMatchingQuestions } from '../lib/bossTrigger';
+import { quizService } from '../lib/quizService.js';
 import Confetti from 'react-confetti';
 import { useWindowSize } from 'react-use';
 
@@ -120,6 +121,8 @@ const Quiz = ({
   
   const [timeLeft, setTimeLeft] = useState(10);
   const [selectedOption, setSelectedOption] = useState(null);
+  const [selectedOptionId, setSelectedOptionId] = useState(null);
+  const [questionStartTime, setQuestionStartTime] = useState(Date.now());
   const [feedback, setFeedback] = useState(null); 
   
   const [sessionBP, setSessionBP] = useState(0);
@@ -136,18 +139,45 @@ const Quiz = ({
   const [isAnimating, setIsAnimating] = useState(false);
   const [animVars, setAnimVars] = useState({});
   const hasRecordedMissionsRef = useRef(false);
+  const [cycleInfo, setCycleInfo] = useState(null);
 
-  // Initialize quiz with questions matching selected subject & form
+  // Step 15 & 17: Initialize quiz with candidate pool management & random ordering
   useEffect(() => {
-    const matched = getMatchingQuestions(
-      quizParams?.subjectTitle || quizParams?.subject || 'History',
-      quizParams?.form || 4
-    );
-    const sourceQuestions = matched && matched.length >= 5 ? matched : rawQuestions;
-    const shuffledQ = shuffleArray(sourceQuestions).slice(0, 10);
-    setQuestions(shuffledQ);
-    setupQuestion(shuffledQ[0]);
-    setStartTime(Date.now());
+    let isMounted = true;
+    (async () => {
+      const matched = getMatchingQuestions(
+        quizParams?.subjectTitle || quizParams?.subject || 'History',
+        quizParams?.form || 4
+      );
+      const sourceQuestions = (matched && matched.length >= 4) ? matched : rawQuestions;
+      
+      const chapterId = quizParams?.chapterId || `chap_${quizParams?.subject || 'history'}_f${quizParams?.form || 4}`;
+      const randomEnabled = quizParams?.randomQuestions !== undefined ? quizParams.randomQuestions : true;
+      const playerId = currentUser?.id || 'guest';
+
+      const batch = await quizService.getNextQuestions({
+        chapterId,
+        limit: 8,
+        playerId,
+        randomEnabled,
+        versionNo: quizParams?.versionNo || 1,
+        availableQuestions: sourceQuestions
+      });
+
+      if (!isMounted) return;
+      const activeQuestions = batch.questions.length > 0 ? batch.questions : sourceQuestions.slice(0, 8);
+      setCycleInfo({
+        cycleNumber: batch.cycle_number,
+        remainingInCycle: batch.remaining_in_cycle,
+        servedInCycle: batch.served_in_cycle,
+        totalInCycle: batch.total_in_cycle
+      });
+      setQuestions(activeQuestions);
+      setupQuestion(activeQuestions[0]);
+      setStartTime(Date.now());
+    })();
+
+    return () => { isMounted = false; };
   }, []);
 
   // Step 7: Quiz 挑战完成进入结算时，自动推进 Daily Missions 进度（不直接给水，只推进度）
@@ -162,13 +192,25 @@ const Quiz = ({
     }
   }, [status, questions.length, correctCount]);
 
+  // Step 16: Setup Question with fixed option IDs and post-shuffle A/B/C/D labeling
   const setupQuestion = (question) => {
     if (!question) return;
-    const allOptions = [question.correctAnswer, ...question.incorrectAnswers];
-    setShuffledOptions(shuffleArray(allOptions));
+    let rawOptions = [];
+    if (Array.isArray(question.options) && question.options.length > 0) {
+      rawOptions = question.options;
+    } else {
+      rawOptions = [
+        { id: 'opt_1', text: question.correctAnswer },
+        ...(question.incorrectAnswers || []).map((t, i) => ({ id: `opt_${i + 2}`, text: t }))
+      ];
+    }
+    const labeledOptions = quizService.shuffleAndLabelOptions(rawOptions);
+    setShuffledOptions(labeledOptions);
     setTimeLeft(10);
     setSelectedOption(null);
+    setSelectedOptionId(null);
     setFeedback(null);
+    setQuestionStartTime(Date.now());
   };
 
   // Countdown logic
@@ -204,9 +246,27 @@ const Quiz = ({
     setFeedback('timeout');
     setSkippedCount(prev => prev + 1);
     setCombo(0);
-    if (questions[currentIndex]) {
+    const question = questions[currentIndex];
+    if (question) {
+      // Step 18: Record answer and cumulative wrong history on timeout
+      quizService.recordAnswer({
+        playerId: currentUser?.id || 'guest',
+        chapterId: quizParams?.chapterId || `chap_${quizParams?.subject || 'history'}_f${quizParams?.form || 4}`,
+        questionId: String(question.question_id || question.id || `q_${currentIndex + 1}`),
+        chapterVersion: quizParams?.versionNo || 1,
+        selectedOptionId: null,
+        isCorrect: false,
+        responseTimeMs: 10000,
+        cycleNumber: cycleInfo?.cycleNumber || 1,
+        impressionId: question.impression_id || null,
+        questionText: question.question || question.text || '',
+        options: question.options || [],
+        correctOptionId: question.correct_option_id || question.correctOptionId || null,
+        explanation: question.explanation || ''
+      });
+
       mockDb.recordQuestionAnswer({
-        question: questions[currentIndex],
+        question,
         isCorrect: false,
         selectedOption: null,
         source: 'normal_quiz_timeout'
@@ -215,18 +275,63 @@ const Quiz = ({
     scheduleNextQuestion();
   };
 
-  const handleSelectOption = (option) => {
+  // Step 16: Handle option selection with Option ID authoritative evaluation
+  const handleSelectOption = (optionObj) => {
     if (feedback !== null || status !== 'playing') return;
 
-    setSelectedOption(option);
-    const question = questions[currentIndex];
-    const isCorrect = option === question.correctAnswer;
+    const optId = optionObj.id;
+    const optText = optionObj.text;
+    setSelectedOption(optText);
+    setSelectedOptionId(optId);
 
-    // Record question answer for permanent history and wrong question bank
+    const question = questions[currentIndex];
+
+    // Determine correct Option ID
+    let correctOptId = question.correct_option_id || question.correctOptionId;
+    if (!correctOptId && question._raw?.correct_option_id) {
+      correctOptId = question._raw.correct_option_id;
+    }
+    if (!correctOptId && question._raw?.correctOptionId) {
+      correctOptId = question._raw.correctOptionId;
+    }
+    if (!correctOptId && question.correctAnswer) {
+      // Legacy question fallback
+      correctOptId = 'opt_1';
+    }
+
+    // Step 16 Core Rule: Compare Option ID with correctOptionId (Never use visual A/B/C/D letter)
+    const evalResult = quizService.evaluateAnswer({
+      selectedOptionId: optId,
+      correctOptionId: correctOptId
+    });
+    const isCorrect = evalResult.isCorrect;
+    const responseTimeMs = Math.max(100, Date.now() - questionStartTime);
+
+    // Step 18: Record detailed answer event & cumulative wrong question history
+    quizService.recordAnswer({
+      playerId: currentUser?.id || 'guest',
+      chapterId: quizParams?.chapterId || `chap_${quizParams?.subject || 'history'}_f${quizParams?.form || 4}`,
+      questionId: String(question.question_id || question.id || `q_${currentIndex + 1}`),
+      chapterVersion: quizParams?.versionNo || 1,
+      selectedOptionId: optId,
+      isCorrect: isCorrect,
+      responseTimeMs: responseTimeMs,
+      cycleNumber: cycleInfo?.cycleNumber || 1,
+      impressionId: question.impression_id || null,
+      questionText: question.question || question.text || '',
+      options: question.options || [],
+      correctOptionId: correctOptId,
+      explanation: question.explanation || ''
+    });
+
+    // Also record in mockDb for legacy UI backward compatibility (Garden, stats)
     mockDb.recordQuestionAnswer({
       question,
       isCorrect,
-      selectedOption: option,
+      selectedOption: optText,
+      selectedOptionId: optId,
+      correctOptionId: correctOptId,
+      responseTimeMs,
       source: 'normal_quiz'
     });
 
@@ -513,7 +618,26 @@ const Quiz = ({
         <button onClick={() => onBack(sessionBP)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-primary)' }}>
           <ArrowLeft size={24} />
         </button>
-        <h1 className="text-h4">{currentQ.subject}</h1>
+        <div style={{ textAlign: 'center' }}>
+          <h1 className="text-h4" style={{ margin: 0 }}>
+            {quizParams?.babNumber ? `${quizParams.babNumber}: ${quizParams.chapterTitle || currentQ.subject}` : currentQ.subject}
+          </h1>
+          <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', alignItems: 'center', marginTop: '3px' }}>
+            {quizParams?.versionNo && (
+              <span style={{ fontSize: '10px', color: '#666', fontWeight: 700 }}>
+                Published v{quizParams.versionNo}
+              </span>
+            )}
+            {cycleInfo?.cycleNumber && (
+              <>
+                <span style={{ fontSize: '10px', color: '#888' }}>•</span>
+                <span style={{ fontSize: '10px', background: '#000', color: '#FFBC00', padding: '1px 6px', borderRadius: '4px', fontWeight: 800 }}>
+                  Cycle {cycleInfo.cycleNumber} ({cycleInfo.servedInCycle || questions.length}/{cycleInfo.totalInCycle || questions.length})
+                </span>
+              </>
+            )}
+          </div>
+        </div>
         <div style={{ width: '24px' }}></div> {/* Spacer for alignment */}
       </header>
 
@@ -553,8 +677,13 @@ const Quiz = ({
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {shuffledOptions.map((opt, idx) => {
-              const isSelected = selectedOption === opt;
-              const isCorrectAnswer = opt === currentQ.correctAnswer;
+              const optId = opt.id || `opt_${idx + 1}`;
+              const optText = opt.text || (typeof opt === 'string' ? opt : '');
+              const optLetter = opt.letter || String.fromCharCode(65 + idx);
+
+              const isSelected = selectedOptionId === optId || selectedOption === optText;
+              const correctOptId = currentQ.correct_option_id || currentQ.correctOptionId || currentQ._raw?.correctOptionId;
+              const isCorrectAnswer = (correctOptId && optId === correctOptId) || optText === currentQ.correctAnswer;
               
               let bg = 'var(--bg-primary)';
               let border = 'var(--border-color)';
@@ -573,7 +702,7 @@ const Quiz = ({
 
               return (
                 <button 
-                  key={idx}
+                  key={optId}
                   onClick={() => handleSelectOption(opt)}
                   disabled={feedback !== null}
                   style={{
@@ -591,16 +720,28 @@ const Quiz = ({
                     position: 'relative'
                   }}
                 >
-                  <div style={{ fontWeight: 800, fontSize: '16px' }}>
-                    {String.fromCharCode(65 + idx)}
+                  <div style={{ 
+                    fontWeight: 900, 
+                    fontSize: '15px',
+                    width: '26px',
+                    height: '26px',
+                    borderRadius: '6px',
+                    background: isSelected ? '#000' : '#E0E0E0',
+                    color: isSelected ? '#FFBC00' : '#000',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: '1px solid #000'
+                  }}>
+                    {optLetter}
                   </div>
-                  <span className="text-body-bold" style={{ flex: 1 }}>{opt}</span>
+                  <span className="text-body-bold" style={{ flex: 1 }}>{optText}</span>
                   
                   {feedback !== null && isCorrectAnswer && isSelected && (
                     <Check size={20} color="#000" strokeWidth={3} />
                   )}
                 </button>
-              )
+              );
             })}
           </div>
         </div>

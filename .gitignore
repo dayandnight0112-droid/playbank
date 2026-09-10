@@ -26,4 +26,7 @@ dist-ssr
 .vercel
 scratch/
 
-.vercel
+# Environment files
+.env
+.env.*
+!.env.example
