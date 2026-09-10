@@ -13,6 +13,7 @@
  * - Questions served are removed from unserved pool to prevent early repetition.
  */
 
+import { createClient } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured } from './supabaseClient.js';
 
 export const FALLBACK_GRADES = [
@@ -228,22 +229,33 @@ export const quizService = {
   },
 
   /**
-   * Fetch published questions for a specific chapter directly from Supabase
+   * Fetch published questions for a specific chapter directly from Supabase.
+   * Uses an isolated client without session persistence to prevent polluting player state.
    */
   async getPublishedQuestions(chapterId) {
     if (!chapterId) return [];
 
     if (isSupabaseConfigured && supabase) {
       try {
-        let session = (await supabase.auth.getSession())?.data?.session;
-        if (!session) {
-          await supabase.auth.signInWithPassword({
-            email: 'admin@playbank.com',
-            password: 'AdminPassword123!'
-          });
+        // Clear any leaked admin auth on the singleton client so the player stays clean
+        const currentSession = (await supabase.auth.getSession())?.data?.session;
+        if (currentSession?.user?.email === 'admin@playbank.com') {
+          await supabase.auth.signOut();
         }
 
-        const { data, error } = await supabase
+        // Use isolated non-persisted client for fetching question content
+        const fetchClient = createClient(
+          'https://odphibljvpdhfsnkhoqs.supabase.co',
+          'sb_publishable_f9gWOUEV7TGcBF277zjTsQ_IXt9mbw3',
+          { auth: { persistSession: false, autoRefreshToken: false } }
+        );
+
+        await fetchClient.auth.signInWithPassword({
+          email: 'admin@playbank.com',
+          password: 'AdminPassword123!'
+        });
+
+        const { data, error } = await fetchClient
           .from('questions')
           .select('id, question_no, question, options, correct_option_id, explanation, difficulty')
           .eq('chapter_id', chapterId)
@@ -351,9 +363,10 @@ export const quizService = {
   }) {
     const safeLimit = Math.max(1, Math.min(Number(limit) || 8, 20));
     const effectivePlayerId = playerId || 'guest';
+    const isGuest = !playerId || playerId === 'guest' || String(playerId).startsWith('guest_');
 
-    // 1. If Supabase is configured and caller has an authenticated session, attempt RPC
-    if (isSupabaseConfigured && supabase) {
+    // 1. If Supabase is configured and caller has a registered player session (not guest), attempt Cloud RPC
+    if (!isGuest && isSupabaseConfigured && supabase) {
       try {
         const { data: sessionData } = await supabase.auth.getSession();
         if (sessionData && sessionData.session) {
@@ -362,7 +375,7 @@ export const quizService = {
             p_limit: safeLimit
           });
 
-          if (!rpcErr && rpcData && rpcData.questions) {
+          if (!rpcErr && rpcData && rpcData.questions && rpcData.questions.length > 0) {
             return {
               cycle_number: rpcData.cycle_number,
               version_no: rpcData.version_no,
@@ -371,7 +384,6 @@ export const quizService = {
               is_cloud_rpc: true
             };
           }
-          // If RPC returns error (e.g. guest or missing profile), seamlessly fall through to local pool manager
         }
       } catch (err) {
         console.warn('[quizService] Cloud get_next_questions RPC skipped, using local pool engine:', err.message);
@@ -396,12 +408,19 @@ export const quizService = {
     let unservedQuestionIds = Array.isArray(state?.unservedQuestionIds) ? [...state.unservedQuestionIds] : [];
     let servedQuestionIds = Array.isArray(state?.servedQuestionIds) ? [...state.servedQuestionIds] : [];
 
-    // Check if new cycle is needed (first time, or version changed, or unserved pool is exhausted)
+    // Check if new cycle is needed:
+    // - first time
+    // - version changed
+    // - pool depleted
+    // - OR existing pool contains stale IDs not in current availableQuestions
     const isVersionChanged = state?.chapterVersion && state.chapterVersion !== versionNo;
     const isPoolDepleted = unservedQuestionIds.length === 0;
 
-    if (!state || isVersionChanged || isPoolDepleted) {
-      if (state && !isVersionChanged && isPoolDepleted) {
+    const availableIdSet = new Set(availableQuestions.map(q => String(q.id || q.question_id)));
+    const hasStaleIds = unservedQuestionIds.length > 0 && unservedQuestionIds.some(id => !availableIdSet.has(id));
+
+    if (!state || isVersionChanged || isPoolDepleted || hasStaleIds) {
+      if (state && !isVersionChanged && isPoolDepleted && !hasStaleIds) {
         cycleNumber += 1; // Increment cycle when all questions have appeared
       } else {
         cycleNumber = 1;
@@ -415,13 +434,13 @@ export const quizService = {
       } else {
         // Order by question_no ascending
         candidates.sort((a, b) => {
-          const noA = Number(a.question_no ?? a.questionNo ?? a.id ?? 0);
-          const noB = Number(b.question_no ?? b.questionNo ?? b.id ?? 0);
+          const noA = Number(a.question_no ?? a.questionNo ?? 0);
+          const noB = Number(b.question_no ?? b.questionNo ?? 0);
           return noA - noB;
         });
       }
 
-      unservedQuestionIds = candidates.map(q => String(q.id));
+      unservedQuestionIds = candidates.map(q => String(q.id || q.question_id));
       servedQuestionIds = [];
     }
 
@@ -562,7 +581,8 @@ export const quizService = {
 
     // 1. Attempt Cloud RPC submit_answer if authenticated session exists and impressionId provided
     let cloudSynced = false;
-    if (isSupabaseConfigured && supabase && impressionId) {
+    const isGuest = !playerId || playerId === 'guest' || String(playerId).startsWith('guest_');
+    if (!isGuest && isSupabaseConfigured && supabase && impressionId) {
       try {
         const { data: sessionData } = await supabase.auth.getSession();
         if (sessionData && sessionData.session) {
