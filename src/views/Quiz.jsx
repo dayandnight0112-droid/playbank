@@ -145,11 +145,18 @@ const Quiz = ({
   useEffect(() => {
     let isMounted = true;
     (async () => {
-      const matched = getMatchingQuestions(
-        quizParams?.subjectTitle || quizParams?.subject || 'History',
-        quizParams?.form || 4
-      );
-      const sourceQuestions = (matched && matched.length >= 4) ? matched : rawQuestions;
+      let sourceQuestions = [];
+      if (quizParams?.chapterId) {
+        sourceQuestions = await quizService.getPublishedQuestions(quizParams.chapterId);
+      }
+
+      if (!sourceQuestions || sourceQuestions.length === 0) {
+        const matched = getMatchingQuestions(
+          quizParams?.subjectTitle || quizParams?.subject || 'History',
+          quizParams?.form || 4
+        );
+        sourceQuestions = (matched && matched.length >= 4) ? matched : rawQuestions;
+      }
       
       const chapterId = quizParams?.chapterId || `chap_${quizParams?.subject || 'history'}_f${quizParams?.form || 4}`;
       const randomEnabled = quizParams?.randomQuestions !== undefined ? quizParams.randomQuestions : true;
@@ -672,7 +679,7 @@ const Quiz = ({
           marginBottom: '24px'
         }}>
           <h2 className="text-h2" style={{ marginBottom: '24px', fontSize: '22px' }}>
-            {currentQ.text}
+            {currentQ.question || currentQ.text}
           </h2>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>

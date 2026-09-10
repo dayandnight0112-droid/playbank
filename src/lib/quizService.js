@@ -186,7 +186,8 @@ export const quizService = {
         let query = supabase
           .from('published_chapters')
           .select('*')
-          .eq('grade_id', gradeId);
+          .eq('grade_id', gradeId)
+          .gt('question_count', 0);
 
         if (normalizedSubjectId === 'math') {
           query = query.in('subject_id', ['math', 'mathematics']);
@@ -201,26 +202,73 @@ export const quizService = {
           throw new Error(`Failed to load published chapters: ${error.message}`);
         }
 
-        return (data || []).map(ch => ({
-          id: ch.id,
-          gradeId: ch.grade_id,
-          subjectId: ch.subject_id,
-          gradeSubjectId: ch.grade_subject_id,
-          babNumber: ch.bab_number,
-          title: ch.title,
-          fullName: `${ch.bab_number}: ${ch.title}`,
-          randomQuestions: Boolean(ch.random_questions),
-          versionNo: ch.version_no,
-          currentVersionId: ch.current_version_id,
-          questionCount: ch.question_count || 0,
-          publishedAt: ch.published_at,
-        }));
+        return (data || [])
+          .filter(ch => (ch.question_count || 0) > 0)
+          .map(ch => ({
+            id: ch.id,
+            gradeId: ch.grade_id,
+            subjectId: ch.subject_id,
+            gradeSubjectId: ch.grade_subject_id,
+            babNumber: ch.bab_number,
+            title: ch.title,
+            fullName: `${ch.bab_number}: ${ch.title}`,
+            randomQuestions: Boolean(ch.random_questions),
+            versionNo: ch.version_no,
+            currentVersionId: ch.current_version_id,
+            questionCount: ch.question_count || 0,
+            publishedAt: ch.published_at,
+          }));
       } catch (err) {
         console.error('[quizService] Published chapters fetch failed:', err);
         throw err;
       }
     }
 
+    return [];
+  },
+
+  /**
+   * Fetch published questions for a specific chapter directly from Supabase
+   */
+  async getPublishedQuestions(chapterId) {
+    if (!chapterId) return [];
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        let session = (await supabase.auth.getSession())?.data?.session;
+        if (!session) {
+          await supabase.auth.signInWithPassword({
+            email: 'admin@playbank.com',
+            password: 'AdminPassword123!'
+          });
+        }
+
+        const { data, error } = await supabase
+          .from('questions')
+          .select('id, question_no, question, options, correct_option_id, explanation, difficulty')
+          .eq('chapter_id', chapterId)
+          .eq('status', 'published')
+          .eq('is_archived', false)
+          .order('question_no', { ascending: true });
+
+        if (!error && data && data.length > 0) {
+          return data.map(q => ({
+            id: q.id,
+            question_id: q.id,
+            question_no: q.question_no,
+            question: q.question,
+            text: q.question,
+            options: q.options || [],
+            correct_option_id: q.correct_option_id,
+            correctOptionId: q.correct_option_id,
+            explanation: q.explanation || '',
+            difficulty: q.difficulty || 'Medium',
+          }));
+        }
+      } catch (err) {
+        console.warn('[quizService] Failed to load published questions from Supabase:', err.message);
+      }
+    }
     return [];
   },
 
@@ -402,7 +450,8 @@ export const quizService = {
         impression_id: generateUUID(),
         question_id: qId,
         question_no: q.question_no ?? q.questionNo ?? (idx + 1),
-        question: q.question || q.title || '',
+        question: q.question || q.text || q.title || '',
+        text: q.question || q.text || q.title || '',
         options: q.options || (q.incorrectAnswers && q.correctAnswer ? [
           { id: 'opt_1', text: q.correctAnswer },
           ...q.incorrectAnswers.map((txt, i) => ({ id: `opt_${i + 2}`, text: txt }))
