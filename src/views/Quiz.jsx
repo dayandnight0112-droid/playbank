@@ -141,26 +141,20 @@ const Quiz = ({
   const hasRecordedMissionsRef = useRef(false);
   const [cycleInfo, setCycleInfo] = useState(null);
 
-  // Step 15 & 17: Initialize quiz with candidate pool management & random ordering
+  // Step 15 & 17: Initialize quiz with secure candidate pool management & random ordering
   useEffect(() => {
     let isMounted = true;
     (async () => {
-      let sourceQuestions = [];
-      if (quizParams?.chapterId) {
-        sourceQuestions = await quizService.getPublishedQuestions(quizParams.chapterId);
-      }
-
-      if (!sourceQuestions || sourceQuestions.length === 0) {
-        const matched = getMatchingQuestions(
-          quizParams?.subjectTitle || quizParams?.subject || 'History',
-          quizParams?.form || 4
-        );
-        sourceQuestions = (matched && matched.length >= 4) ? matched : rawQuestions;
-      }
-      
       const chapterId = quizParams?.chapterId || `chap_${quizParams?.subject || 'history'}_f${quizParams?.form || 4}`;
       const randomEnabled = quizParams?.randomQuestions !== undefined ? quizParams.randomQuestions : true;
       const playerId = currentUser?.id || 'guest';
+
+      // Safe local fallback questions in case offline or Guest
+      const matched = getMatchingQuestions(
+        quizParams?.subjectTitle || quizParams?.subject || 'History',
+        quizParams?.form || 4
+      );
+      const fallbackQuestions = (matched && matched.length >= 4) ? matched : rawQuestions;
 
       const batch = await quizService.getNextQuestions({
         chapterId,
@@ -168,11 +162,11 @@ const Quiz = ({
         playerId,
         randomEnabled,
         versionNo: quizParams?.versionNo || 1,
-        availableQuestions: sourceQuestions
+        fallbackQuestions
       });
 
       if (!isMounted) return;
-      const activeQuestions = batch.questions.length > 0 ? batch.questions : sourceQuestions.slice(0, 8);
+      const activeQuestions = batch.questions && batch.questions.length > 0 ? batch.questions : fallbackQuestions.slice(0, 8);
       setCycleInfo({
         cycleNumber: batch.cycle_number,
         remainingInCycle: batch.remaining_in_cycle,
@@ -249,12 +243,36 @@ const Quiz = ({
     return () => clearInterval(timer);
   }, [feedback, questions, currentIndex, status]);
 
-  const handleTimeout = () => {
+  const handleTimeout = async () => {
+    if (feedback !== null || status !== 'playing') return;
     setFeedback('timeout');
     setSkippedCount(prev => prev + 1);
     setCombo(0);
     const question = questions[currentIndex];
     if (question) {
+      let correctOptId = null;
+      let explanation = '';
+
+      if (question.impression_id) {
+        try {
+          const res = await quizService.submitAnswerRPC({
+            impressionId: question.impression_id,
+            selectedOptionId: '',
+            responseTimeMs: 10000
+          });
+          correctOptId = res.correct_option_id;
+          explanation = res.explanation || '';
+        } catch (e) {
+          console.warn('[Quiz] Timeout submit_answer failed:', e);
+        }
+      } else {
+        correctOptId = question.correct_option_id || question.correctOptionId || 'opt_1';
+        explanation = question.explanation || '';
+      }
+
+      question.revealedCorrectOptionId = correctOptId;
+      question.revealedExplanation = explanation;
+
       // Step 18: Record answer and cumulative wrong history on timeout
       quizService.recordAnswer({
         playerId: currentUser?.id || 'guest',
@@ -268,8 +286,9 @@ const Quiz = ({
         impressionId: question.impression_id || null,
         questionText: question.question || question.text || '',
         options: question.options || [],
-        correctOptionId: question.correct_option_id || question.correctOptionId || null,
-        explanation: question.explanation || ''
+        correctOptionId: correctOptId,
+        explanation: explanation,
+        cloudSynced: Boolean(question.impression_id)
       });
 
       mockDb.recordQuestionAnswer({
@@ -282,8 +301,8 @@ const Quiz = ({
     scheduleNextQuestion();
   };
 
-  // Step 16: Handle option selection with Option ID authoritative evaluation
-  const handleSelectOption = (optionObj) => {
+  // Step 2 & 16: Handle option selection with Secure RPC Grading & Shuffled Option IDs
+  const handleSelectOption = async (optionObj) => {
     if (feedback !== null || status !== 'playing') return;
 
     const optId = optionObj.id;
@@ -292,27 +311,47 @@ const Quiz = ({
     setSelectedOptionId(optId);
 
     const question = questions[currentIndex];
-
-    // Determine correct Option ID
-    let correctOptId = question.correct_option_id || question.correctOptionId;
-    if (!correctOptId && question._raw?.correct_option_id) {
-      correctOptId = question._raw.correct_option_id;
-    }
-    if (!correctOptId && question._raw?.correctOptionId) {
-      correctOptId = question._raw.correctOptionId;
-    }
-    if (!correctOptId && question.correctAnswer) {
-      // Legacy question fallback
-      correctOptId = 'opt_1';
-    }
-
-    // Step 16 Core Rule: Compare Option ID with correctOptionId (Never use visual A/B/C/D letter)
-    const evalResult = quizService.evaluateAnswer({
-      selectedOptionId: optId,
-      correctOptionId: correctOptId
-    });
-    const isCorrect = evalResult.isCorrect;
     const responseTimeMs = Math.max(100, Date.now() - questionStartTime);
+
+    let isCorrect = false;
+    let correctOptId = null;
+    let explanation = '';
+
+    if (question.impression_id) {
+      // Step 2: Authoritative Cloud Server-Side Grading via submit_answer RPC
+      try {
+        const res = await quizService.submitAnswerRPC({
+          impressionId: question.impression_id,
+          selectedOptionId: optId,
+          responseTimeMs
+        });
+        isCorrect = Boolean(res.is_correct);
+        correctOptId = res.correct_option_id;
+        explanation = res.explanation || '';
+      } catch (err) {
+        console.error('[Quiz] submit_answer RPC failed:', err);
+      }
+    } else {
+      // Fallback local evaluation for offline/demo bank
+      let fallbackCorrectOptId = question.correct_option_id || question.correctOptionId;
+      if (!fallbackCorrectOptId && question._raw?.correct_option_id) {
+        fallbackCorrectOptId = question._raw.correct_option_id;
+      }
+      if (!fallbackCorrectOptId && question.correctAnswer) {
+        fallbackCorrectOptId = 'opt_1';
+      }
+      const evalResult = quizService.evaluateAnswer({
+        selectedOptionId: optId,
+        correctOptionId: fallbackCorrectOptId
+      });
+      isCorrect = evalResult.isCorrect;
+      correctOptId = fallbackCorrectOptId;
+      explanation = question.explanation || '';
+    }
+
+    // Attach revealed server grading result for UI rendering
+    question.revealedCorrectOptionId = correctOptId;
+    question.revealedExplanation = explanation;
 
     // Step 18: Record detailed answer event & cumulative wrong question history
     quizService.recordAnswer({
@@ -328,7 +367,8 @@ const Quiz = ({
       questionText: question.question || question.text || '',
       options: question.options || [],
       correctOptionId: correctOptId,
-      explanation: question.explanation || ''
+      explanation: explanation,
+      cloudSynced: Boolean(question.impression_id)
     });
 
     // Also record in mockDb for legacy UI backward compatibility (Garden, stats)

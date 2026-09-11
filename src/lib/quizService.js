@@ -229,58 +229,11 @@ export const quizService = {
   },
 
   /**
-   * Fetch published questions for a specific chapter directly from Supabase.
-   * Uses an isolated client without session persistence to prevent polluting player state.
+   * Step 2 Security Contract:
+   * Direct reading of public.questions table is strictly eliminated.
+   * All official questions are served exclusively via secure get_next_questions RPC.
    */
-  async getPublishedQuestions(chapterId) {
-    if (!chapterId) return [];
-
-    if (isSupabaseConfigured && supabase) {
-      try {
-        // Clear any leaked admin auth on the singleton client so the player stays clean
-        const currentSession = (await supabase.auth.getSession())?.data?.session;
-        if (currentSession?.user?.email === 'admin@playbank.com') {
-          await supabase.auth.signOut();
-        }
-
-        // Use isolated non-persisted client for fetching question content
-        const fetchClient = createClient(
-          'https://odphibljvpdhfsnkhoqs.supabase.co',
-          'sb_publishable_f9gWOUEV7TGcBF277zjTsQ_IXt9mbw3',
-          { auth: { persistSession: false, autoRefreshToken: false } }
-        );
-
-        await fetchClient.auth.signInWithPassword({
-          email: 'admin@playbank.com',
-          password: 'AdminPassword123!'
-        });
-
-        const { data, error } = await fetchClient
-          .from('questions')
-          .select('id, question_no, question, options, correct_option_id, explanation, difficulty')
-          .eq('chapter_id', chapterId)
-          .eq('status', 'published')
-          .eq('is_archived', false)
-          .order('question_no', { ascending: true });
-
-        if (!error && data && data.length > 0) {
-          return data.map(q => ({
-            id: q.id,
-            question_id: q.id,
-            question_no: q.question_no,
-            question: q.question,
-            text: q.question,
-            options: q.options || [],
-            correct_option_id: q.correct_option_id,
-            correctOptionId: q.correct_option_id,
-            explanation: q.explanation || '',
-            difficulty: q.difficulty || 'Medium',
-          }));
-        }
-      } catch (err) {
-        console.warn('[quizService] Failed to load published questions from Supabase:', err.message);
-      }
-    }
+  async getPublishedQuestions() {
     return [];
   },
 
@@ -359,7 +312,8 @@ export const quizService = {
     playerId = 'guest',
     randomEnabled = true,
     versionNo = 1,
-    availableQuestions = []
+    availableQuestions = [],
+    fallbackQuestions = []
   }) {
     const safeLimit = Math.max(1, Math.min(Number(limit) || 8, 20));
     const effectivePlayerId = playerId || 'guest';
@@ -376,13 +330,29 @@ export const quizService = {
           });
 
           if (!rpcErr && rpcData && rpcData.questions && rpcData.questions.length > 0) {
+            // Step 2 Security Guarantee: Strip any accidental answers/explanations
+            const safeQuestions = rpcData.questions.map(q => ({
+              id: String(q.question_id || q.id),
+              question_id: String(q.question_id || q.id),
+              impression_id: q.impression_id,
+              question_no: q.question_no,
+              question: q.question,
+              text: q.question,
+              options: q.options || [],
+              difficulty: q.difficulty || 'Medium'
+            }));
+
             return {
               cycle_number: rpcData.cycle_number,
               version_no: rpcData.version_no,
-              questions: rpcData.questions,
+              questions: safeQuestions,
               remaining_in_cycle: rpcData.remaining_in_cycle,
+              total_in_cycle: rpcData.total_in_cycle || safeQuestions.length,
+              served_in_cycle: rpcData.served_in_cycle || 0,
               is_cloud_rpc: true
             };
+          } else if (rpcErr) {
+            console.warn('[quizService] Cloud get_next_questions RPC skipped, using local fallback:', rpcErr.message);
           }
         }
       } catch (err) {
@@ -390,9 +360,9 @@ export const quizService = {
       }
     }
 
-    // 2. High-Performance Local Unserved Pool Engine (Step 15)
-    // Managed key: player_id + chapter_id + cycle_number
-    const totalQuestionsCount = availableQuestions.length;
+    // 2. High-Performance Local Unserved Pool Engine (Step 15) Fallback
+    const candidateList = (availableQuestions && availableQuestions.length > 0) ? availableQuestions : fallbackQuestions;
+    const totalQuestionsCount = candidateList.length;
     if (totalQuestionsCount === 0) {
       return {
         cycle_number: 1,
@@ -412,11 +382,11 @@ export const quizService = {
     // - first time
     // - version changed
     // - pool depleted
-    // - OR existing pool contains stale IDs not in current availableQuestions
+    // - OR existing pool contains stale IDs not in current candidateList
     const isVersionChanged = state?.chapterVersion && state.chapterVersion !== versionNo;
     const isPoolDepleted = unservedQuestionIds.length === 0;
 
-    const availableIdSet = new Set(availableQuestions.map(q => String(q.id || q.question_id)));
+    const availableIdSet = new Set(candidateList.map(q => String(q.id || q.question_id)));
     const hasStaleIds = unservedQuestionIds.length > 0 && unservedQuestionIds.some(id => !availableIdSet.has(id));
 
     if (!state || isVersionChanged || isPoolDepleted || hasStaleIds) {
@@ -427,7 +397,7 @@ export const quizService = {
       }
 
       // Prepare fresh candidate pool
-      let candidates = [...availableQuestions];
+      let candidates = [...candidateList];
       if (randomEnabled) {
         // Shuffle candidates for this player's cycle
         candidates = shuffleArray(candidates);
@@ -448,6 +418,8 @@ export const quizService = {
     const drawnIds = unservedQuestionIds.slice(0, safeLimit);
     const nextUnservedIds = unservedQuestionIds.slice(safeLimit);
     const nextServedIds = [...servedQuestionIds, ...drawnIds];
+
+    const drawnQuestions = drawnIds.map(id => candidateList.find(q => String(q.id || q.question_id) === String(id))).filter(Boolean);
 
     // Persist updated pool state
     this.saveCycleState(effectivePlayerId, chapterId, {
@@ -556,49 +528,62 @@ export const quizService = {
    * 2. Cumulative aggregation per (player_id, question_id):
    *    - total_attempts (出现/作答次数)
    *    - correct_count (正确次数)
-   *    - wrong_count (答错次数)
-   *    - last_wrong_at (最近答错时间)
-   *    - last_attempt_at (最近尝试时间)
-   * 3. Syncs with Supabase RPC submit_answer if authenticated session exists.
+   * Step 2: Authoritative Server-Side Answer Evaluation via RPC submit_answer
+   * @param {Object} params
+   * @param {string} params.impressionId
+   * @param {string} params.selectedOptionId
+   * @param {number} params.responseTimeMs
+   * @returns {Promise<{ is_correct: boolean, correct_option_id: string, explanation: string, is_idempotent: boolean }>}
    */
-  async recordAnswer({
-    playerId = 'guest',
+  async submitAnswerRPC({ impressionId, selectedOptionId, responseTimeMs = 1000 }) {
+    if (!impressionId) {
+      throw new Error('Missing impression_id for submit_answer RPC');
+    }
+
+    if (isSupabaseConfigured && supabase) {
+      const { data, error } = await supabase.rpc('submit_answer', {
+        p_impression_id: impressionId,
+        p_selected_option_id: selectedOptionId || '',
+        p_response_time_ms: Math.max(0, Math.round(responseTimeMs))
+      });
+
+      if (error) {
+        console.error('[quizService] submit_answer RPC error:', error.message);
+        throw new Error(error.message);
+      }
+
+      return {
+        is_correct: Boolean(data?.is_correct),
+        correct_option_id: data?.correct_option_id || null,
+        explanation: data?.explanation || '',
+        is_idempotent: Boolean(data?.is_idempotent)
+      };
+    }
+
+    throw new Error('Supabase is not configured for cloud answer submission');
+  },
+
+  /**
+   * Step 18: Record detailed answer event & cumulative wrong question history
+   */
+  recordAnswer({
+    playerId,
     chapterId,
     questionId,
     chapterVersion = 1,
-    selectedOptionId = null,
-    isCorrect = false,
-    responseTimeMs = 0,
+    selectedOptionId,
+    isCorrect,
+    responseTimeMs,
     cycleNumber = 1,
     impressionId = null,
     questionText = '',
     options = [],
     correctOptionId = null,
-    explanation = ''
+    explanation = '',
+    cloudSynced = false
   }) {
     const answeredAt = new Date().toISOString();
     const effectivePlayerId = playerId || 'guest';
-
-    // 1. Attempt Cloud RPC submit_answer if authenticated session exists and impressionId provided
-    let cloudSynced = false;
-    const isGuest = !playerId || playerId === 'guest' || String(playerId).startsWith('guest_');
-    if (!isGuest && isSupabaseConfigured && supabase && impressionId) {
-      try {
-        const { data: sessionData } = await supabase.auth.getSession();
-        if (sessionData && sessionData.session) {
-          const { data: submitData, error: subErr } = await supabase.rpc('submit_answer', {
-            p_impression_id: impressionId,
-            p_selected_option_id: selectedOptionId || '',
-            p_response_time_ms: Math.max(0, Math.round(responseTimeMs))
-          });
-          if (!subErr && submitData) {
-            cloudSynced = true;
-          }
-        }
-      } catch (err) {
-        console.warn('[quizService] Cloud submit_answer RPC skipped, recording locally:', err.message);
-      }
-    }
 
     // 2. Append to Immutable Answer Log (Step 18 Field Requirements)
     const answerLogKey = `playbank_answers_${effectivePlayerId}`;
