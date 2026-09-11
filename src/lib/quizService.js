@@ -561,17 +561,33 @@ export const quizService = {
    * @param {number} params.responseTimeMs
    * @returns {Promise<{ is_correct: boolean, correct_option_id: string, explanation: string, is_idempotent: boolean }>}
    */
-  async submitAnswerRPC({ impressionId, selectedOptionId, responseTimeMs = 1000 }) {
+  async submitAnswerRPC({ impressionId, selectedOptionId, responseTimeMs = 1000, sessionId = null }) {
     if (!impressionId) {
       throw new Error('Missing impression_id for submit_answer RPC');
     }
 
     if (isSupabaseConfigured && supabase) {
-      const { data, error } = await supabase.rpc('submit_answer', {
+      let rpcParams = {
         p_impression_id: impressionId,
         p_selected_option_id: selectedOptionId || '',
         p_response_time_ms: Math.max(0, Math.round(responseTimeMs))
-      });
+      };
+      if (sessionId) {
+        rpcParams.p_session_id = sessionId;
+      }
+
+      let { data, error } = await supabase.rpc('submit_answer', rpcParams);
+
+      // If the 4-arg overload hasn't been migrated yet in Supabase (PGRST202), retry with 3 args
+      if (error && error.code === 'PGRST202' && sessionId) {
+        const retry = await supabase.rpc('submit_answer', {
+          p_impression_id: impressionId,
+          p_selected_option_id: selectedOptionId || '',
+          p_response_time_ms: Math.max(0, Math.round(responseTimeMs))
+        });
+        data = retry.data;
+        error = retry.error;
+      }
 
       if (error) {
         console.error('[quizService] submit_answer RPC error:', error.message);
@@ -776,8 +792,8 @@ export const quizService = {
   },
 
   /**
-   * Step 4.2 & Requirement 1-2: Create Game Session in Supabase BEFORE quiz starts
-   * Strictly validates UUID and creates game_sessions with started_at
+   * Step 4.2 & Requirements 1-3: Create Game Session in Supabase BEFORE quiz starts
+   * Fail-fast: strictly validates UUID and creates game_sessions with started_at
    */
   async createGameSession({
     chapterId,
@@ -793,76 +809,48 @@ export const quizService = {
       throw new Error(errMsg);
     }
 
-    const effectiveStartedAt = new Date().toISOString();
-    let sessionId = generateUUID();
-
-    if (isSupabaseConfigured && supabase) {
-      try {
-        const userId = await playerAuthService.getAuthUserId();
-        if (!userId) {
-          throw new Error('未检测到有效的玩家登录态，请重试');
-        }
-
-        // Try inserting with 'in_progress'
-        let statusToUse = 'in_progress';
-        let { data: insertData, error: insertErr } = await supabase
-          .from('game_sessions')
-          .insert({
-            player_id: userId,
-            chapter_id: chapterId,
-            chapter_version: chapterVersion,
-            started_at: effectiveStartedAt,
-            total_questions: totalQuestions,
-            correct_count: 0,
-            wrong_count: 0,
-            score: 0,
-            earned_bp: 0,
-            status: statusToUse
-          })
-          .select('id, started_at')
-          .single();
-
-        // If check constraint in Supabase rejects 'in_progress' (code 23514), fallback to initial 'abandoned'
-        if (insertErr && insertErr.code === '23514') {
-          statusToUse = 'abandoned';
-          const retry = await supabase
-            .from('game_sessions')
-            .insert({
-              player_id: userId,
-              chapter_id: chapterId,
-              chapter_version: chapterVersion,
-              started_at: effectiveStartedAt,
-              total_questions: totalQuestions,
-              correct_count: 0,
-              wrong_count: 0,
-              score: 0,
-              earned_bp: 0,
-              status: statusToUse
-            })
-            .select('id, started_at')
-            .single();
-
-          insertData = retry.data;
-          insertErr = retry.error;
-        }
-
-        if (insertErr) {
-          console.error('[quizService] Supabase createGameSession error:', insertErr);
-          throw new Error(`对局建立失败，请重试: ${insertErr.message}`);
-        }
-
-        if (insertData?.id) {
-          sessionId = insertData.id;
-        }
-      } catch (err) {
-        console.error('[quizService] createGameSession failed:', err);
-        throw err;
-      }
+    if (!isSupabaseConfigured || !supabase) {
+      throw new Error('Supabase客户端未初始化，无法建立对局');
     }
 
+    const userId = await playerAuthService.getAuthUserId();
+    if (!userId) {
+      throw new Error('对局建立失败：未检测到有效Supabase auth.uid()');
+    }
+
+    const effectiveStartedAt = new Date().toISOString();
+
+    const { data: created, error: insertErr } = await supabase
+      .from('game_sessions')
+      .insert({
+        player_id: userId,
+        chapter_id: chapterId,
+        chapter_version: chapterVersion,
+        started_at: effectiveStartedAt,
+        total_questions: totalQuestions,
+        correct_count: 0,
+        wrong_count: 0,
+        score: 0,
+        earned_bp: 0,
+        status: 'in_progress'
+      })
+      .select('id, player_id, chapter_id, status, started_at')
+      .single();
+
+    if (insertErr) {
+      console.error('[GameSession] Create failed:', insertErr);
+      throw new Error(`对局建立失败: ${insertErr.message}`);
+    }
+
+    if (!created?.id) {
+      throw new Error('对局建立失败: 未从Supabase获取到新Session ID');
+    }
+
+    console.log(`[GameSession] Created\nsession_id: ${created.id}\nplayer_id: ${created.player_id}\nchapter_id: ${created.chapter_id}\nstatus: in_progress`);
+
     // Cache initial session info
-    this.saveSessionDetails(sessionId, {
-      id: sessionId,
+    this.saveSessionDetails(created.id, {
+      id: created.id,
       chapter_id: chapterId,
       chapter_title: chapterTitle,
       chapter_version: chapterVersion,
@@ -872,11 +860,12 @@ export const quizService = {
       questions: []
     });
 
-    return { sessionId, startedAt: effectiveStartedAt };
+    return created;
   },
 
   /**
-   * Requirement 4: Complete the exact same Game Session upon finishing 8 questions
+   * Requirement 6: Complete the exact same Game Session upon finishing 8 questions
+   * Fail-fast: awaits Supabase UPDATE and throws if update does not succeed
    */
   async completeGameSession({
     sessionId,
@@ -891,48 +880,44 @@ export const quizService = {
     earnedBP = 0,
     questionsDetails = []
   }) {
+    if (!sessionId) {
+      throw new Error('结算保存失败: 缺少有效的 Session ID');
+    }
+
     const endedAt = new Date().toISOString();
 
-    if (isSupabaseConfigured && supabase && sessionId) {
-      try {
-        const updateRes = await supabase
-          .from('game_sessions')
-          .update({
-            status: 'completed',
-            ended_at: endedAt,
-            total_questions: totalQuestions,
-            correct_count: correctCount,
-            wrong_count: wrongCount,
-            score: score,
-            earned_bp: earnedBP
-          })
-          .eq('id', sessionId)
-          .select('id');
-
-        // If UPDATE privilege is denied (code 42501) because grant SQL hasn't been executed, insert completed session directly
-        if (updateRes.error && updateRes.error.code === '42501') {
-          console.warn('[quizService] UPDATE on game_sessions permission denied (42501), inserting completed record directly.');
-          const userId = await playerAuthService.getAuthUserId();
-          await supabase
-            .from('game_sessions')
-            .insert({
-              id: sessionId,
-              player_id: userId,
-              chapter_id: chapterId,
-              chapter_version: chapterVersion,
-              started_at: startedAt || endedAt,
-              ended_at: endedAt,
-              total_questions: totalQuestions,
-              correct_count: correctCount,
-              wrong_count: wrongCount,
-              score: score,
-              earned_bp: earnedBP,
-              status: 'completed'
-            });
-        }
-      } catch (err) {
-        console.error('[quizService] completeGameSession cloud error:', err);
+    if (isSupabaseConfigured && supabase) {
+      const authUserId = await playerAuthService.getAuthUserId();
+      if (!authUserId) {
+        throw new Error('未检测到有效的玩家登录态，无法保存结算');
       }
+
+      const updateRes = await supabase
+        .from('game_sessions')
+        .update({
+          status: 'completed',
+          ended_at: endedAt,
+          total_questions: totalQuestions,
+          correct_count: correctCount,
+          wrong_count: wrongCount,
+          score: score,
+          earned_bp: earnedBP
+        })
+        .eq('id', sessionId)
+        .eq('player_id', authUserId)
+        .select('id, status, score, correct_count, wrong_count')
+        .single();
+
+      if (updateRes.error) {
+        console.error('[GameSession] Complete failed:', updateRes.error);
+        throw new Error(`结算保存失败: ${updateRes.error.message || updateRes.error.details || 'Supabase更新被拒绝'}`);
+      }
+
+      if (!updateRes.data || updateRes.data.status !== 'completed') {
+        throw new Error('结算保存失败: 数据库未能成功更新对局状态为 completed');
+      }
+
+      console.log(`[GameSession] Completed\nsession_id: ${sessionId}\nstatus: completed\nscore: ${score}\ncorrect_count: ${correctCount}\nwrong_count: ${wrongCount}`);
     }
 
     // Save questions details associated with this exact session
@@ -1021,27 +1006,23 @@ export const quizService = {
           ]);
 
           if (sessRes.error) {
-            console.warn('[quizService] Error fetching game_sessions:', sessRes.error);
-            fetchError = sessRes.error;
+            console.error('[quizService] Error fetching game_sessions:', sessRes.error);
+            throw new Error(`读取对局记录失败: ${sessRes.error.message}`);
           } else if (Array.isArray(sessRes.data)) {
             cloudSessions = sessRes.data;
           }
 
           if (ansRes.error) {
             console.warn('[quizService] Error fetching player_answers:', ansRes.error);
-            if (!fetchError) fetchError = ansRes.error;
+            // player_answers is supplementary for cumulative totals; don't hard crash if empty
           } else if (Array.isArray(ansRes.data)) {
             cloudAnswers = ansRes.data;
           }
         }
       } catch (err) {
-        console.warn('[quizService] getPlayerFullStats cloud exception:', err);
-        fetchError = err;
+        console.error('[quizService] getPlayerFullStats exception:', err);
+        throw err;
       }
-    }
-
-    if (fetchError && cloudSessions.length === 0 && cloudAnswers.length === 0) {
-      throw new Error(fetchError.message || '无法连接到云端数据库，请检查网络连接');
     }
 
     // Attach question details saved for each completed session

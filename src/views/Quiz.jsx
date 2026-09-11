@@ -147,7 +147,10 @@ const Quiz = ({
   const [loadError, setLoadError] = useState(null);
   const [submitError, setSubmitError] = useState(null);
 
-  // Step 2.1 & 2.6 & Requirements 1-3: Initialize quiz with real chapter UUID and pre-created session
+  const [saveError, setSaveError] = useState(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Step 2.1 & 2.6 & Requirements 1-5: Initialize quiz with real chapter UUID and pre-created session (Fail-Fast)
   const loadQuizQuestions = useCallback(async () => {
     setIsLoadingQuestions(true);
     setLoadError(null);
@@ -155,46 +158,32 @@ const Quiz = ({
 
     try {
       const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      let resolvedChapterId = quizParams?.chapterId;
-      let resolvedChapterTitle = quizParams?.chapterTitle || quizParams?.chapterName || 'Sejarah';
-      let resolvedVersionNo = quizParams?.versionNo || 1;
+      const chapterId = quizParams?.chapterId;
 
-      // If chapterId is missing or is an invalid legacy string like chap_history_f4, resolve from published_chapters
-      if (!resolvedChapterId || !UUID_REGEX.test(resolvedChapterId)) {
-        try {
-          const grade = quizParams?.gradeId || `form-${quizParams?.form || 4}`;
-          const subj = quizParams?.subject || 'sejarah';
-          const pubChapters = await quizService.getPublishedChapters(grade, subj);
-          if (pubChapters && pubChapters.length > 0) {
-            resolvedChapterId = pubChapters[0].id;
-            resolvedChapterTitle = pubChapters[0].title || resolvedChapterTitle;
-            resolvedVersionNo = pubChapters[0].versionNo || resolvedVersionNo;
-          }
-        } catch (resolveErr) {
-          console.warn('[Quiz] Failed to query published_chapters for UUID fallback:', resolveErr);
-        }
+      // Requirement 4: Strictly fail-fast. Do NOT auto-select "latest chapter"!
+      if (!chapterId || !UUID_REGEX.test(chapterId)) {
+        throw new Error('对局建立失败：未检测到有效Chapter UUID，请返回关卡选择重新进入。');
       }
 
-      // Rule 1: Validate UUID strictly. If still not a valid UUID, block game start!
-      if (!resolvedChapterId || !UUID_REGEX.test(resolvedChapterId)) {
-        throw new Error('对局建立失败，请重试：未能获取对应章节的发布记录或Chapter UUID无效。');
-      }
+      currentChapterIdRef.current = chapterId;
 
-      currentChapterIdRef.current = resolvedChapterId;
-
-      // Rule 2 & 6: Pre-create session before questions start with real auth.uid()
-      const authUserId = await playerAuthService.getAuthUserId();
-      const playerId = (currentUser?.id && currentUser.id !== 'guest') ? currentUser.id : authUserId;
-
-      const sessionResult = await quizService.createGameSession({
-        chapterId: resolvedChapterId,
-        chapterTitle: resolvedChapterTitle,
-        chapterVersion: resolvedVersionNo,
+      // Requirement 3 & 5: Pre-create session directly, fail-fast, capture created id immediately
+      const createdSession = await quizService.createGameSession({
+        chapterId: chapterId,
+        chapterTitle: quizParams?.chapterTitle || quizParams?.chapterName || 'Sejarah',
+        chapterVersion: quizParams?.versionNo || 1,
         totalQuestions: 8
       });
 
-      currentSessionIdRef.current = sessionResult?.sessionId;
+      const newSessionId = createdSession?.id || createdSession?.sessionId;
+      if (!newSessionId) {
+        throw new Error('对局建立失败：未从Supabase获取到新Session ID，已终止游戏。');
+      }
 
+      currentSessionIdRef.current = newSessionId;
+
+      const authUserId = await playerAuthService.getAuthUserId();
+      const playerId = (currentUser?.id && currentUser.id !== 'guest') ? currentUser.id : authUserId;
       const randomEnabled = quizParams?.randomQuestions !== undefined ? quizParams.randomQuestions : true;
 
       // Safe local fallback questions ONLY for non-cloud offline demo mode
@@ -205,11 +194,11 @@ const Quiz = ({
       const fallbackQuestions = (matched && matched.length >= 4) ? matched : rawQuestions;
 
       const batch = await quizService.getNextQuestions({
-        chapterId: resolvedChapterId,
+        chapterId: chapterId,
         limit: 8,
         playerId,
         randomEnabled,
-        versionNo: resolvedVersionNo,
+        versionNo: quizParams?.versionNo || 1,
         fallbackQuestions
       });
 
@@ -238,48 +227,47 @@ const Quiz = ({
     loadQuizQuestions();
   }, [loadQuizQuestions]);
 
-  // Step 4 & 7: Quiz 挑战完成进入结算时，保存 game_sessions 并自动推进 Daily Missions
-  useEffect(() => {
-    if (status === 'result' && questions.length > 0 && !hasRecordedMissionsRef.current) {
-      hasRecordedMissionsRef.current = true;
-      mockDb.recordQuizForDailyMissions({
-        quizCompleted: 1,
-        questionsAnswered: questions.length,
-        correctAnswers: correctCount
-      });
+  // Requirement 6: Await completeGameSession and confirm Supabase update before showing result
+  const finalizeGameSession = useCallback(async () => {
+    setIsSaving(true);
+    setSaveError(null);
 
-      // Build clean question details array for this session (prevents ID mangling/loss)
-      const questionsDetails = questions.map((q, idx) => {
-        const rawOpts = q.options || [];
-        const selectedOpt = rawOpts.find(o => o.id === q.selectedOptionId);
-        const correctOpt = rawOpts.find(o => o.id === (q.revealedCorrectOptionId || q.correct_option_id));
-        const isUserCorrect = q.isUserCorrect !== undefined
-          ? q.isUserCorrect
-          : (q.revealedCorrectOptionId ? q.revealedCorrectOptionId === q.selectedOptionId : false);
+    // Build clean question details array for this session (prevents ID mangling/loss)
+    const questionsDetails = questions.map((q, idx) => {
+      const rawOpts = q.options || [];
+      const selectedOpt = rawOpts.find(o => o.id === q.selectedOptionId);
+      const correctOpt = rawOpts.find(o => o.id === (q.revealedCorrectOptionId || q.correct_option_id));
+      const isUserCorrect = q.isUserCorrect !== undefined
+        ? q.isUserCorrect
+        : (q.revealedCorrectOptionId ? q.revealedCorrectOptionId === q.selectedOptionId : false);
 
-        let selectedText = q.selectedOptionText || selectedOpt?.text || null;
-        if (!selectedText || q.selectedOptionId === 'timeout' || q.selectedOptionId === 'unanswered' || !q.selectedOptionId) {
-          selectedText = '未作答 / Time Out';
-        }
+      let selectedText = q.selectedOptionText || selectedOpt?.text || null;
+      if (!selectedText || q.selectedOptionId === 'timeout' || q.selectedOptionId === 'unanswered' || !q.selectedOptionId) {
+        selectedText = '未作答 / Time Out';
+      }
 
-        let correctText = correctOpt?.text || q.revealedCorrectText || q.correctAnswer || '正确答案';
-        if (typeof correctText === 'string' && correctText.startsWith('opt_')) {
-          correctText = '正确答案';
-        }
+      let correctText = correctOpt?.text || q.revealedCorrectText || q.correctAnswer || '正确答案';
+      if (typeof correctText === 'string' && correctText.startsWith('opt_')) {
+        correctText = '正确答案';
+      }
 
-        return {
-          question_no: idx + 1,
-          question_text: q.question || q.text || `题目 #${idx + 1}`,
-          selected_option_text: selectedText,
-          correct_option_text: correctText,
-          explanation: q.revealedExplanation || q.explanation || '',
-          is_correct: isUserCorrect,
-          response_time_ms: q.responseTimeMs || 2000
-        };
-      });
+      return {
+        question_no: idx + 1,
+        question_text: q.question || q.text || `题目 #${idx + 1}`,
+        selected_option_text: selectedText,
+        correct_option_text: correctText,
+        explanation: q.revealedExplanation || q.explanation || '',
+        is_correct: isUserCorrect,
+        response_time_ms: q.responseTimeMs || 2000
+      };
+    });
 
-      // Step 4: Complete Game Session in Supabase & local storage
-      quizService.completeGameSession({
+    const finalScore = correctCount * scorePerQuestion;
+    const finalWrong = questions.length - correctCount - skippedCount;
+
+    try {
+      // Step 6: MUST await completeGameSession and confirm Supabase returned success
+      await quizService.completeGameSession({
         sessionId: currentSessionIdRef.current,
         chapterId: currentChapterIdRef.current || quizParams?.chapterId,
         chapterTitle: quizParams?.chapterTitle || quizParams?.chapterName || 'Sejarah',
@@ -287,13 +275,30 @@ const Quiz = ({
         startedAt: startTime ? new Date(startTime).toISOString() : new Date().toISOString(),
         totalQuestions: questions.length,
         correctCount: correctCount,
-        wrongCount: questions.length - correctCount - skippedCount,
-        score: correctCount * scorePerQuestion,
+        wrongCount: finalWrong,
+        score: finalScore,
         earnedBP: sessionBP,
-        questionsDetails: questionsDetails
-      }).catch(err => console.warn('[Quiz] Failed to complete game session:', err));
+        questionsDetails
+      });
+
+      // Advance daily missions only upon confirmed success
+      if (!hasRecordedMissionsRef.current) {
+        hasRecordedMissionsRef.current = true;
+        mockDb.recordQuizForDailyMissions({
+          quizCompleted: 1,
+          questionsAnswered: questions.length,
+          correctAnswers: correctCount
+        });
+      }
+
+      setIsSaving(false);
+      setStatus('result');
+    } catch (err) {
+      console.error('[Quiz] completeGameSession failed:', err);
+      setSaveError(err.message || '结算保存失败，请重试');
+      setIsSaving(false);
     }
-  }, [status, questions, correctCount, quizParams, startTime, skippedCount, sessionBP, scorePerQuestion]);
+  }, [questions, correctCount, scorePerQuestion, skippedCount, quizParams, startTime, sessionBP]);
 
   // Step 16: Setup Question with fixed option IDs and post-shuffle A/B/C/D labeling
   const setupQuestion = (question) => {
@@ -386,7 +391,8 @@ const Quiz = ({
         quizService.submitAnswerRPC({
           impressionId: question.impression_id,
           selectedOptionId: 'timeout',
-          responseTimeMs: 10000
+          responseTimeMs: 10000,
+          sessionId: currentSessionIdRef.current
         }).catch(err => console.warn('[Quiz] Timeout submitAnswerRPC error:', err));
       }
 
@@ -442,7 +448,8 @@ const Quiz = ({
         const res = await quizService.submitAnswerRPC({
           impressionId: question.impression_id,
           selectedOptionId: optId,
-          responseTimeMs
+          responseTimeMs,
+          sessionId: currentSessionIdRef.current
         });
         isCorrect = Boolean(res.is_correct);
         correctOptId = res.correct_option_id;
@@ -558,10 +565,70 @@ const Quiz = ({
           }
         }
 
-        setStatus('result');
+        setStatus('saving');
+        finalizeGameSession();
       }
     }, delayMs);
-  }, [currentIndex, questions, startTime, onCheckBossTrigger, sessionBP, correctCount, skippedCount, maxCombo]);
+  }, [currentIndex, questions, startTime, onCheckBossTrigger, sessionBP, correctCount, skippedCount, maxCombo, finalizeGameSession]);
+
+  if (saveError) {
+    return (
+      <div className="view-content flex-center flex-column" style={{ padding: '32px 20px', textAlign: 'center', minHeight: '80vh', justifyContent: 'center' }}>
+        <div style={{ background: '#FEE2E2', padding: '16px', borderRadius: '50%', marginBottom: '16px', border: '2px solid #EF4444', display: 'inline-flex' }}>
+          <AlertCircle size={44} color="#EF4444" />
+        </div>
+        <h2 style={{ fontSize: '20px', fontWeight: 900, marginBottom: '8px', color: '#000' }}>结算保存失败</h2>
+        <p style={{ fontSize: '13px', color: '#B91C1C', marginBottom: '8px', maxWidth: '320px', lineHeight: 1.5, fontWeight: 700 }}>
+          {saveError}
+        </p>
+        <p style={{ fontSize: '12px', color: '#666', marginBottom: '24px', maxWidth: '300px', lineHeight: 1.4 }}>
+          对局数据已保留。请点击下方按钮重新保存，成功后即可进入结算页与历史记录。
+        </p>
+        <button
+          onClick={finalizeGameSession}
+          style={{
+            padding: '12px 32px',
+            background: '#000',
+            color: '#FFBC00',
+            fontWeight: 900,
+            borderRadius: '9999px',
+            border: 'none',
+            cursor: 'pointer',
+            fontSize: '14px',
+            boxShadow: 'var(--card-shadow-sm)'
+          }}
+        >
+          重新保存结算 (Retry Save)
+        </button>
+        <button
+          onClick={() => onBack(sessionBP, currentSessionIdRef.current)}
+          style={{
+            marginTop: '12px',
+            padding: '8px 20px',
+            background: 'transparent',
+            color: '#666',
+            fontWeight: 600,
+            border: 'none',
+            cursor: 'pointer',
+            fontSize: '13px'
+          }}
+        >
+          返回主页
+        </button>
+      </div>
+    );
+  }
+
+  if (status === 'saving' || isSaving) {
+    return (
+      <div className="view-content flex-center flex-column" style={{ minHeight: '80vh', justifyContent: 'center', textAlign: 'center', padding: '20px' }}>
+        <RefreshCw size={40} color="#000" style={{ marginBottom: '16px', animation: 'spin 1s linear infinite' }} />
+        <h3 style={{ fontWeight: 900, fontSize: '18px', color: '#000', margin: '0 0 8px 0' }}>正在保存成绩与对局记录...</h3>
+        <p style={{ fontSize: '13px', color: '#666', margin: 0 }}>正在向云端数据库提交完赛结算，请稍候</p>
+        <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
 
   if (loadError) {
     return (
