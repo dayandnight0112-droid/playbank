@@ -107,7 +107,9 @@ const Quiz = ({
   currentUser,
   onGoGarden,
   quizParams = null,
-  onCheckBossTrigger = null
+  onCheckBossTrigger = null,
+  onEvaluateBossTrigger = null,
+  onTriggerBossEncounter = null
 }) => {
   const rawQuestions = mockDb.getQuestions();
   const { width, height } = useWindowSize();
@@ -142,6 +144,12 @@ const Quiz = ({
   const hasRecordedMissionsRef = useRef(false);
   const currentSessionIdRef = useRef(null);
   const currentChapterIdRef = useRef(null);
+  const pendingBossTriggerRef = useRef(null);
+  const pendingFinalStatsRef = useRef(null);
+  const questionsRef = useRef(questions);
+  useEffect(() => {
+    questionsRef.current = questions;
+  }, [questions]);
   const [cycleInfo, setCycleInfo] = useState(null);
   const [isLoadingQuestions, setIsLoadingQuestions] = useState(true);
   const [loadError, setLoadError] = useState(null);
@@ -227,13 +235,24 @@ const Quiz = ({
     loadQuizQuestions();
   }, [loadQuizQuestions]);
 
-  // Requirement 6: Await completeGameSession and confirm Supabase update before showing result
-  const finalizeGameSession = useCallback(async () => {
+  // Requirement 6: Await completeGameSession and confirm Supabase update before showing result or entering Boss
+  const finalizeGameSession = useCallback(async (customStats = null, customBossTrigger = null) => {
     setIsSaving(true);
     setSaveError(null);
 
+    const activeQuestions = questionsRef.current?.length > 0 ? questionsRef.current : questions;
+    const statsToUse = customStats || pendingFinalStatsRef.current;
+    
+    // Authoritatively compute counts
+    const computedCorrect = activeQuestions.filter(q => q.isUserCorrect === true).length;
+    const effCorrect = statsToUse?.correctCount !== undefined ? statsToUse.correctCount : computedCorrect;
+    const effSkipped = statsToUse?.skippedCount ?? skippedCount;
+    const effWrong = activeQuestions.length - effCorrect - effSkipped;
+    const effScore = effCorrect * scorePerQuestion;
+    const effBP = statsToUse?.sessionBP ?? sessionBP;
+
     // Build clean question details array for this session (prevents ID mangling/loss)
-    const questionsDetails = questions.map((q, idx) => {
+    const questionsDetails = activeQuestions.map((q, idx) => {
       const rawOpts = q.options || [];
       const selectedOpt = rawOpts.find(o => o.id === q.selectedOptionId);
       const correctOpt = rawOpts.find(o => o.id === (q.revealedCorrectOptionId || q.correct_option_id));
@@ -262,43 +281,55 @@ const Quiz = ({
       };
     });
 
-    const finalScore = correctCount * scorePerQuestion;
-    const finalWrong = questions.length - correctCount - skippedCount;
-
     try {
       // Step 6: MUST await completeGameSession and confirm Supabase returned success
-      await quizService.completeGameSession({
+      const completionResult = await quizService.completeGameSession({
         sessionId: currentSessionIdRef.current,
         chapterId: currentChapterIdRef.current || quizParams?.chapterId,
         chapterTitle: quizParams?.chapterTitle || quizParams?.chapterName || 'Sejarah',
         chapterVersion: quizParams?.versionNo || 1,
         startedAt: startTime ? new Date(startTime).toISOString() : new Date().toISOString(),
-        totalQuestions: questions.length,
-        correctCount: correctCount,
-        wrongCount: finalWrong,
-        score: finalScore,
-        earnedBP: sessionBP,
+        totalQuestions: activeQuestions.length,
+        correctCount: effCorrect,
+        wrongCount: effWrong,
+        score: effScore,
+        earnedBP: effBP,
         questionsDetails
       });
+
+      if (!completionResult || completionResult.status !== 'completed') {
+        throw new Error('数据库未能确认对局状态为 completed');
+      }
 
       // Advance daily missions only upon confirmed success
       if (!hasRecordedMissionsRef.current) {
         hasRecordedMissionsRef.current = true;
         mockDb.recordQuizForDailyMissions({
           quizCompleted: 1,
-          questionsAnswered: questions.length,
-          correctAnswers: correctCount
+          questionsAnswered: activeQuestions.length,
+          correctAnswers: effCorrect
         });
       }
 
       setIsSaving(false);
-      setStatus('result');
+
+      // 保存成功后：如果触发Boss，才进入Boss Encounter；如果没有触发Boss，进入普通Quiz结算页
+      const bossTrigger = customBossTrigger !== undefined ? customBossTrigger : pendingBossTriggerRef.current;
+      if (bossTrigger && (bossTrigger.shouldTrigger || bossTrigger === true)) {
+        if (onTriggerBossEncounter) {
+          onTriggerBossEncounter(bossTrigger, statsToUse || { sessionBP: effBP, correctCount: effCorrect, wrongCount: effWrong });
+        } else if (onCheckBossTrigger) {
+          onCheckBossTrigger(statsToUse || { sessionBP: effBP, correctCount: effCorrect, wrongCount: effWrong });
+        }
+      } else {
+        setStatus('result');
+      }
     } catch (err) {
       console.error('[Quiz] completeGameSession failed:', err);
       setSaveError(err.message || '结算保存失败，请重试');
       setIsSaving(false);
     }
-  }, [questions, correctCount, scorePerQuestion, skippedCount, quizParams, startTime, sessionBP]);
+  }, [questions, scorePerQuestion, skippedCount, quizParams, startTime, sessionBP, onTriggerBossEncounter, onCheckBossTrigger]);
 
   // Step 16: Setup Question with fixed option IDs and post-shuffle A/B/C/D labeling
   const setupQuestion = (question) => {
@@ -538,38 +569,52 @@ const Quiz = ({
   };
 
   const scheduleNextQuestion = useCallback((delayMs = 2000) => {
-    setTimeout(() => {
+    setTimeout(async () => {
+      const activeQuestions = questionsRef.current?.length > 0 ? questionsRef.current : questions;
       const nextIndex = currentIndex + 1;
-      if (nextIndex < questions.length) {
+      if (nextIndex < activeQuestions.length) {
         setCurrentIndex(nextIndex);
-        setupQuestion(questions[nextIndex]);
+        setupQuestion(activeQuestions[nextIndex]);
       } else {
+        // 1. 第8题完成：计算本局最终Stats
         const totalDuration = Math.floor((Date.now() - startTime) / 1000);
         setTimeTaken(totalDuration);
 
-        // Check if Boss should trigger upon completing challenge
-        if (onCheckBossTrigger) {
-          const stats = {
-            sessionBP,
-            correctCount,
-            wrongCount: questions.length - correctCount - skippedCount,
-            skippedCount,
-            accuracy: Math.round((correctCount / questions.length) * 100),
-            maxCombo,
-            timeTaken: totalDuration,
-            questions
-          };
-          const triggered = onCheckBossTrigger(stats);
-          if (triggered) {
-            return; // Handled by App.jsx to show Boss Encounter
-          }
-        }
+        const computedCorrect = activeQuestions.filter(q => q.isUserCorrect === true).length;
+        const currentWrong = activeQuestions.length - computedCorrect - skippedCount;
+        const currentAccuracy = Math.round((computedCorrect / activeQuestions.length) * 100);
 
+        const finalStats = {
+          sessionBP,
+          correctCount: computedCorrect,
+          wrongCount: currentWrong,
+          skippedCount,
+          accuracy: currentAccuracy,
+          maxCombo,
+          timeTaken: totalDuration,
+          questions: activeQuestions
+        };
+        pendingFinalStatsRef.current = finalStats;
+
+        // 2. 判断是否需要触发Boss，但此时不能立即跳转
+        let bossTriggerResult = null;
+        if (onEvaluateBossTrigger) {
+          bossTriggerResult = onEvaluateBossTrigger(finalStats);
+        } else if (onCheckBossTrigger) {
+          bossTriggerResult = onCheckBossTrigger(finalStats, true);
+        }
+        pendingBossTriggerRef.current = bossTriggerResult;
+
+        // 3. 设置页面状态为 saving
         setStatus('saving');
-        finalizeGameSession();
+
+        // 4. await finalizeGameSession(finalStats)
+        // 必须确认Supabase返回该Session的 status = completed
+        // 保存成功后：如果触发Boss才进入Boss Encounter；如果没有触发Boss进入普通Quiz结算页
+        await finalizeGameSession(finalStats, bossTriggerResult);
       }
     }, delayMs);
-  }, [currentIndex, questions, startTime, onCheckBossTrigger, sessionBP, correctCount, skippedCount, maxCombo, finalizeGameSession]);
+  }, [currentIndex, questions, startTime, onEvaluateBossTrigger, onCheckBossTrigger, sessionBP, skippedCount, maxCombo, finalizeGameSession]);
 
   if (saveError) {
     return (
@@ -585,7 +630,7 @@ const Quiz = ({
           对局数据已保留。请点击下方按钮重新保存，成功后即可进入结算页与历史记录。
         </p>
         <button
-          onClick={finalizeGameSession}
+          onClick={() => finalizeGameSession(pendingFinalStatsRef.current, pendingBossTriggerRef.current)}
           style={{
             padding: '12px 32px',
             background: '#000',

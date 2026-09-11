@@ -230,7 +230,17 @@ function App() {
     });
   };
 
-  const handleCheckBossTrigger = (quizStats) => {
+  const handleEvaluateBossTrigger = (quizStats) => {
+    return evaluateBossTrigger({
+      subject: quizParams.subjectTitle || quizParams.subject || 'History',
+      form: quizParams.form || 4,
+      chapter: quizParams.chapter || 1,
+      quizStats,
+      currentUser
+    });
+  };
+
+  const handleTriggerBossEncounter = (triggerResult, quizStats) => {
     // 1. Bank Normal Quiz BP immediately so learning rewards are never lost
     const normalBP = quizStats?.sessionBP || 0;
     if (normalBP > 0) {
@@ -246,25 +256,21 @@ function App() {
       }
     }
 
-    // 2. Evaluate Boss Trigger
-    const triggerResult = evaluateBossTrigger({
-      subject: quizParams.subjectTitle || quizParams.subject || 'History',
-      form: quizParams.form || 4,
-      chapter: quizParams.chapter || 1,
-      quizStats,
-      currentUser
-    });
+    // 2. Trigger Boss Encounter Alert and switch view
+    setBossBattleParams(triggerResult);
+    setBossEncounterAlert(true);
+    setTimeout(() => {
+      setBossEncounterAlert(false);
+      setCurrentView('boss_battle');
+    }, 1400);
+  };
 
+  const handleCheckBossTrigger = (quizStats) => {
+    const triggerResult = handleEvaluateBossTrigger(quizStats);
     if (triggerResult.shouldTrigger) {
-      setBossBattleParams(triggerResult);
-      setBossEncounterAlert(true);
-      setTimeout(() => {
-        setBossEncounterAlert(false);
-        setCurrentView('boss_battle');
-      }, 1400);
+      handleTriggerBossEncounter(triggerResult, quizStats);
       return true; // Boss encounter triggered!
     }
-
     return false; // Proceed to normal Quiz Result
   };
 
@@ -491,7 +497,8 @@ function App() {
             currentUser={currentUser}
             onGoGarden={() => setCurrentView('garden')}
             quizParams={quizParams}
-            onCheckBossTrigger={handleCheckBossTrigger}
+            onEvaluateBossTrigger={handleEvaluateBossTrigger}
+            onTriggerBossEncounter={handleTriggerBossEncounter}
           />
         );
       case 'boss_battle':
