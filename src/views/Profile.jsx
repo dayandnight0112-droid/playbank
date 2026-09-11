@@ -1078,14 +1078,32 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
                       {/* Accordion Expanded Content: Questions Breakdown */}
                       {isExpanded && (
                         <div
+                          className="questions-scroll-container"
                           style={{
-                            padding: '14px 16px',
+                            padding: '14px 14px',
                             backgroundColor: '#FAF9F6',
                             display: 'flex',
                             flexDirection: 'column',
-                            gap: '12px'
+                            gap: '12px',
+                            maxHeight: '340px',
+                            overflowY: 'auto',
+                            WebkitOverflowScrolling: 'touch'
                           }}
                         >
+                          {/* Inner Scroll Hint */}
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '0 2px 2px 2px',
+                            fontSize: '11px',
+                            color: '#B45309',
+                            fontWeight: 800
+                          }}>
+                            <span>作答题目明细（共 {sess.questions?.length || 8} 题）</span>
+                            <span>↕️ 可在此区域内滑动查看</span>
+                          </div>
+
                           {sess.questions && sess.questions.length > 0 ? (
                             sess.questions.map((q, qIdx) => {
                               const isQCorrect = Boolean(q.is_correct);
