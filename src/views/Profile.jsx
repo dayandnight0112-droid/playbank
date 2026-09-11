@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   ArrowLeft,
   Clock,
@@ -17,7 +17,9 @@ import {
   Sparkles,
   Flame,
   CheckCircle2,
-  RotateCcw
+  RotateCcw,
+  AlertCircle,
+  RefreshCw
 } from 'lucide-react';
 import { quizService } from '../lib/quizService';
 import { mockDb } from '../lib/mockDb';
@@ -128,63 +130,80 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showBadgesModal, setShowBadgesModal] = useState(false);
   const [expandedSessionId, setExpandedSessionId] = useState(null);
-  const [cloudStats, setCloudStats] = useState(null);
-  const [isLoadingStats, setIsLoadingStats] = useState(true);
 
-  // Compute or format stats from actual data
+  // Step 4.1: 4 Strict States for Profile & Game History
+  const [sessions, setSessions] = useState([]);
+  const [answers, setAnswers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
   const effectivePlayerId = currentUser?.id || 'guest';
-  const rawHistory = useMemo(() => quizService.getAnswerHistory(effectivePlayerId), [effectivePlayerId]);
 
-  // Load cloud stats on mount
-  useEffect(() => {
-    let isMounted = true;
-    (async () => {
-      try {
-        const data = await quizService.getPlayerSummaryStats(effectivePlayerId);
-        if (isMounted && data) {
-          setCloudStats(data);
-        }
-      } catch (err) {
-        console.warn('[Profile] Failed to load cloud stats:', err);
-      } finally {
-        if (isMounted) setIsLoadingStats(false);
-      }
-    })();
-    return () => { isMounted = false; };
+  // Step 4.1 & 4.3: Cloud load with async/await in useEffect, no silence on Supabase error
+  const loadProfileData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await quizService.getPlayerFullStats(effectivePlayerId);
+      setSessions(Array.isArray(data?.sessions) ? data.sessions : []);
+      setAnswers(Array.isArray(data?.answers) ? data.answers : []);
+    } catch (err) {
+      console.error('[Profile] Failed to load stats from Supabase:', err);
+      setError(err.message || '加载对局记录与统计失败，请检查网络后重试');
+    } finally {
+      setLoading(false);
+    }
   }, [effectivePlayerId]);
 
+  useEffect(() => {
+    loadProfileData();
+  }, [loadProfileData]);
+
+  // Step 4.2: Profile 4 Stat Cards Calculation
   const stats = useMemo(() => {
-    let minutes = 0;
-    let totalCorrect = 0;
-    let totalWrong = 0;
-    let bestScore = 0;
-    let sessions = [];
+    const safeSessions = Array.isArray(sessions) ? sessions : [];
+    const safeAnswers = Array.isArray(answers) ? answers : [];
 
-    if (cloudStats) {
-      totalCorrect = cloudStats.totalCorrect || 0;
-      totalWrong = cloudStats.totalWrong || 0;
-      bestScore = cloudStats.bestScore || 0;
-      minutes = cloudStats.totalMinutes || 0;
-      sessions = cloudStats.recentSessions || [];
-    } else {
-      totalCorrect = rawHistory.filter((a) => a.is_correct).length;
-      totalWrong = rawHistory.filter((a) => !a.is_correct).length;
-      const totalMs = rawHistory.reduce((acc, a) => acc + (a.response_time || a.responseTimeMs || 2000), 0);
-      minutes = Math.round(totalMs / 60000);
-      sessions = quizService.getGameSessions(effectivePlayerId);
-      bestScore = sessions.reduce((max, s) => Math.max(max, s.score || 0), userBP || 0);
-    }
+    // 1. Play Time: SUM(game_sessions.active_duration_seconds)
+    const totalSeconds = safeSessions.reduce((acc, s) => {
+      const dur = s.active_duration_seconds != null
+        ? Number(s.active_duration_seconds)
+        : (s.started_at && s.ended_at ? Math.max(0, Math.round((new Date(s.ended_at) - new Date(s.started_at)) / 1000)) : 0);
+      return acc + (dur > 0 && dur <= 3600 ? dur : 0);
+    }, 0);
 
-    const playTimeText = minutes >= 60 ? `${(minutes / 60).toFixed(1)} h` : `${minutes} m`;
+    const totalMinutes = Math.floor(totalSeconds / 60);
+    const hours = Math.floor(totalMinutes / 60);
+    const mins = totalMinutes % 60;
+    const playTimeText = hours > 0 ? `${hours} h ${mins} m` : `${totalMinutes} m`;
+
+    // 2. Correct Answers: COUNT(player_answers WHERE is_correct = true)
+    const ansCorrect = safeAnswers.filter((a) => a.is_correct === true).length;
+    const sessCorrect = safeSessions.reduce((acc, s) => acc + (Number(s.correct_count) || 0), 0);
+    const correctCount = Math.max(ansCorrect, sessCorrect);
+
+    // 3. Best Score: MAX(game_sessions.score) of completed sessions (0 if none)
+    // NOTE: NOT cumulative, NOT userBP, NOT earned_bp.
+    const completedSessions = safeSessions.filter((s) => s.status === 'completed' || s.score != null);
+    const bestScore = completedSessions.length
+      ? Math.max(...completedSessions.map((session) => Number(session.score) || 0))
+      : 0;
+
+    // 4. Wrong Answers: COUNT(player_answers WHERE is_correct = false)
+    const ansWrong = safeAnswers.filter((a) => a.is_correct === false).length;
+    const sessWrong = safeSessions.reduce((acc, s) => acc + (Number(s.wrong_count) || 0), 0);
+    const wrongCount = Math.max(ansWrong, sessWrong);
 
     return {
       playTimeText,
-      correctCount: totalCorrect,
-      wrongCount: totalWrong,
-      bestScore: bestScore,
-      recentSessions: sessions
+      totalMinutes,
+      totalSeconds,
+      correctCount,
+      bestScore,
+      wrongCount,
+      recentSessions: safeSessions
     };
-  }, [cloudStats, rawHistory, userBP, effectivePlayerId]);
+  }, [sessions, answers]);
 
   // Player Name & Code Display
   const displayName = useMemo(() => {
@@ -510,6 +529,47 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
           />
         </div>
 
+        {/* Error Retry Banner if fetch failed */}
+        {error && (
+          <div
+            style={{
+              backgroundColor: '#FEF2F2',
+              border: '2px solid #F87171',
+              borderRadius: '16px',
+              padding: '12px 16px',
+              marginBottom: '20px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '12px',
+              boxShadow: '0 2px 8px rgba(220, 38, 38, 0.1)'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <AlertCircle size={22} color="#DC2626" />
+              <span style={{ fontSize: '13px', fontWeight: 700, color: '#991B1B' }}>
+                {error}
+              </span>
+            </div>
+            <button
+              onClick={loadProfileData}
+              style={{
+                padding: '6px 14px',
+                backgroundColor: '#DC2626',
+                color: '#FFFFFF',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '12px',
+                fontWeight: 800,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              重试 (Retry)
+            </button>
+          </div>
+        )}
+
         {/* ------------------------------------------------------------------ */}
         {/* STATS 2x2 GRID                                                     */}
         {/* ------------------------------------------------------------------ */}
@@ -557,7 +617,7 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
                 </span>
               </div>
               <div style={{ fontSize: '26px', fontWeight: 900, color: '#000000', lineHeight: 1 }}>
-                {stats.playTimeText}
+                {loading ? '...' : stats.playTimeText}
               </div>
             </div>
 
@@ -611,7 +671,7 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
                 </span>
               </div>
               <div style={{ fontSize: '26px', fontWeight: 900, color: '#000000', lineHeight: 1 }}>
-                {stats.correctCount.toLocaleString()}
+                {loading ? '...' : stats.correctCount.toLocaleString()}
               </div>
             </div>
 
@@ -665,7 +725,7 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
                 </span>
               </div>
               <div style={{ fontSize: '26px', fontWeight: 900, color: '#000000', lineHeight: 1 }}>
-                {stats.bestScore.toLocaleString()}
+                {loading ? '...' : stats.bestScore.toLocaleString()}
               </div>
             </div>
 
@@ -719,7 +779,7 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
                 </span>
               </div>
               <div style={{ fontSize: '26px', fontWeight: 900, color: '#000000', lineHeight: 1 }}>
-                {stats.wrongCount.toLocaleString()}
+                {loading ? '...' : stats.wrongCount.toLocaleString()}
               </div>
             </div>
 
@@ -865,7 +925,34 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
 
             {/* Accordion List of Game Sessions (以局为单位的手风琴折叠) */}
             <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {(!stats.recentSessions || stats.recentSessions.length === 0) ? (
+              {loading ? (
+                <div style={{ padding: '40px 16px', textAlign: 'center', color: '#6B7280' }}>
+                  <RefreshCw size={36} color="#000" style={{ marginBottom: '14px', animation: 'spin 1s linear infinite' }} />
+                  <p style={{ margin: 0, fontWeight: 800, fontSize: '14.5px', color: '#000' }}>正在从云端读取对局记录...</p>
+                  <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
+                </div>
+              ) : error ? (
+                <div style={{ padding: '30px 16px', textAlign: 'center', color: '#DC2626' }}>
+                  <AlertCircle size={36} color="#DC2626" style={{ marginBottom: '12px' }} />
+                  <p style={{ margin: 0, fontWeight: 800, fontSize: '14.5px' }}>{error}</p>
+                  <button
+                    onClick={loadProfileData}
+                    style={{
+                      marginTop: '14px',
+                      padding: '8px 22px',
+                      backgroundColor: '#000000',
+                      color: '#FFBC00',
+                      border: 'none',
+                      borderRadius: '9999px',
+                      fontSize: '13px',
+                      fontWeight: 800,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    重新加载 (Retry)
+                  </button>
+                </div>
+              ) : (!stats.recentSessions || stats.recentSessions.length === 0) ? (
                 <div
                   style={{
                     textAlign: 'center',
@@ -886,6 +973,15 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
                   const isExpanded = expandedSessionId === sessKey;
                   const roundNum = stats.recentSessions.length - idx;
                   const sessDate = sess.created_at || sess.ended_at || sess.started_at;
+                  const dateFormatted = sessDate
+                    ? new Date(sessDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                    : '近期';
+                  const durSec = sess.active_duration_seconds != null
+                    ? Number(sess.active_duration_seconds)
+                    : (sess.started_at && sess.ended_at ? Math.max(0, Math.round((new Date(sess.ended_at) - new Date(sess.started_at)) / 1000)) : 0);
+                  const durM = Math.floor(durSec / 60);
+                  const durS = durSec % 60;
+                  const durFormatted = durM > 0 ? `${durM}m ${durS}s` : `${durS}s`;
 
                   return (
                     <div
@@ -914,29 +1010,36 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
                       >
                         <div style={{ flex: 1, minWidth: 0, paddingRight: '12px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                            <span style={{ fontSize: '14px', fontWeight: 900, color: '#000000' }}>
-                              第 {roundNum} 局 · {sess.chapter_title || 'Sejarah 答题对局'}
+                            <span style={{ fontSize: '15px', fontWeight: 900, color: '#000000' }}>
+                              Game #{roundNum}
                             </span>
                           </div>
-                          <div style={{ fontSize: '12px', color: '#6B7280', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span>{sessDate ? new Date(sessDate).toLocaleString() : '近期'}</span>
+                          <div style={{ fontSize: '12px', color: '#4B5563', fontWeight: 700, marginBottom: '4px' }}>
+                            {dateFormatted} · {sess.subject_name || 'Sejarah'} · {sess.chapter_title || 'Bab 1'}
+                          </div>
+                          <div style={{ fontSize: '12px', color: '#6B7280', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ color: '#D97706', fontWeight: 900 }}>Score {sess.score ?? 0}</span>
                             <span>·</span>
-                            <span style={{ color: '#16A34A' }}>{sess.correct_count ?? 0} 对</span>
-                            <span style={{ color: '#DC2626' }}>{sess.wrong_count ?? 0} 错</span>
+                            <span style={{ color: '#16A34A' }}>{sess.correct_count ?? 0}/{sess.total_questions || 8} Correct</span>
+                            <span>·</span>
+                            <span>{durFormatted}</span>
                           </div>
                         </div>
 
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
-                          <div style={{ textAlign: 'right' }}>
-                            <div style={{ fontSize: '15px', fontWeight: 900, color: '#D97706' }}>
-                              {sess.score ?? (sess.correct_count * 10)} 分
-                            </div>
-                            <div style={{ fontSize: '11px', color: '#2563EB', fontWeight: 800 }}>
-                              +{sess.earned_bp ?? (sess.correct_count * 10)} BP
+                          <div style={{
+                            padding: '6px 12px',
+                            backgroundColor: '#FEF3C7',
+                            borderRadius: '10px',
+                            border: '1.5px solid #F59E0B',
+                            textAlign: 'center'
+                          }}>
+                            <div style={{ fontSize: '14px', fontWeight: 900, color: '#92400E' }}>
+                              {sess.score ?? 0} 分
                             </div>
                           </div>
                           <div style={{ color: '#000000' }}>
-                            {isExpanded ? <ChevronUp size={20} strokeWidth={2.5} /> : <ChevronDown size={20} strokeWidth={2.5} />}
+                            {isExpanded ? <ChevronUp size={22} strokeWidth={2.5} /> : <ChevronDown size={22} strokeWidth={2.5} />}
                           </div>
                         </div>
                       </div>
@@ -955,6 +1058,7 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
                           {sess.questions && sess.questions.length > 0 ? (
                             sess.questions.map((q, qIdx) => {
                               const isQCorrect = Boolean(q.is_correct);
+                              const respTimeText = q.response_time || (q.response_time_ms ? `${(q.response_time_ms / 1000).toFixed(1)}秒` : '6.2秒');
 
                               return (
                                 <div
@@ -963,53 +1067,73 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
                                     backgroundColor: '#FFFFFF',
                                     borderRadius: '12px',
                                     border: isQCorrect ? '1.5px solid #BBF7D0' : '1.5px solid #FECDD3',
-                                    padding: '12px',
+                                    padding: '14px',
                                     display: 'flex',
                                     flexDirection: 'column',
-                                    gap: '8px',
+                                    gap: '10px',
                                     boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
                                   }}
                                 >
-                                  {/* Question Title */}
-                                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px' }}>
-                                    <span style={{ fontWeight: 900, fontSize: '13px', color: isQCorrect ? '#16A34A' : '#DC2626' }}>
-                                      {isQCorrect ? '✔️' : '❌'} Q{q.question_no || qIdx + 1}.
-                                    </span>
-                                    <span style={{ fontWeight: 800, fontSize: '13px', color: '#111827', lineHeight: 1.45 }}>
-                                      {q.question_text}
+                                  {/* Question Header & Result Pill */}
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                      <span style={{ fontWeight: 900, fontSize: '13.5px', color: '#111827' }}>
+                                        Question {q.question_no || qIdx + 1}
+                                      </span>
+                                      <span
+                                        style={{
+                                          padding: '2px 8px',
+                                          borderRadius: '9999px',
+                                          fontSize: '11px',
+                                          fontWeight: 900,
+                                          backgroundColor: isQCorrect ? '#DCFCE7' : '#FEE2E2',
+                                          color: isQCorrect ? '#166534' : '#991B1B',
+                                          border: `1px solid ${isQCorrect ? '#86EFAC' : '#FCA5A5'}`
+                                        }}
+                                      >
+                                        {isQCorrect ? 'Correct' : 'Wrong'}
+                                      </span>
+                                    </div>
+                                    <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#6B7280' }}>
+                                      回答时间：{respTimeText}
                                     </span>
                                   </div>
 
+                                  {/* Question Text */}
+                                  <div style={{ fontWeight: 800, fontSize: '13.5px', color: '#111827', lineHeight: 1.5 }}>
+                                    题目：{q.question_text}
+                                  </div>
+
                                   {/* Answers Comparison */}
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '2px' }}>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                     {!isQCorrect && (
                                       <div
                                         style={{
-                                          padding: '7px 10px',
+                                          padding: '8px 12px',
                                           backgroundColor: '#FEF2F2',
                                           borderRadius: '8px',
                                           border: '1px solid #FCA5A5',
-                                          fontSize: '12px',
+                                          fontSize: '12.5px',
                                           fontWeight: 700,
                                           color: '#B91C1C'
                                         }}
                                       >
-                                        ❌ 你的选择: {q.selected_option_text}
+                                        你的答案：{q.selected_option_text || '未作答 / Time Out'}
                                       </div>
                                     )}
 
                                     <div
                                       style={{
-                                        padding: '7px 10px',
+                                        padding: '8px 12px',
                                         backgroundColor: '#F0FDF4',
                                         borderRadius: '8px',
                                         border: '1px solid #86EFAC',
-                                        fontSize: '12px',
+                                        fontSize: '12.5px',
                                         fontWeight: 700,
                                         color: '#15803D'
                                       }}
                                     >
-                                      ✔️ 正确答案: {q.correct_option_text}
+                                      正确答案：{q.correct_option_text || '正确答案'}
                                     </div>
                                   </div>
 
@@ -1017,14 +1141,14 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
                                   {q.explanation && (
                                     <div
                                       style={{
-                                        padding: '7px 10px',
+                                        padding: '8px 12px',
                                         backgroundColor: '#FFFBEB',
                                         borderRadius: '8px',
                                         border: '1px solid #FDE68A',
-                                        fontSize: '11.5px',
+                                        fontSize: '12px',
                                         fontWeight: 600,
                                         color: '#92400E',
-                                        lineHeight: 1.4
+                                        lineHeight: 1.45
                                       }}
                                     >
                                       💡 <strong>解析：</strong>{q.explanation}
@@ -1034,7 +1158,7 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
                               );
                             })
                           ) : (
-                            <div style={{ padding: '12px', textAlign: 'center', color: '#6B7280', fontSize: '12.5px' }}>
+                            <div style={{ padding: '14px', textAlign: 'center', color: '#6B7280', fontSize: '13px' }}>
                               本局共 {sess.total_questions || 8} 道题目，答对 {sess.correct_count ?? 0} 题，做错 {sess.wrong_count ?? 0} 题，结算得分 {sess.score ?? 0} 分。
                             </div>
                           )}

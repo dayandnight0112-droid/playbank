@@ -852,19 +852,30 @@ export const quizService = {
     // Try Cloud fetch to merge with cloud sessions
     if (isSupabaseConfigured && supabase) {
       try {
-        const { data, error } = await supabase
+        await playerAuthService.initAuth();
+        const { data: { session } } = await supabase.auth.getSession();
+        let query = supabase
           .from('game_sessions')
-          .select('*, chapters(title)')
+          .select('*, chapters(title, bab_number, grade_id, subjects(title_zh, title_en))')
           .order('created_at', { ascending: false })
           .limit(limit);
 
-        if (!error && Array.isArray(data) && data.length > 0) {
+        if (session?.user?.id) {
+          query = query.eq('player_id', session.user.id);
+        }
+
+        const { data, error } = await query;
+
+        if (!error && Array.isArray(data)) {
           // Merge cloud sessions with local session details
           return data.map((cloudSess) => {
-            const matchedLocal = localSessions.find(ls => ls.id === cloudSess.id);
+            const matchedLocal = localSessions.find(ls => ls.id === cloudSess.id || (Math.abs(new Date(ls.started_at || 0) - new Date(cloudSess.started_at || 0)) < 15000));
+            const subName = cloudSess.chapters?.subjects?.title_zh || cloudSess.chapters?.subjects?.title_en || matchedLocal?.subject_name || '历史';
+            const chapTitle = cloudSess.chapters?.title || matchedLocal?.chapter_title || 'Sejarah 答题对局';
             return {
               ...cloudSess,
-              chapter_title: cloudSess.chapters?.title || matchedLocal?.chapter_title || 'Sejarah 答题对局',
+              subject_name: subName,
+              chapter_title: chapTitle,
               questions: matchedLocal?.questions || []
             };
           });
@@ -878,99 +889,182 @@ export const quizService = {
   },
 
   /**
-   * Step 4: Get Aggregated Summary Stats for Player Profile
-   * Strictly calculates REAL statistics (NO hardcoded 128h / 980 / 2480 / 312)
+   * Step 4: Get Full Player Stats (Sessions & Answers) with Supabase Cloud Priority
    */
-  async getPlayerSummaryStats(playerId = null) {
+  async getPlayerFullStats(playerId = null) {
     const effectivePlayerId = playerId || playerAuthService.getUserId() || 'guest';
-
-    let sessions = [];
-    let answers = [];
-    let wrongHistory = [];
+    let cloudSessions = [];
+    let cloudAnswers = [];
+    let fetchError = null;
 
     if (isSupabaseConfigured && supabase) {
       try {
         await playerAuthService.initAuth();
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
-          const [sessRes, ansRes, histRes] = await Promise.all([
-            supabase.from('game_sessions').select('*, chapters(title)').order('created_at', { ascending: false }).limit(20),
-            supabase.from('player_answers').select('*, questions(question, options, explanation), chapters(title)').limit(200),
-            supabase.from('player_question_history').select('*').gt('wrong_count', 0).order('last_wrong_at', { ascending: false }).limit(50)
+          const authUserId = session.user.id;
+          const [sessRes, ansRes] = await Promise.all([
+            supabase
+              .from('game_sessions')
+              .select('*, chapters(title, bab_number, grade_id, subjects(title_zh, title_en))')
+              .eq('player_id', authUserId)
+              .order('created_at', { ascending: false })
+              .limit(50),
+            supabase
+              .from('player_answers')
+              .select('*, questions(question, options, explanation)')
+              .eq('player_id', authUserId)
+              .order('answered_at', { ascending: false })
+              .limit(500)
           ]);
 
-          if (sessRes.data && sessRes.data.length > 0) {
-            sessions = sessRes.data.map(s => ({
-              ...s,
-              chapter_title: s.chapters?.title || 'Sejarah 答题对局'
-            }));
+          if (sessRes.error) {
+            console.warn('[quizService] Error fetching game_sessions:', sessRes.error);
+            fetchError = sessRes.error;
+          } else if (Array.isArray(sessRes.data)) {
+            cloudSessions = sessRes.data;
           }
-          if (ansRes.data && ansRes.data.length > 0) answers = ansRes.data;
-          if (histRes.data && histRes.data.length > 0) wrongHistory = histRes.data;
+
+          if (ansRes.error) {
+            console.warn('[quizService] Error fetching player_answers:', ansRes.error);
+            if (!fetchError) fetchError = ansRes.error;
+          } else if (Array.isArray(ansRes.data)) {
+            cloudAnswers = ansRes.data;
+          }
         }
-      } catch (e) {
-        console.warn('[quizService] Cloud getPlayerSummaryStats error:', e.message);
+      } catch (err) {
+        console.warn('[quizService] getPlayerFullStats cloud exception:', err);
+        fetchError = err;
       }
     }
 
-    // Local fallback/merge
-    const localSessions = await this.getGameSessions(effectivePlayerId);
-    if (sessions.length === 0) {
-      sessions = localSessions;
-    } else {
-      // Enrich cloud sessions with local question details if missing
-      sessions = sessions.map(s => {
-        const matched = localSessions.find(ls => ls.id === s.id);
+    // Local sessions
+    const storageKey = `playbank_game_sessions_${effectivePlayerId}`;
+    let localSessions = [];
+    try {
+      const raw = this.getStorage(storageKey);
+      if (raw) localSessions = JSON.parse(raw);
+    } catch (e) {}
+
+    // Merge sessions
+    let mergedSessions = [];
+    if (cloudSessions.length > 0) {
+      mergedSessions = cloudSessions.map((cs) => {
+        const localMatch = localSessions.find(ls => ls.id === cs.id || (Math.abs(new Date(ls.started_at || 0) - new Date(cs.started_at || 0)) < 15000));
+        let questions = localMatch?.questions || [];
+
+        // If local questions missing, reconstruct from cloudAnswers
+        if (questions.length === 0 && cloudAnswers.length > 0) {
+          const matchedAnswers = cloudAnswers.filter(ca => {
+            if (ca.chapter_id !== cs.chapter_id) return false;
+            const aTime = new Date(ca.answered_at).getTime();
+            const sStart = new Date(cs.started_at).getTime() - 15000;
+            const sEnd = new Date(cs.ended_at || cs.created_at).getTime() + 15000;
+            return aTime >= sStart && aTime <= sEnd;
+          });
+
+          if (matchedAnswers.length > 0) {
+            questions = matchedAnswers.map((ca, idx) => {
+              const qData = ca.questions;
+              const opts = qData?.options || [];
+              const selOpt = opts.find(o => o.id === ca.selected_option_id);
+              const corrOpt = opts.find(o => o.id === ca.correct_option_id);
+
+              return {
+                question_no: idx + 1,
+                question_text: qData?.question || `第 ${idx + 1} 题`,
+                selected_option_text: (ca.selected_option_id === 'timeout' || !ca.selected_option_id) ? '未作答 / Time Out' : (selOpt?.text || '未作答'),
+                correct_option_text: corrOpt?.text || '正确答案',
+                explanation: qData?.explanation || '',
+                is_correct: Boolean(ca.is_correct),
+                response_time_ms: ca.response_time_ms || 0
+              };
+            });
+          }
+        }
+
+        const subName = cs.chapters?.subjects?.title_zh || cs.chapters?.subjects?.title_en || localMatch?.subject_name || '历史';
+        const chapTitle = cs.chapters?.title || localMatch?.chapter_title || 'Sejarah 答题对局';
+        const durationSec = cs.active_duration_seconds != null
+          ? Number(cs.active_duration_seconds)
+          : (cs.started_at && cs.ended_at ? Math.max(0, Math.round((new Date(cs.ended_at) - new Date(cs.started_at)) / 1000)) : 0);
+
         return {
-          ...s,
-          questions: (s.questions && s.questions.length > 0) ? s.questions : (matched?.questions || [])
+          id: cs.id,
+          player_id: cs.player_id,
+          chapter_id: cs.chapter_id,
+          chapter_title: chapTitle,
+          subject_name: subName,
+          started_at: cs.started_at,
+          ended_at: cs.ended_at,
+          total_questions: cs.total_questions || 8,
+          correct_count: cs.correct_count ?? 0,
+          wrong_count: cs.wrong_count ?? 0,
+          score: cs.score ?? 0,
+          earned_bp: cs.earned_bp ?? 0,
+          status: cs.status || 'completed',
+          active_duration_seconds: durationSec,
+          created_at: cs.created_at || cs.started_at,
+          questions: questions
         };
       });
+    } else {
+      mergedSessions = localSessions;
     }
 
-    if (answers.length === 0) {
-      answers = this.getAnswerHistory(effectivePlayerId);
-    }
-    if (wrongHistory.length === 0) {
-      wrongHistory = this.getWrongQuestionsHistory(effectivePlayerId);
+    if (fetchError && mergedSessions.length === 0) {
+      throw new Error(fetchError.message || '无法连接到云端数据库，请检查网络连接');
     }
 
-    // Real computations
-    const completedSessionsCount = sessions.filter(s => s.status === 'completed').length;
-    const sessionCorrectSum = sessions.reduce((acc, s) => acc + (Number(s.correct_count) || 0), 0);
-    const sessionWrongSum = sessions.reduce((acc, s) => acc + (Number(s.wrong_count) || 0), 0);
-    const answerCorrectCount = answers.filter(a => a.is_correct).length;
-    const answerWrongCount = answers.filter(a => !a.is_correct).length;
+    const effectiveAnswers = cloudAnswers.length > 0 ? cloudAnswers : this.getAnswerHistory(effectivePlayerId);
 
-    // Use most accurate count
-    const totalCorrect = Math.max(sessionCorrectSum, answerCorrectCount);
-    const totalWrong = Math.max(sessionWrongSum, answerWrongCount);
+    return {
+      sessions: mergedSessions,
+      answers: effectiveAnswers
+    };
+  },
 
-    let bestScore = 0;
-    let totalSeconds = 0;
-    for (const s of sessions) {
-      if (s.score && s.score > bestScore) bestScore = s.score;
-      if (s.earned_bp && s.earned_bp > bestScore) bestScore = s.earned_bp;
-      if (s.started_at && s.ended_at) {
-        const diff = (new Date(s.ended_at) - new Date(s.started_at)) / 1000;
-        if (diff > 0 && diff < 3600) totalSeconds += diff;
-      }
-    }
-    for (const a of answers) {
-      totalSeconds += ((a.response_time || a.response_time_ms || 2000) / 1000);
-    }
+  /**
+   * Step 4: Get Aggregated Summary Stats for Player Profile
+   * Strictly calculates REAL statistics (NO hardcoded 128h / 980 / 2480 / 312)
+   */
+  async getPlayerSummaryStats(playerId = null) {
+    const { sessions, answers } = await this.getPlayerFullStats(playerId);
+
+    // 4.2 Play Time: SUM(game_sessions.active_duration_seconds)
+    const totalSeconds = (sessions || []).reduce((acc, s) => {
+      const dur = s.active_duration_seconds != null
+        ? Number(s.active_duration_seconds)
+        : (s.started_at && s.ended_at ? Math.max(0, Math.round((new Date(s.ended_at) - new Date(s.started_at)) / 1000)) : 0);
+      return acc + (dur > 0 && dur <= 3600 ? dur : 0);
+    }, 0);
 
     const totalMinutes = Math.round(totalSeconds / 60);
 
+    // 4.2 Correct & Wrong Answers
+    const answerCorrectCount = (answers || []).filter(a => a.is_correct === true).length;
+    const answerWrongCount = (answers || []).filter(a => a.is_correct === false).length;
+    const sessionCorrectSum = (sessions || []).reduce((acc, s) => acc + (Number(s.correct_count) || 0), 0);
+    const sessionWrongSum = (sessions || []).reduce((acc, s) => acc + (Number(s.wrong_count) || 0), 0);
+
+    const totalCorrect = Math.max(sessionCorrectSum, answerCorrectCount);
+    const totalWrong = Math.max(sessionWrongSum, answerWrongCount);
+
+    // 4.2 Best Score: MAX(game_sessions.score) of completed sessions (0 if none)
+    const completedSessions = (sessions || []).filter(s => s.status === 'completed' || s.score != null);
+    const bestScore = completedSessions.length
+      ? Math.max(...completedSessions.map(session => Number(session.score) || 0))
+      : 0;
+
     return {
-      completedSessionsCount: completedSessionsCount,
-      totalCorrect: totalCorrect,
-      totalWrong: totalWrong,
-      bestScore: bestScore,
-      totalSeconds: totalSeconds,
-      totalMinutes: totalMinutes,
+      completedSessionsCount: completedSessions.length,
+      totalCorrect,
+      totalWrong,
+      bestScore,
+      totalSeconds,
+      totalMinutes,
       recentSessions: sessions,
-      wrongQuestions: wrongHistory
+      wrongQuestions: this.getWrongQuestionsHistory(playerId)
     };
   }
 };

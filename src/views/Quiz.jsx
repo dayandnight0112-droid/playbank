@@ -215,13 +215,24 @@ const Quiz = ({
           ? q.isUserCorrect
           : (q.revealedCorrectOptionId ? q.revealedCorrectOptionId === q.selectedOptionId : false);
 
+        let selectedText = q.selectedOptionText || selectedOpt?.text || null;
+        if (!selectedText || q.selectedOptionId === 'timeout' || q.selectedOptionId === 'unanswered' || !q.selectedOptionId) {
+          selectedText = '未作答 / Time Out';
+        }
+
+        let correctText = correctOpt?.text || q.revealedCorrectText || q.correctAnswer || '正确答案';
+        if (typeof correctText === 'string' && correctText.startsWith('opt_')) {
+          correctText = '正确答案';
+        }
+
         return {
           question_no: idx + 1,
           question_text: q.question || q.text || `题目 #${idx + 1}`,
-          selected_option_text: q.selectedOptionText || selectedOpt?.text || '未作答',
-          correct_option_text: (correctOpt?.text) || (q.revealedCorrectText) || (q.correctAnswer) || '正确答案',
+          selected_option_text: selectedText,
+          correct_option_text: correctText,
           explanation: q.revealedExplanation || q.explanation || '',
-          is_correct: isUserCorrect
+          is_correct: isUserCorrect,
+          response_time_ms: q.responseTimeMs || 2000
         };
       });
 
@@ -322,9 +333,20 @@ const Quiz = ({
 
       question.revealedCorrectOptionId = correctOptId;
       question.revealedExplanation = explanation;
+      question.selectedOptionId = 'timeout';
+      question.selectedOptionText = '未作答 / Time Out';
       const correctOpt = shuffledOptions.find(o => o.id === correctOptId);
       if (correctOpt) {
         question.revealedCorrectText = `${correctOpt.letter}. ${correctOpt.text}`;
+      }
+
+      // Submit timeout answer to Supabase if impression_id exists
+      if (question.impression_id) {
+        quizService.submitAnswerRPC({
+          impressionId: question.impression_id,
+          selectedOptionId: 'timeout',
+          responseTimeMs: 10000
+        }).catch(err => console.warn('[Quiz] Timeout submitAnswerRPC error:', err));
       }
 
       // Step 18: Record answer and cumulative wrong history on timeout
@@ -333,7 +355,7 @@ const Quiz = ({
         chapterId: quizParams?.chapterId || `chap_${quizParams?.subject || 'history'}_f${quizParams?.form || 4}`,
         questionId: String(question.question_id || question.id || `q_${currentIndex + 1}`),
         chapterVersion: quizParams?.versionNo || 1,
-        selectedOptionId: null,
+        selectedOptionId: 'timeout',
         isCorrect: false,
         responseTimeMs: 10000,
         cycleNumber: cycleInfo?.cycleNumber || 1,
