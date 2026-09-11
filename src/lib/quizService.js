@@ -15,6 +15,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured } from './supabaseClient.js';
+import { playerAuthService } from './playerAuthService.js';
 
 export const FALLBACK_GRADES = [
   { id: 'year-1', name: 'Year 1', level: 'primary', order: 1 },
@@ -316,31 +317,53 @@ export const quizService = {
     fallbackQuestions = []
   }) {
     const safeLimit = Math.max(1, Math.min(Number(limit) || 8, 20));
-    const effectivePlayerId = playerId || 'guest';
-    const isGuest = !playerId || playerId === 'guest' || String(playerId).startsWith('guest_');
-
-    // 1. If Supabase is configured and caller has a registered player session (not guest), attempt Cloud RPC
-    if (!isGuest && isSupabaseConfigured && supabase) {
+    // 1. If Supabase is configured, ensure auth session is ready and call Cloud RPC
+    if (isSupabaseConfigured && supabase) {
       try {
-        const { data: sessionData } = await supabase.auth.getSession();
-        if (sessionData && sessionData.session) {
+        // Step 2.1: Ensure auth session is initialized (Anonymous or Registered)
+        await playerAuthService.initAuth();
+        const { data: { session } } = await supabase.auth.getSession();
+
+        if (session && session.user) {
           const { data: rpcData, error: rpcErr } = await supabase.rpc('get_next_questions', {
             p_chapter_id: chapterId,
             p_limit: safeLimit
           });
 
-          if (!rpcErr && rpcData && rpcData.questions && rpcData.questions.length > 0) {
-            // Step 2 Security Guarantee: Strip any accidental answers/explanations
-            const safeQuestions = rpcData.questions.map(q => ({
-              id: String(q.question_id || q.id),
-              question_id: String(q.question_id || q.id),
-              impression_id: q.impression_id,
-              question_no: q.question_no,
-              question: q.question,
-              text: q.question,
-              options: q.options || [],
-              difficulty: q.difficulty || 'Medium'
-            }));
+          if (rpcErr) {
+            console.error('[quizService] Cloud get_next_questions RPC error:', rpcErr);
+            // Step 2.6: Do NOT silently fallback for published chapters!
+            throw new Error(`加载章节题目失败: ${rpcErr.message}`);
+          }
+
+          if (rpcData && rpcData.questions) {
+            if (rpcData.questions.length === 0) {
+              throw new Error('本章节暂无可用题目，请联系管理员。');
+            }
+
+            // Step 2.4 & Security Guarantee: Cleanly format options and question text with zero leakage
+            const safeQuestions = rpcData.questions.map((q) => {
+              let rawOptions = [];
+              if (Array.isArray(q.options)) {
+                rawOptions = q.options.map((opt, i) => {
+                  if (typeof opt === 'string') {
+                    return { id: `opt_${i + 1}`, text: opt };
+                  }
+                  return { id: String(opt.id || `opt_${i + 1}`), text: String(opt.text || '') };
+                });
+              }
+
+              return {
+                id: String(q.question_id || q.id),
+                question_id: String(q.question_id || q.id),
+                impression_id: q.impression_id,
+                question_no: Number(q.question_no || 1),
+                question: String(q.question || q.text || ''),
+                text: String(q.question || q.text || ''),
+                options: rawOptions,
+                difficulty: q.difficulty || 'Medium'
+              };
+            });
 
             return {
               cycle_number: rpcData.cycle_number,
@@ -351,16 +374,19 @@ export const quizService = {
               served_in_cycle: rpcData.served_in_cycle || 0,
               is_cloud_rpc: true
             };
-          } else if (rpcErr) {
-            console.warn('[quizService] Cloud get_next_questions RPC skipped, using local fallback:', rpcErr.message);
           }
+        } else {
+          // If Supabase session is missing after initAuth, report error so user can re-auth
+          throw new Error('未检测到有效的玩家登录会话，请刷新重试。');
         }
       } catch (err) {
-        console.warn('[quizService] Cloud get_next_questions RPC skipped, using local pool engine:', err.message);
+        // Step 2.6: Do NOT silently fallback to demo bank for published chapters
+        console.error('[quizService] getNextQuestions error:', err.message);
+        throw err;
       }
     }
 
-    // 2. High-Performance Local Unserved Pool Engine (Step 15) Fallback
+    // 2. Offline / Local Demo Fallback (ONLY when Supabase is completely unconfigured in .env)
     const candidateList = (availableQuestions && availableQuestions.length > 0) ? availableQuestions : fallbackQuestions;
     const totalQuestionsCount = candidateList.length;
     if (totalQuestionsCount === 0) {

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { ArrowLeft, Clock, Check, Trophy, Flame, ChevronRight, CheckCircle2, MinusCircle, XCircle } from 'lucide-react';
+import { ArrowLeft, Clock, Check, Trophy, Flame, ChevronRight, CheckCircle2, MinusCircle, XCircle, AlertCircle, RefreshCw } from 'lucide-react';
 import { mockDb } from '../lib/mockDb';
 import { getMatchingQuestions } from '../lib/bossTrigger';
 import { quizService } from '../lib/quizService.js';
@@ -140,16 +140,22 @@ const Quiz = ({
   const [animVars, setAnimVars] = useState({});
   const hasRecordedMissionsRef = useRef(false);
   const [cycleInfo, setCycleInfo] = useState(null);
+  const [isLoadingQuestions, setIsLoadingQuestions] = useState(true);
+  const [loadError, setLoadError] = useState(null);
+  const [submitError, setSubmitError] = useState(null);
 
-  // Step 15 & 17: Initialize quiz with secure candidate pool management & random ordering
-  useEffect(() => {
-    let isMounted = true;
-    (async () => {
+  // Step 2.1 & 2.6: Initialize quiz with secure candidate pool and explicit error state
+  const loadQuizQuestions = useCallback(async () => {
+    setIsLoadingQuestions(true);
+    setLoadError(null);
+    setSubmitError(null);
+
+    try {
       const chapterId = quizParams?.chapterId || `chap_${quizParams?.subject || 'history'}_f${quizParams?.form || 4}`;
       const randomEnabled = quizParams?.randomQuestions !== undefined ? quizParams.randomQuestions : true;
       const playerId = currentUser?.id || 'guest';
 
-      // Safe local fallback questions in case offline or Guest
+      // Safe local fallback questions ONLY for non-cloud offline demo mode
       const matched = getMatchingQuestions(
         quizParams?.subjectTitle || quizParams?.subject || 'History',
         quizParams?.form || 4
@@ -165,21 +171,30 @@ const Quiz = ({
         fallbackQuestions
       });
 
-      if (!isMounted) return;
-      const activeQuestions = batch.questions && batch.questions.length > 0 ? batch.questions : fallbackQuestions.slice(0, 8);
+      if (!batch?.questions || batch.questions.length === 0) {
+        throw new Error('本章节暂无可作答的已发布题目。');
+      }
+
       setCycleInfo({
         cycleNumber: batch.cycle_number,
         remainingInCycle: batch.remaining_in_cycle,
         servedInCycle: batch.served_in_cycle,
         totalInCycle: batch.total_in_cycle
       });
-      setQuestions(activeQuestions);
-      setupQuestion(activeQuestions[0]);
+      setQuestions(batch.questions);
+      setupQuestion(batch.questions[0]);
       setStartTime(Date.now());
-    })();
+      setIsLoadingQuestions(false);
+    } catch (err) {
+      console.error('[Quiz] loadQuizQuestions failed:', err);
+      setLoadError(err.message || '加载题目失败，请重试。');
+      setIsLoadingQuestions(false);
+    }
+  }, [quizParams, currentUser]);
 
-    return () => { isMounted = false; };
-  }, []);
+  useEffect(() => {
+    loadQuizQuestions();
+  }, [loadQuizQuestions]);
 
   // Step 7: Quiz 挑战完成进入结算时，自动推进 Daily Missions 进度（不直接给水，只推进度）
   useEffect(() => {
@@ -320,6 +335,7 @@ const Quiz = ({
     if (question.impression_id) {
       // Step 2: Authoritative Cloud Server-Side Grading via submit_answer RPC
       try {
+        setSubmitError(null);
         const res = await quizService.submitAnswerRPC({
           impressionId: question.impression_id,
           selectedOptionId: optId,
@@ -330,6 +346,10 @@ const Quiz = ({
         explanation = res.explanation || '';
       } catch (err) {
         console.error('[Quiz] submit_answer RPC failed:', err);
+        setSubmitError(err.message || '答案提交失败，请重试');
+        setSelectedOption(null);
+        setSelectedOptionId(null);
+        return; // Pause on error so answer is not lost and not faked
       }
     } else {
       // Fallback local evaluation for offline/demo bank
@@ -432,7 +452,62 @@ const Quiz = ({
     }, 2000);
   }, [currentIndex, questions, startTime, onCheckBossTrigger, sessionBP, correctCount, skippedCount, maxCombo]);
 
-  if (questions.length === 0) return <div className="view-content flex-center">Loading...</div>;
+  if (loadError) {
+    return (
+      <div className="view-content flex-center flex-column" style={{ padding: '32px 20px', textAlign: 'center', minHeight: '80vh', justifyContent: 'center' }}>
+        <div style={{ background: '#FFEFE5', padding: '16px', borderRadius: '50%', marginBottom: '16px', border: '2px solid #FF5722', display: 'inline-flex' }}>
+          <AlertCircle size={44} color="#FF5722" />
+        </div>
+        <h2 style={{ fontSize: '20px', fontWeight: 900, marginBottom: '8px', color: '#000' }}>题目加载失败</h2>
+        <p style={{ fontSize: '13px', color: '#666', marginBottom: '24px', maxWidth: '300px', lineHeight: 1.5 }}>
+          {loadError}
+        </p>
+        <button
+          onClick={loadQuizQuestions}
+          style={{
+            padding: '12px 28px',
+            background: '#000',
+            color: '#FFBC00',
+            fontWeight: 800,
+            borderRadius: '9999px',
+            border: 'none',
+            cursor: 'pointer',
+            fontSize: '14px',
+            boxShadow: 'var(--card-shadow-sm)'
+          }}
+        >
+          重新加载 (Retry)
+        </button>
+        <button
+          onClick={() => onBack(0)}
+          style={{
+            marginTop: '12px',
+            padding: '8px 20px',
+            background: 'transparent',
+            color: '#666',
+            fontWeight: 600,
+            border: 'none',
+            cursor: 'pointer',
+            fontSize: '13px'
+          }}
+        >
+          返回关卡选择
+        </button>
+      </div>
+    );
+  }
+
+  if (isLoadingQuestions || questions.length === 0) {
+    return (
+      <div className="view-content flex-center flex-column" style={{ minHeight: '80vh', justifyContent: 'center' }}>
+        <RefreshCw size={36} color="#000" style={{ marginBottom: '16px', animation: 'spin 1s linear infinite' }} />
+        <p style={{ fontWeight: 800, fontSize: '15px' }}>正在加载章节题目...</p>
+        <style>{`
+          @keyframes spin { 100% { transform: rotate(360deg); } }
+        `}</style>
+      </div>
+    );
+  }
 
   if (status === 'countdown') {
     return (
@@ -710,6 +785,26 @@ const Quiz = ({
       {/* Main Container */}
       <div style={{ flex: 1, padding: '0 20px', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
         
+        {/* Submit Error Banner */}
+        {submitError && (
+          <div style={{
+            background: '#FFEFE5',
+            border: '2px solid #FF5722',
+            color: '#D84315',
+            padding: '12px 16px',
+            borderRadius: '12px',
+            marginBottom: '16px',
+            fontSize: '13px',
+            fontWeight: 800,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px'
+          }}>
+            <AlertCircle size={18} color="#FF5722" style={{ flexShrink: 0 }} />
+            <span>{submitError}</span>
+          </div>
+        )}
+
         {/* Question Card */}
         <div style={{
           background: 'var(--card-bg)',

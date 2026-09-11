@@ -23,6 +23,7 @@ import ExitRetentionModal from './components/home/ExitRetentionModal';
 import BossBattle from './views/BossBattle';
 import { evaluateBossTrigger } from './lib/bossTrigger';
 import OnboardingFlow from './views/onboarding/OnboardingFlow';
+import { playerAuthService } from './lib/playerAuthService';
 
 function App() {
   const [guestProfile, setGuestProfile] = useState(() => mockDb.getGuestProfile());
@@ -67,6 +68,15 @@ function App() {
       return () => clearTimeout(timer);
     }
   }, [welcomeBackToast]);
+
+  // Step 2.1: Initialize Supabase Player Auth on mount
+  useEffect(() => {
+    playerAuthService.initAuth().then((res) => {
+      if (res?.user) {
+        console.log(`[App] Player auth initialized: ${res.user.id} (anonymous: ${res.isAnonymous})`);
+      }
+    });
+  }, []);
 
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [showSaveModal, setShowSaveModal] = useState(false);
