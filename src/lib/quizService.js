@@ -561,33 +561,21 @@ export const quizService = {
    * @param {number} params.responseTimeMs
    * @returns {Promise<{ is_correct: boolean, correct_option_id: string, explanation: string, is_idempotent: boolean }>}
    */
-  async submitAnswerRPC({ impressionId, selectedOptionId, responseTimeMs = 1000, sessionId = null }) {
+  async submitAnswerRPC({ impressionId, selectedOptionId, responseTimeMs = 1000, sessionId }) {
     if (!impressionId) {
       throw new Error('Missing impression_id for submit_answer RPC');
     }
+    if (!sessionId) {
+      throw new Error('Missing sessionId for submit_answer RPC: answers must be bound to a game session');
+    }
 
     if (isSupabaseConfigured && supabase) {
-      let rpcParams = {
+      const { data, error } = await supabase.rpc('submit_answer', {
         p_impression_id: impressionId,
         p_selected_option_id: selectedOptionId || '',
-        p_response_time_ms: Math.max(0, Math.round(responseTimeMs))
-      };
-      if (sessionId) {
-        rpcParams.p_session_id = sessionId;
-      }
-
-      let { data, error } = await supabase.rpc('submit_answer', rpcParams);
-
-      // If the 4-arg overload hasn't been migrated yet in Supabase (PGRST202), retry with 3 args
-      if (error && error.code === 'PGRST202' && sessionId) {
-        const retry = await supabase.rpc('submit_answer', {
-          p_impression_id: impressionId,
-          p_selected_option_id: selectedOptionId || '',
-          p_response_time_ms: Math.max(0, Math.round(responseTimeMs))
-        });
-        data = retry.data;
-        error = retry.error;
-      }
+        p_response_time_ms: Math.max(0, Math.round(responseTimeMs)),
+        p_session_id: sessionId
+      });
 
       if (error) {
         console.error('[quizService] submit_answer RPC error:', error.message);
@@ -864,8 +852,9 @@ export const quizService = {
   },
 
   /**
-   * Requirement 6: Complete the exact same Game Session upon finishing 8 questions
-   * Fail-fast: awaits Supabase UPDATE and throws if update does not succeed
+   * Requirement 5 & 6: Authoritative Server-Side Game Session Settlement
+   * Calls secure complete_game_session RPC: server calculates score and counts from player_answers.
+   * earned_bp is strictly decoupled and stored as 0.
    */
   async completeGameSession({
     sessionId,
@@ -884,7 +873,12 @@ export const quizService = {
       throw new Error('结算保存失败: 缺少有效的 Session ID');
     }
 
-    const endedAt = new Date().toISOString();
+    let authoritativeResult = {
+      score: score,
+      correct_count: correctCount,
+      wrong_count: wrongCount,
+      earned_bp: 0
+    };
 
     if (isSupabaseConfigured && supabase) {
       const authUserId = await playerAuthService.getAuthUserId();
@@ -892,35 +886,28 @@ export const quizService = {
         throw new Error('未检测到有效的玩家登录态，无法保存结算');
       }
 
-      const updateRes = await supabase
-        .from('game_sessions')
-        .update({
-          status: 'completed',
-          ended_at: endedAt,
-          total_questions: totalQuestions,
-          correct_count: correctCount,
-          wrong_count: wrongCount,
-          score: score,
-          earned_bp: earnedBP
-        })
-        .eq('id', sessionId)
-        .eq('player_id', authUserId)
-        .select('id, status, score, correct_count, wrong_count')
-        .single();
+      // Requirement 5: Call authoritative complete_game_session RPC (server computes scores from answers)
+      const { data: rpcRes, error: rpcErr } = await supabase.rpc('complete_game_session', {
+        p_session_id: sessionId
+      });
 
-      if (updateRes.error) {
-        console.error('[GameSession] Complete failed:', updateRes.error);
-        throw new Error(`结算保存失败: ${updateRes.error.message || updateRes.error.details || 'Supabase更新被拒绝'}`);
+      if (rpcErr) {
+        console.error('[GameSession] complete_game_session RPC error:', rpcErr);
+        throw new Error(`结算保存失败: ${rpcErr.message || 'Supabase结算被拒绝'}`);
       }
 
-      if (!updateRes.data || updateRes.data.status !== 'completed') {
+      if (!rpcRes || rpcRes.status !== 'completed') {
         throw new Error('结算保存失败: 数据库未能成功更新对局状态为 completed');
       }
 
-      console.log(`[GameSession] Completed\nsession_id: ${sessionId}\nstatus: completed\nscore: ${score}\ncorrect_count: ${correctCount}\nwrong_count: ${wrongCount}`);
+      authoritativeResult = rpcRes;
+
+      console.log(`[GameSession] Completed\nsession_id: ${sessionId}\nstatus: completed\nscore: ${authoritativeResult.score}\ncorrect_count: ${authoritativeResult.correct_count}\nwrong_count: ${authoritativeResult.wrong_count}\nearned_bp: ${authoritativeResult.earned_bp || 0}`);
     }
 
-    // Save questions details associated with this exact session
+    const endedAt = new Date().toISOString();
+
+    // Save questions details associated with this exact session for Game History accordion
     this.saveSessionDetails(sessionId, {
       id: sessionId,
       chapter_id: chapterId,
@@ -929,15 +916,15 @@ export const quizService = {
       started_at: startedAt,
       ended_at: endedAt,
       total_questions: totalQuestions,
-      correct_count: correctCount,
-      wrong_count: wrongCount,
-      score: score,
-      earned_bp: earnedBP,
+      correct_count: authoritativeResult.correct_count ?? correctCount,
+      wrong_count: authoritativeResult.wrong_count ?? wrongCount,
+      score: authoritativeResult.score ?? score,
+      earned_bp: authoritativeResult.earned_bp ?? 0,
       status: 'completed',
       questions: questionsDetails
     });
 
-    return { sessionId, status: 'completed' };
+    return { sessionId, status: 'completed', ...authoritativeResult };
   },
 
   /**
