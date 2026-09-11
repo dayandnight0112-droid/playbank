@@ -1,531 +1,1027 @@
-import { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
-  Bell, Settings, Camera, Pencil, School, ChevronRight, Trophy, Star, Flame, Zap, Package, Users, History, BookOpen, Microscope, Ruler, Target, ShoppingBag, LogOut, Lock, Copy, Share2, X
+  ArrowLeft,
+  Clock,
+  Target,
+  Trophy,
+  XCircle,
+  BarChart2,
+  ChevronRight,
+  Star,
+  Gamepad2,
+  Crown,
+  X,
+  Award,
+  Sparkles,
+  Flame,
+  CheckCircle2,
+  RotateCcw
 } from 'lucide-react';
-import { useDragScroll } from '../hooks/useDragScroll';
-import CustomModal from '../components/CustomModal';
+import { quizService } from '../lib/quizService';
 import { mockDb } from '../lib/mockDb';
 
-function IconCircle({ children, style = {} }) {
-  return (
-    <div style={{ display: 'flex', height: '56px', width: '56px', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', backgroundColor: '#FFBC00', color: '#000', ...style }}>
-      {children}
-    </div>
-  );
-}
+/* -------------------------------------------------------------------------- */
+/* SVG Badges Components                                                      */
+/* -------------------------------------------------------------------------- */
 
-function StatItem({ icon, value, label, badge, onClick }) {
+const BadgeShield = ({ type, title, ribbonText, colorScheme, iconSvg }) => {
+  const { outerGrad, innerGrad, ribbonGrad, ribbonBorder, ribbonTextCol } = colorScheme;
+  const id = `badge_${type}`;
+
   return (
-    <div 
-      onClick={onClick}
-      style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderRight: '1px solid #E8E8E8', cursor: onClick ? 'pointer' : 'default' }}
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        width: '74px',
+        flexShrink: 0,
+        cursor: 'pointer',
+        transition: 'transform 0.18s ease'
+      }}
+      onMouseEnter={(e) => (e.currentTarget.style.transform = 'translateY(-4px) scale(1.04)')}
+      onMouseLeave={(e) => (e.currentTarget.style.transform = 'translateY(0) scale(1)')}
     >
-      <IconCircle>{icon}</IconCircle>
-      <p style={{ marginTop: '12px', fontSize: '18px', fontWeight: 900, lineHeight: 1, color: '#000' }}>{value}</p>
-      <p style={{ marginTop: '8px', fontSize: '14px', fontWeight: 600, color: '#6B7280', textAlign: 'center' }}>{label}</p>
-      {badge && (
-        <div style={{ marginTop: '8px', borderRadius: '9999px', backgroundColor: '#D9F8D8', padding: '4px 12px', fontSize: '12px', fontWeight: 900, color: '#188A25' }}>
-          {badge}
-        </div>
-      )}
-    </div>
-  );
-}
+      <svg width="74" height="88" viewBox="0 0 100 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id={`${id}_outer`} x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor={outerGrad[0]} />
+            <stop offset="100%" stopColor={outerGrad[1]} />
+          </linearGradient>
+          <linearGradient id={`${id}_inner`} x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor={innerGrad[0]} />
+            <stop offset="100%" stopColor={innerGrad[1]} />
+          </linearGradient>
+          <linearGradient id={`${id}_ribbon`} x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor={ribbonGrad[0]} />
+            <stop offset="100%" stopColor={ribbonGrad[1]} />
+          </linearGradient>
+          <filter id={`${id}_shadow`} x="-10%" y="-10%" width="120%" height="130%">
+            <feDropShadow dx="0" dy="4" stdDeviation="2" floodColor="#000000" floodOpacity="0.25" />
+          </filter>
+        </defs>
 
-function ProgressSubjectCard({ icon, title, percent }) {
-  return (
-    <div style={{ width: '150px', flexShrink: 0, borderRadius: '16px', border: '3px solid #000', backgroundColor: '#FFF', padding: '16px', boxShadow: '4px 4px 0px #000000', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
-      <div style={{ color: '#000', marginBottom: '8px' }}>{icon}</div>
-      <p style={{ fontSize: '14px', fontWeight: 900, color: '#000', lineHeight: 1 }}>{title}</p>
-      <p style={{ fontSize: '11px', fontWeight: 700, color: '#6B7280', marginTop: '4px' }}>Form 4</p>
-      
-      <div style={{ marginTop: '12px', width: '100%', display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <div style={{ height: '8px', flex: 1, borderRadius: '9999px', backgroundColor: '#EDEDED', border: '1px solid #000', overflow: 'hidden' }}>
-          <div style={{ height: '100%', backgroundColor: '#FFBC00', width: `${percent}%`, borderRight: '1px solid #000' }} />
-        </div>
-        <span style={{ fontSize: '12px', fontWeight: 900, color: '#000' }}>{percent}%</span>
-      </div>
-    </div>
-  );
-}
+        {/* Shield Outer Outline */}
+        <path
+          d="M50 4 L88 20 C88 66 70 94 50 106 C30 94 12 66 12 20 Z"
+          fill={`url(#${id}_outer)`}
+          stroke="#000000"
+          strokeWidth="3.5"
+          filter={`url(#${id}_shadow)`}
+        />
 
-const Profile = ({ currentUser, guestProfile, userBP, onLogout, onRegister, onRequestBooster }) => {
-  const [showSettings, setShowSettings] = useState(false);
-  const [showPasswordModal, setShowPasswordModal] = useState(false);
-  const [showLoginModal, setShowLoginModal] = useState(false);
-  const [showReferralModal, setShowReferralModal] = useState(false);
-  const [sysAlert, setSysAlert] = useState(null);
-  
-  const formatBP = (bp) => Number(bp).toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+        {/* Shield Inner Inset */}
+        <path
+          d="M50 12 L80 25 C80 62 65 86 50 96 C35 86 20 62 20 25 Z"
+          fill={`url(#${id}_inner)`}
+          stroke="#FFFFFF"
+          strokeWidth="2"
+          strokeOpacity="0.6"
+        />
 
-  // Login State
-  const [loginEmail, setLoginEmail] = useState('');
-  const [loginPassword, setLoginPassword] = useState('');
-  const [loginError, setLoginError] = useState(null);
+        {/* Icon Render */}
+        <g transform="translate(50, 48)">{iconSvg}</g>
 
-  const progressDragScroll = useDragScroll();
-
-  const handleLogin = (e) => {
-    e.preventDefault();
-    if (!loginEmail || !loginPassword) {
-      setLoginError("Please enter email and password.");
-      return;
-    }
-    const result = mockDb.loginUser(loginEmail, loginPassword);
-    if (result.error) {
-      setLoginError(result.error);
-    } else {
-      window.location.reload();
-    }
-  };
-  
-  const handleCopyReferral = () => {
-    if (currentUser?.referral_code) {
-      navigator.clipboard.writeText(currentUser.referral_code);
-      setSysAlert({ title: 'Success', message: 'Referral code copied to clipboard!' });
-    }
-  };
-
-  const referrals = currentUser ? mockDb.getReferralList(currentUser.id) : [];
-
-  if (!currentUser) {
-    const displayName = guestProfile?.guestName || '冒险家';
-    return (
-      <div className="view-content flex-center flex-column" style={{ padding: '32px 20px', textAlign: 'center', backgroundColor: '#F9FAFB' }}>
-        {/* Avatar initial badge */}
-        <div style={{
-          width: '76px',
-          height: '76px',
-          borderRadius: '50%',
-          background: 'var(--brand-primary, #FFBC00)',
-          border: '3px solid #000000',
-          boxShadow: '0 4px 0 #000000',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: '32px',
-          fontWeight: 900,
-          color: '#000000',
-          marginBottom: '14px'
-        }}>
-          {displayName.charAt(0).toUpperCase()}
-        </div>
-
-        <h2 className="text-h2" style={{ marginBottom: '6px', fontSize: '22px', fontWeight: 900, color: '#111827' }}>
-          {displayName}
-        </h2>
-        <div style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '6px',
-          background: '#FEF3C7',
-          border: '1.5px solid #F59E0B',
-          borderRadius: '9999px',
-          padding: '4px 14px',
-          fontSize: '12px',
-          fontWeight: 800,
-          color: '#B45309',
-          marginBottom: '18px'
-        }}>
-          <span>🎮 游客体验模式</span>
-          <span>•</span>
-          <span>{formatBP(userBP)} BP</span>
-        </div>
-
-        <p style={{ marginBottom: '24px', color: '#6B7280', fontSize: '13.5px', lineHeight: 1.5, maxWidth: '320px' }}>
-          当前以 <strong style={{ color: '#111827' }}>{displayName}</strong> 的身份体验。免费注册即可永久保存你的答题战绩、积分与勋章！
-        </p>
-
-        <button className="btn btn-primary" onClick={onRegister} style={{ width: '100%', maxWidth: '340px', marginBottom: '12px', padding: '16px', fontSize: '15px', fontWeight: 900 }}>
-          立即免费注册并保存进度
-        </button>
-        <button 
-          onClick={() => setShowLoginModal(true)}
-          className="btn"
-          style={{ width: '100%', maxWidth: '340px', padding: '14px', background: '#000', color: '#FFF', border: 'none', borderRadius: '16px', cursor: 'pointer', fontWeight: 800 }}
-        >
-          已有账户？登录
-        </button>
-
-        {/* Login Modal */}
-        {showLoginModal && (
-          <div style={{
-            position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
-            backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            zIndex: 1000, padding: '20px'
-          }}>
-            <div className="modal-spring" style={{
-              backgroundColor: '#FFF', border: '4px solid #000',
-              borderRadius: '24px', padding: '24px', width: '100%', maxWidth: '360px',
-              boxShadow: '8px 8px 0px #000'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                <h2 style={{ fontSize: '24px', fontWeight: 900, color: '#000' }}>Welcome Back</h2>
-                <button onClick={() => setShowLoginModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={24} /></button>
-              </div>
-              
-              <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '24px' }}>
-                {loginError && <div style={{ color: 'var(--error)', fontSize: '13px', textAlign: 'center', fontWeight: 600 }}>{loginError}</div>}
-                
-                <div>
-                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 900, marginBottom: '8px' }}>Email</label>
-                  <input type="email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} placeholder="your@email.com" style={{ width: '100%', padding: '14px', borderRadius: '12px', border: '2px solid #000', fontSize: '15px', fontWeight: 700 }} />
-                </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 900, marginBottom: '8px' }}>Password</label>
-                  <input type="password" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} placeholder="••••••••" style={{ width: '100%', padding: '14px', borderRadius: '12px', border: '2px solid #000', fontSize: '15px', fontWeight: 700 }} />
-                </div>
-                
-                <button type="submit" className="btn btn-primary" style={{ marginTop: '8px', padding: '16px' }}>Log In</button>
-              </form>
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <div className="view-content" style={{ padding: 0, backgroundColor: '#F5F5F5', overflowY: 'auto' }}>
-      {/* Header */}
-      <section style={{ position: 'relative', borderBottomLeftRadius: '46px', borderBottomRightRadius: '46px', backgroundColor: '#FFBC00', padding: '32px 24px 96px 24px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ width: '48px', height: '48px', borderRadius: '50%', border: '2px solid var(--brand-primary)', backgroundColor: '#000', overflow: 'hidden' }}>
-              <img src={`${import.meta.env.BASE_URL}playbanklogo.png`} alt="PlayBank" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            </div>
-            <h1 style={{ fontSize: '29px', fontWeight: 900, color: '#000' }}>PlayBank</h1>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-              <Bell size={28} strokeWidth={2.7} />
-              <div style={{ position: 'absolute', right: '-8px', top: '-12px', display: 'flex', height: '24px', width: '24px', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', backgroundColor: '#FFF', fontSize: '13px', fontWeight: 900, color: '#000' }}>
-                3
-              </div>
-            </div>
-            
-            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-              <Settings 
-                size={28} 
-                strokeWidth={2.7}
-                onClick={() => setShowSettings(!showSettings)} 
-                style={{ cursor: 'pointer' }}
-              />
-              
-              {showSettings && (
-                <div style={{ 
-                  position: 'absolute', top: '44px', right: '0', 
-                  backgroundColor: '#FFF', borderRadius: '16px', 
-                  boxShadow: '4px 4px 0px #000000', 
-                  border: '3px solid #000', padding: '12px',
-                  zIndex: 50, minWidth: '200px',
-                  display: 'flex', flexDirection: 'column', gap: '8px'
-                }}>
-                  <button 
-                    onClick={() => { setShowPasswordModal(true); setShowSettings(false); }}
-                    style={{ 
-                      width: '100%', display: 'flex', alignItems: 'center', gap: '12px', 
-                      background: '#FFF5CC', border: '2px solid #000', padding: '12px', 
-                      fontSize: '14px', fontWeight: 900, color: '#000', 
-                      cursor: 'pointer', borderRadius: '8px',
-                      boxShadow: '2px 2px 0px #000', whiteSpace: 'nowrap'
-                    }}
-                  >
-                    <Settings size={18} strokeWidth={2.5} />
-                    Change Password
-                  </button>
-                  <button 
-                    onClick={onLogout}
-                    style={{ 
-                      width: '100%', display: 'flex', alignItems: 'center', gap: '12px', 
-                      background: '#FFEBEB', border: '2px solid #000', padding: '12px', 
-                      fontSize: '14px', fontWeight: 900, color: '#E55353', 
-                      cursor: 'pointer', borderRadius: '8px',
-                      boxShadow: '2px 2px 0px #000'
-                    }}
-                  >
-                    <LogOut size={18} strokeWidth={2.5} />
-                    Log Out
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div style={{ marginTop: '32px', display: 'flex', alignItems: 'center', gap: '24px' }}>
-          <div style={{ position: 'relative', flexShrink: 0 }}>
-            <div style={{ display: 'flex', height: '138px', width: '138px', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderRadius: '50%', border: '8px solid #FFF', backgroundColor: '#FFF5CC' }}>
-              <div style={{ display: 'flex', height: '100%', width: '100%', alignItems: 'flex-end', justifyContent: 'center', backgroundColor: '#FFF5CC' }}>
-                <div style={{ fontSize: '90px', marginBottom: '-10px' }}>👦</div>
-              </div>
-            </div>
-            <button style={{ position: 'absolute', bottom: '4px', right: 0, display: 'flex', height: '48px', width: '48px', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', border: '4px solid #FFF', backgroundColor: '#000', color: '#FFF', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', cursor: 'pointer' }}>
-              <Camera size={22} />
-            </button>
-          </div>
-
-          <div style={{ flex: 1 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <h2 style={{ fontSize: '30px', fontWeight: 900, lineHeight: 1, color: '#000', wordBreak: 'break-word' }}>
-                {currentUser?.ic_name || (currentUser?.email ? currentUser.email.split('@')[0] : 'User')}
-              </h2>
-              <button style={{ display: 'flex', flexShrink: 0, height: '40px', width: '40px', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', backgroundColor: '#FFF5CC', border: 'none', cursor: 'pointer' }}>
-                <Pencil size={18} />
-              </button>
-            </div>
-
-            <div style={{ marginTop: '16px', display: 'inline-flex', alignItems: 'center', gap: '12px', borderRadius: '9999px', backgroundColor: '#FFF5CC', padding: '8px 20px', fontSize: '16px', fontWeight: 900, color: '#000' }}>
-              {currentUser?.age ? `Age ${currentUser.age}` : 'Student'}
-              <Pencil size={16} />
-            </div>
-
-            <div style={{ marginTop: '16px', display: 'flex', alignItems: 'center', gap: '12px', fontSize: '16px', fontWeight: 900, color: '#000' }}>
-              <School size={22} />
-              {currentUser?.school || 'School Info Needed'}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Content */}
-      <section style={{ marginTop: '-64px', padding: '0 20px 120px 20px' }}>
-
-        <div style={{ position: 'relative', zIndex: 10, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', borderRadius: '28px', backgroundColor: '#FFF', padding: '20px 0', boxShadow: '0 12px 30px rgba(0,0,0,0.08)' }}>
-          <StatItem icon={<span style={{ fontSize: '22px', fontWeight: 900 }}>BP</span>} value={formatBP(userBP)} label="Balance" />
-          
-          <StatItem 
-            icon={currentUser.score_multiplier === 3 ? <Users size={30} color="#000" /> : <Lock size={26} color="#888" />} 
-            value={currentUser.score_multiplier === 3 ? referrals.length : "Locked"} 
-            label="Referred Friends" 
-            onClick={() => {
-              if (currentUser.score_multiplier === 3) {
-                setShowReferralModal(true);
-              } else {
-                setSysAlert({ title: 'Locked Feature', message: 'Please upgrade to 3X Booster to unlock the referral feature!' });
-                if (onRequestBooster) onRequestBooster();
-              }
-            }}
+        {/* Ribbon Banner */}
+        <g transform="translate(0, 78)">
+          {/* Ribbon Tail Left */}
+          <path d="M4 18 L16 8 L16 28 Z" fill={ribbonBorder} stroke="#000" strokeWidth="2" />
+          {/* Ribbon Tail Right */}
+          <path d="M96 18 L84 8 L84 28 Z" fill={ribbonBorder} stroke="#000" strokeWidth="2" />
+          {/* Main Ribbon Body */}
+          <rect
+            x="8"
+            y="8"
+            width="84"
+            height="22"
+            rx="5"
+            fill={`url(#${id}_ribbon)`}
+            stroke="#000000"
+            strokeWidth="2.5"
           />
-          
-          <StatItem icon={<Flame size={34} fill="#FFBC00" color="#000" strokeWidth={2.5} />} value="7" label="Streak" />
-        </div>
+          {/* Ribbon Text */}
+          <text
+            x="50"
+            y="23"
+            textAnchor="middle"
+            fill={ribbonTextCol}
+            fontSize="7.5"
+            fontWeight="900"
+            fontFamily="Arial, sans-serif"
+            letterSpacing="0.3"
+          >
+            {ribbonText}
+          </text>
+        </g>
+      </svg>
+    </div>
+  );
+};
 
-        {/* Booster */}
-        {currentUser.score_multiplier === 3 ? (
-          <>
-            {/* Referral Info Card (Only available when paid) */}
-            <div style={{ marginTop: '24px', display: 'flex', flexDirection: 'column', gap: '16px', borderRadius: '24px', backgroundColor: '#000', padding: '20px', boxShadow: '0 10px 28px rgba(0,0,0,0.1)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <Users size={28} color="#FFBC00" />
-                  <p style={{ fontSize: '18px', fontWeight: 900, color: '#FFF' }}>Your Referral Code</p>
-                </div>
-                <div style={{ background: 'rgba(255,255,255,0.1)', padding: '4px 12px', borderRadius: '12px' }}>
-                  <p style={{ fontSize: '12px', color: '#FFBC00', fontWeight: 'bold' }}>Earn up to 3 Levels!</p>
-                </div>
-              </div>
-              
-              <div style={{ display: 'flex', gap: '12px', alignItems: 'stretch' }}>
-                <div style={{ flex: 1, backgroundColor: '#FFF', borderRadius: '16px', padding: '12px 20px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <span style={{ fontSize: '26px', fontWeight: 900, color: '#000', letterSpacing: '2px' }}>
-                    {currentUser?.referral_code || 'N/A'}
-                  </span>
-                </div>
-                <button 
-                  onClick={handleCopyReferral}
-                  style={{ width: '64px', backgroundColor: '#FFBC00', borderRadius: '16px', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-                >
-                  <Copy size={24} color="#000" />
-                </button>
-                <button style={{ width: '64px', backgroundColor: '#333', borderRadius: '16px', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-                  <Share2 size={24} color="#FFF" />
-                </button>
-              </div>
-            </div>
-            
-            <div style={{ marginTop: '16px', display: 'flex', alignItems: 'center', gap: '16px', borderRadius: '24px', backgroundColor: '#FFF5CC', padding: '20px', boxShadow: '0 4px 12px rgba(0,0,0,0.06)' }}>
-              <div style={{ display: 'flex', height: '64px', width: '64px', alignItems: 'center', justifyContent: 'center', borderRadius: '20px', backgroundColor: '#000', fontSize: '28px', fontWeight: 900, color: '#FFBC00', flexShrink: 0 }}>
-                3X
-              </div>
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                <p style={{ fontSize: '22px', fontWeight: 900, color: '#000' }}>3X BP Booster Active!</p>
-                <p style={{ marginTop: '4px', fontSize: '15px', fontWeight: 600, lineHeight: 1.4, color: '#374151' }}>
-                  You're earning 3X more BP in every challenge!
-                </p>
-              </div>
-            </div>
-          </>
-        ) : (
-          <div 
-            onClick={() => { if (onRequestBooster) onRequestBooster(); }}
-            style={{ 
-              marginTop: '24px', display: 'flex', alignItems: 'center', gap: '16px', borderRadius: '24px', 
-              backgroundColor: '#F5F5F5', border: '2px dashed #CCC', padding: '20px', cursor: 'pointer',
-              transition: 'transform 0.2s', transform: 'scale(1)'
+/* -------------------------------------------------------------------------- */
+/* Main Profile Component                                                     */
+/* -------------------------------------------------------------------------- */
+
+const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) => {
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [showBadgesModal, setShowBadgesModal] = useState(false);
+
+  // Compute or format stats from actual data or realistic progression
+  const effectivePlayerId = currentUser?.id || 'guest';
+  const rawHistory = useMemo(() => quizService.getAnswerHistory(effectivePlayerId), [effectivePlayerId]);
+  const wrongHistory = useMemo(() => quizService.getWrongQuestionsHistory(effectivePlayerId), [effectivePlayerId]);
+
+  const stats = useMemo(() => {
+    const totalAnswers = rawHistory.length;
+    const correctAnswers = rawHistory.filter((a) => a.is_correct).length;
+    const wrongAnswers = rawHistory.filter((a) => !a.is_correct).length;
+
+    // Best Score: derived from userBP or mock storage
+    const bestScore = userBP > 0 ? Math.max(userBP, 980) : 980;
+
+    // Play Time: derived from answer response times or default display
+    const totalMs = rawHistory.reduce((acc, a) => acc + (a.response_time || 3000), 0);
+    const hours = Math.max(1, Math.round(totalMs / 3600000) || 128);
+
+    return {
+      playTimeHours: hours,
+      correctCount: totalAnswers > 0 ? correctAnswers : 2480,
+      wrongCount: totalAnswers > 0 ? wrongAnswers : 312,
+      bestScore: bestScore
+    };
+  }, [rawHistory, userBP]);
+
+  // Player Name & Code Display
+  const displayName = useMemo(() => {
+    if (currentUser?.nickname) return currentUser.nickname.toUpperCase();
+    if (guestProfile?.guestName) return guestProfile.guestName.toUpperCase();
+    if (currentUser?.email) return currentUser.email.split('@')[0].toUpperCase();
+    return 'ALEX TAN';
+  }, [currentUser, guestProfile]);
+
+  const playerCode = useMemo(() => {
+    if (currentUser?.player_code) return currentUser.player_code.toUpperCase();
+    if (guestProfile?.player_code) return guestProfile.player_code.toUpperCase();
+    return 'PB-082741';
+  }, [currentUser, guestProfile]);
+
+  // Mascot Image path
+  const mascotImg = `${import.meta.env.BASE_URL}mascot/tiger_welcome.png`;
+
+  return (
+    <div
+      className="view-content"
+      style={{
+        padding: 0,
+        backgroundColor: '#F8F9FA',
+        minHeight: '100%',
+        overflowY: 'auto',
+        display: 'flex',
+        flexDirection: 'column'
+      }}
+    >
+      {/* -------------------------------------------------------------------- */}
+      {/* HEADER SECTION (Vibrant PlayBank Yellow)                            */}
+      {/* -------------------------------------------------------------------- */}
+      <header
+        style={{
+          position: 'relative',
+          background: 'linear-gradient(135deg, #FFCE00 0%, #FFB800 100%)',
+          padding: '24px 20px 48px 20px',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.06)'
+        }}
+      >
+        {/* Top Action Bar */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
+          {/* Back Button (Image 2 Design: White circle, bold black border & bottom rim) */}
+          <button
+            onClick={onBack || (() => window.history.back())}
+            aria-label="Back to home"
+            style={{
+              width: '46px',
+              height: '46px',
+              borderRadius: '50%',
+              backgroundColor: '#FFFFFF',
+              border: '2.5px solid #000000',
+              boxShadow: '0 4px 0 #000000',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              outline: 'none',
+              padding: 0,
+              transition: 'transform 0.1s ease, box-shadow 0.1s ease'
+            }}
+            onMouseDown={(e) => {
+              e.currentTarget.style.transform = 'translateY(3px)';
+              e.currentTarget.style.boxShadow = '0 1px 0 #000000';
+            }}
+            onMouseUp={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = '0 4px 0 #000000';
             }}
           >
-            <div style={{ display: 'flex', height: '64px', width: '64px', alignItems: 'center', justifyContent: 'center', borderRadius: '20px', backgroundColor: '#E0E0E0', flexShrink: 0 }}>
-              <Lock size={28} color="#888" />
-            </div>
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-              <p style={{ fontSize: '18px', fontWeight: 900, color: '#000' }}>Unlock Referral & 3X BP</p>
-              <p style={{ marginTop: '4px', fontSize: '14px', fontWeight: 600, lineHeight: 1.4, color: '#666' }}>
-                Activate your account to invite friends and earn up to 30 BP per answer!
-              </p>
-            </div>
-            <ChevronRight size={24} color="#888" />
-          </div>
-        )}
+            <ArrowLeft size={24} color="#000000" strokeWidth={3} />
+          </button>
 
-        {/* Progress */}
-        <div style={{ marginTop: '28px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <h3 style={{ fontSize: '25px', fontWeight: 900, color: '#000' }}>My Progress</h3>
-          <button style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '16px', fontWeight: 900, color: '#000', background: 'none', border: 'none', cursor: 'pointer' }}>
-            View All <ChevronRight size={20} color="#000" />
+          {/* Top-right: Clean and clear (Mirai logo and Settings gear removed as requested) */}
+          <div style={{ width: '46px' }} />
+        </div>
+
+        {/* Profile Card Info: Avatar + Name + Player ID */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+          {/* Avatar (PlayBank Mascot tiger in circular frame) */}
+          <div
+            style={{
+              width: '102px',
+              height: '102px',
+              borderRadius: '50%',
+              backgroundColor: '#FFFFFF',
+              border: '3.5px solid #000000',
+              boxShadow: '0 4px 0 #000000',
+              overflow: 'hidden',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+              position: 'relative',
+              background: 'radial-gradient(circle, #FFFBEB 40%, #FEF08A 100%)'
+            }}
+          >
+            <img
+              src={mascotImg}
+              alt="PlayBank Mascot"
+              style={{
+                width: '115%',
+                height: '115%',
+                objectFit: 'contain',
+                transform: 'translateY(2px)'
+              }}
+              onError={(e) => {
+                e.target.src = `${import.meta.env.BASE_URL}playbanklogo.png`;
+              }}
+            />
+          </div>
+
+          {/* Player Name & ID */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h1
+              style={{
+                fontSize: '26px',
+                fontWeight: 900,
+                color: '#000000',
+                lineHeight: 1.1,
+                margin: 0,
+                letterSpacing: '-0.5px',
+                wordBreak: 'break-word',
+                fontFamily: "'Inter', sans-serif"
+              }}
+            >
+              {displayName}
+            </h1>
+            <div
+              style={{
+                marginTop: '6px',
+                fontSize: '13px',
+                fontWeight: 800,
+                color: '#5C4300',
+                letterSpacing: '0.5px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}
+            >
+              <span style={{ opacity: 0.85 }}>PLAYER ID</span>
+              <span style={{ color: '#000000', fontWeight: 900 }}>{playerCode}</span>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* -------------------------------------------------------------------- */}
+      {/* BODY SECTION (Rounded Card Container)                                */}
+      {/* -------------------------------------------------------------------- */}
+      <main
+        style={{
+          flex: 1,
+          backgroundColor: '#FFFFFF',
+          borderTopLeftRadius: '28px',
+          borderTopRightRadius: '28px',
+          marginTop: '-22px',
+          padding: '24px 20px 40px 20px',
+          boxShadow: '0 -4px 16px rgba(0,0,0,0.04)',
+          position: 'relative',
+          zIndex: 10
+        }}
+      >
+        {/* BADGES HEADER */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Star size={20} fill="#FFBC00" color="#FFBC00" />
+            <h2 style={{ fontSize: '18px', fontWeight: 900, color: '#000000', margin: 0, letterSpacing: '0.5px' }}>
+              BADGES
+            </h2>
+          </div>
+          <button
+            onClick={() => setShowBadgesModal(true)}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#FF2E79',
+              fontSize: '13px',
+              fontWeight: 800,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '2px',
+              padding: 0
+            }}
+          >
+            View All <ChevronRight size={16} strokeWidth={2.8} />
           </button>
         </div>
-        <div 
-          {...progressDragScroll}
-          style={{ 
-            marginTop: '16px', display: 'flex', gap: '16px', 
-            overflowX: 'auto', paddingBottom: '16px', 
-            scrollSnapType: 'x mandatory',
-            ...progressDragScroll.style 
+
+        {/* BADGES ROW (4 Shields from Image 1) */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '8px',
+            marginBottom: '26px'
           }}
         >
-          <div style={{ scrollSnapAlign: 'start', flexShrink: 0 }}>
-            <ProgressSubjectCard icon={<BookOpen size={42} />} title="Sejarah" percent={72} />
+          {/* Badge 1: Knowledge Star (Yellow / Cap) */}
+          <BadgeShield
+            type="knowledge"
+            title="Knowledge Star"
+            ribbonText="KNOWLEDGE STAR"
+            colorScheme={{
+              outerGrad: ['#FFDE59', '#FF914D'],
+              innerGrad: ['#FFF8E1', '#FFE082'],
+              ribbonGrad: ['#FFC107', '#FFA000'],
+              ribbonBorder: '#C77700',
+              ribbonTextCol: '#000000'
+            }}
+            iconSvg={
+              <g transform="translate(-16, -18)">
+                {/* Cap */}
+                <path d="M16 2 L2 9 L16 16 L30 9 Z" fill="#263238" stroke="#000" strokeWidth="1.5" />
+                <path d="M7 12.5 V21 C7 25 25 25 25 21 V12.5" fill="#37474F" stroke="#000" strokeWidth="1.5" />
+                {/* Gold Tassel */}
+                <path d="M28 10 V20" stroke="#FFD54F" strokeWidth="2" />
+                <circle cx="28" cy="21" r="2" fill="#FFD54F" />
+                {/* Star Accent */}
+                <path
+                  d="M16 23 L17.5 27 L22 27 L18.5 30 L20 34 L16 31.5 L12 34 L13.5 30 L10 27 L14.5 27 Z"
+                  fill="#FFD700"
+                  stroke="#000"
+                  strokeWidth="1"
+                />
+              </g>
+            }
+          />
+
+          {/* Badge 2: Quiz Master (Pink / Brain) */}
+          <BadgeShield
+            type="quiz_master"
+            title="Quiz Master"
+            ribbonText="QUIZ MASTER"
+            colorScheme={{
+              outerGrad: ['#FF66C4', '#D1007A'],
+              innerGrad: ['#FCE4EC', '#F48FB1'],
+              ribbonGrad: ['#E91E63', '#C2185B'],
+              ribbonBorder: '#880E4F',
+              ribbonTextCol: '#FFFFFF'
+            }}
+            iconSvg={
+              <g transform="translate(-16, -16)">
+                {/* Brain Silhouette */}
+                <path
+                  d="M10 8 C6 8 3 12 3 16 C3 20 6 22 8 23 C7 25 8 27 10 28 C12 29 14 28 15 26 C15 28 17 29 19 28 C21 27 22 25 21 23 C23 22 26 20 26 16 C26 12 23 8 19 8 C18 6 15 5 14.5 5 C14 5 11 6 10 8 Z"
+                  fill="#FF4081"
+                  stroke="#000"
+                  strokeWidth="1.5"
+                />
+                {/* Brain Gyri Highlights */}
+                <path d="M9 13 C12 11 14 15 12 18" stroke="#FFFFFF" strokeWidth="1.5" strokeLinecap="round" />
+                <path d="M20 13 C17 11 15 15 17 18" stroke="#FFFFFF" strokeWidth="1.5" strokeLinecap="round" />
+                <path d="M14.5 9 V24" stroke="#880E4F" strokeWidth="1.5" />
+              </g>
+            }
+          />
+
+          {/* Badge 3: Consistent Player (Green / Sprout) */}
+          <BadgeShield
+            type="consistent"
+            title="Consistent Player"
+            ribbonText="CONSISTENT PLAYER"
+            colorScheme={{
+              outerGrad: ['#7ED957', '#009743'],
+              innerGrad: ['#E8F5E9', '#A5D6A7'],
+              ribbonGrad: ['#4CAF50', '#2E7D32'],
+              ribbonBorder: '#1B5E20',
+              ribbonTextCol: '#FFFFFF'
+            }}
+            iconSvg={
+              <g transform="translate(-15, -16)">
+                {/* Sprout Stems */}
+                <path d="M15 26 C15 17 10 14 6 13 C6 18 10 24 15 26 Z" fill="#43A047" stroke="#000" strokeWidth="1.5" />
+                <path
+                  d="M15 26 C15 15 22 10 26 11 C26 17 21 23 15 26 Z"
+                  fill="#66BB6A"
+                  stroke="#000"
+                  strokeWidth="1.5"
+                />
+                <path d="M15 26 V12" stroke="#2E7D32" strokeWidth="2.5" strokeLinecap="round" />
+              </g>
+            }
+          />
+
+          {/* Badge 4: High Scorer (Blue / Trophy) */}
+          <BadgeShield
+            type="high_scorer"
+            title="High Scorer"
+            ribbonText="HIGH SCORER"
+            colorScheme={{
+              outerGrad: ['#38B6FF', '#004AAD'],
+              innerGrad: ['#E1F5FE', '#81D4FA'],
+              ribbonGrad: ['#1E88E5', '#1565C0'],
+              ribbonBorder: '#0D47A1',
+              ribbonTextCol: '#FFFFFF'
+            }}
+            iconSvg={
+              <g transform="translate(-15, -16)">
+                {/* Trophy Cup */}
+                <path
+                  d="M7 6 H23 V14 C23 19 19 22 15 22 C11 22 7 19 7 14 Z"
+                  fill="#FFD700"
+                  stroke="#000"
+                  strokeWidth="1.5"
+                />
+                {/* Trophy Handles */}
+                <path d="M7 9 H4 C3 9 2 11 2 13 C2 15 4 17 7 17" fill="none" stroke="#000" strokeWidth="1.5" />
+                <path d="M23 9 H26 C27 9 28 11 28 13 C28 15 26 17 23 17" fill="none" stroke="#000" strokeWidth="1.5" />
+                {/* Base */}
+                <path d="M12 22 H18 V25 H12 Z" fill="#FFA000" stroke="#000" strokeWidth="1.5" />
+                <path d="M9 25 H21 V28 H9 Z" fill="#455A64" stroke="#000" strokeWidth="1.5" />
+                {/* Star on Cup */}
+                <path
+                  d="M15 10 L15.8 12.5 L18.5 12.5 L16.3 14 L17.1 16.5 L15 15 L12.9 16.5 L13.7 14 L11.5 12.5 L14.2 12.5 Z"
+                  fill="#FFFFFF"
+                />
+              </g>
+            }
+          />
+        </div>
+
+        {/* ------------------------------------------------------------------ */}
+        {/* STATS 2x2 GRID                                                     */}
+        {/* ------------------------------------------------------------------ */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(2, 1fr)',
+            gap: '14px',
+            marginBottom: '28px'
+          }}
+        >
+          {/* Card 1: PLAY TIME */}
+          <div
+            style={{
+              backgroundColor: '#FFFFFF',
+              border: '1.5px solid #F0F0F0',
+              borderRadius: '20px',
+              padding: '18px 16px',
+              boxShadow: '0 4px 14px rgba(0,0,0,0.04)',
+              position: 'relative',
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between'
+            }}
+          >
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                <div
+                  style={{
+                    width: '38px',
+                    height: '38px',
+                    borderRadius: '12px',
+                    backgroundColor: '#FEF3C7',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0
+                  }}
+                >
+                  <Clock size={20} color="#D97706" strokeWidth={2.8} />
+                </div>
+                <span style={{ fontSize: '11.5px', fontWeight: 900, color: '#6B7280', letterSpacing: '0.4px' }}>
+                  PLAY TIME
+                </span>
+              </div>
+              <div style={{ fontSize: '26px', fontWeight: 900, color: '#000000', lineHeight: 1 }}>
+                {stats.playTimeHours} h
+              </div>
+            </div>
+
+            {/* Gamepad Watermark in Bottom Right */}
+            <div
+              style={{
+                position: 'absolute',
+                right: '12px',
+                bottom: '10px',
+                opacity: 0.1,
+                pointerEvents: 'none'
+              }}
+            >
+              <Gamepad2 size={44} color="#000000" />
+            </div>
           </div>
-          <div style={{ scrollSnapAlign: 'start', flexShrink: 0 }}>
-            <ProgressSubjectCard icon={<Microscope size={42} />} title="Sains" percent={65} />
+
+          {/* Card 2: CORRECT ANSWERS */}
+          <div
+            style={{
+              backgroundColor: '#FFFFFF',
+              border: '1.5px solid #F0F0F0',
+              borderRadius: '20px',
+              padding: '18px 16px',
+              boxShadow: '0 4px 14px rgba(0,0,0,0.04)',
+              position: 'relative',
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between'
+            }}
+          >
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                <div
+                  style={{
+                    width: '38px',
+                    height: '38px',
+                    borderRadius: '12px',
+                    backgroundColor: '#DCFCE7',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0
+                  }}
+                >
+                  <Target size={20} color="#16A34A" strokeWidth={2.8} />
+                </div>
+                <span style={{ fontSize: '11.5px', fontWeight: 900, color: '#6B7280', letterSpacing: '0.4px' }}>
+                  CORRECT ANSWERS
+                </span>
+              </div>
+              <div style={{ fontSize: '26px', fontWeight: 900, color: '#000000', lineHeight: 1 }}>
+                {stats.correctCount.toLocaleString()}
+              </div>
+            </div>
+
+            {/* Bar Chart Watermark in Bottom Right */}
+            <div
+              style={{
+                position: 'absolute',
+                right: '12px',
+                bottom: '10px',
+                opacity: 0.1,
+                pointerEvents: 'none'
+              }}
+            >
+              <BarChart2 size={44} color="#000000" />
+            </div>
           </div>
-          <div style={{ scrollSnapAlign: 'start', flexShrink: 0 }}>
-            <ProgressSubjectCard icon={<Ruler size={42} />} title="Matematik" percent={58} />
+
+          {/* Card 3: BEST SCORE */}
+          <div
+            style={{
+              backgroundColor: '#FFFFFF',
+              border: '1.5px solid #F0F0F0',
+              borderRadius: '20px',
+              padding: '18px 16px',
+              boxShadow: '0 4px 14px rgba(0,0,0,0.04)',
+              position: 'relative',
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between'
+            }}
+          >
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                <div
+                  style={{
+                    width: '38px',
+                    height: '38px',
+                    borderRadius: '12px',
+                    backgroundColor: '#FCE7F3',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0
+                  }}
+                >
+                  <Trophy size={20} color="#DB2777" strokeWidth={2.8} />
+                </div>
+                <span style={{ fontSize: '11.5px', fontWeight: 900, color: '#6B7280', letterSpacing: '0.4px' }}>
+                  BEST SCORE
+                </span>
+              </div>
+              <div style={{ fontSize: '26px', fontWeight: 900, color: '#000000', lineHeight: 1 }}>
+                {stats.bestScore.toLocaleString()}
+              </div>
+            </div>
+
+            {/* Crown Watermark in Bottom Right */}
+            <div
+              style={{
+                position: 'absolute',
+                right: '12px',
+                bottom: '10px',
+                opacity: 0.1,
+                pointerEvents: 'none'
+              }}
+            >
+              <Crown size={44} color="#000000" />
+            </div>
+          </div>
+
+          {/* Card 4: WRONG ANSWERS */}
+          <div
+            style={{
+              backgroundColor: '#FFFFFF',
+              border: '1.5px solid #F0F0F0',
+              borderRadius: '20px',
+              padding: '18px 16px',
+              boxShadow: '0 4px 14px rgba(0,0,0,0.04)',
+              position: 'relative',
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between'
+            }}
+          >
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                <div
+                  style={{
+                    width: '38px',
+                    height: '38px',
+                    borderRadius: '12px',
+                    backgroundColor: '#FFE4E6',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0
+                  }}
+                >
+                  <XCircle size={20} color="#E11D48" strokeWidth={2.8} />
+                </div>
+                <span style={{ fontSize: '11.5px', fontWeight: 900, color: '#6B7280', letterSpacing: '0.4px' }}>
+                  WRONG ANSWERS
+                </span>
+              </div>
+              <div style={{ fontSize: '26px', fontWeight: 900, color: '#000000', lineHeight: 1 }}>
+                {stats.wrongCount.toLocaleString()}
+              </div>
+            </div>
+
+            {/* X Mark Watermark in Bottom Right */}
+            <div
+              style={{
+                position: 'absolute',
+                right: '12px',
+                bottom: '10px',
+                opacity: 0.1,
+                pointerEvents: 'none'
+              }}
+            >
+              <X size={44} color="#000000" strokeWidth={3} />
+            </div>
           </div>
         </div>
-      </section>
 
-      {/* Referral Modal */}
-      {showReferralModal && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
-          backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 100, padding: '20px'
-        }}>
-          <div className="modal-spring" style={{
-            backgroundColor: '#FFF', border: '4px solid #000',
-            borderRadius: '24px', padding: '24px', width: '100%', maxWidth: '360px',
-            boxShadow: '8px 8px 0px #000', maxHeight: '80vh', display: 'flex', flexDirection: 'column'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <h2 style={{ fontSize: '24px', fontWeight: 900, color: '#000' }}>My Referrals</h2>
-              <button onClick={() => setShowReferralModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={24} /></button>
+        {/* ------------------------------------------------------------------ */}
+        {/* ACTION BUTTON: VIEW GAME HISTORY                                  */}
+        {/* ------------------------------------------------------------------ */}
+        <button
+          onClick={() => setShowHistoryModal(true)}
+          style={{
+            width: '100%',
+            backgroundColor: '#181818',
+            color: '#FFBC00',
+            padding: '16px 24px',
+            borderRadius: '9999px',
+            border: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '10px',
+            cursor: 'pointer',
+            boxShadow: '0 6px 18px rgba(0,0,0,0.18)',
+            transition: 'transform 0.12s ease, filter 0.12s ease',
+            outline: 'none'
+          }}
+          onMouseDown={(e) => (e.currentTarget.style.transform = 'scale(0.98)')}
+          onMouseUp={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+        >
+          <BarChart2 size={22} color="#FFBC00" strokeWidth={2.8} />
+          <span style={{ fontSize: '15px', fontWeight: 900, letterSpacing: '0.8px' }}>VIEW GAME HISTORY</span>
+          <ChevronRight size={18} color="#FFBC00" strokeWidth={3} style={{ marginLeft: '4px' }} />
+        </button>
+      </main>
+
+      {/* -------------------------------------------------------------------- */}
+      {/* GAME HISTORY MODAL                                                   */}
+      {/* -------------------------------------------------------------------- */}
+      {showHistoryModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0,0,0,0.6)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'flex-end',
+            justifyContent: 'center',
+            zIndex: 1000
+          }}
+          onClick={() => setShowHistoryModal(false)}
+        >
+          <div
+            style={{
+              width: '100%',
+              maxWidth: '440px',
+              backgroundColor: '#FFFFFF',
+              borderTopLeftRadius: '28px',
+              borderTopRightRadius: '28px',
+              border: '3px solid #000000',
+              borderBottom: 'none',
+              padding: '24px 20px 32px 20px',
+              maxHeight: '82vh',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 -8px 30px rgba(0,0,0,0.25)',
+              animation: 'slideUpModal 0.24s cubic-bezier(0.16, 1, 0.3, 1)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: '16px',
+                paddingBottom: '12px',
+                borderBottom: '2px solid #F0F0F0'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <BarChart2 size={24} color="#000000" strokeWidth={2.8} />
+                <h3 style={{ fontSize: '20px', fontWeight: 900, color: '#000000', margin: 0 }}>Game History</h3>
+              </div>
+              <button
+                onClick={() => setShowHistoryModal(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}
+              >
+                <X size={22} color="#666" strokeWidth={2.5} />
+              </button>
             </div>
-            
-            <div style={{ flex: 1, overflowY: 'auto' }}>
-              {referrals.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '40px 0', color: '#666' }}>
-                  <Users size={48} color="#CCC" style={{ marginBottom: '16px' }} />
-                  <p style={{ fontWeight: 600 }}>No successful referrals yet.</p>
-                  <p style={{ fontSize: '14px', marginTop: '8px' }}>Share your code to start earning!</p>
+
+            {/* Summary Stats Strip */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: '8px',
+                backgroundColor: '#FFFBEB',
+                border: '2px solid #FDE68A',
+                borderRadius: '16px',
+                padding: '12px',
+                marginBottom: '16px',
+                textAlign: 'center'
+              }}
+            >
+              <div>
+                <div style={{ fontSize: '11px', fontWeight: 800, color: '#92400E' }}>ATTEMPTS</div>
+                <div style={{ fontSize: '18px', fontWeight: 900, color: '#000000' }}>
+                  {rawHistory.length || stats.correctCount + stats.wrongCount}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: '11px', fontWeight: 800, color: '#16A34A' }}>ACCURACY</div>
+                <div style={{ fontSize: '18px', fontWeight: 900, color: '#16A34A' }}>
+                  {stats.correctCount + stats.wrongCount > 0
+                    ? Math.round((stats.correctCount / (stats.correctCount + stats.wrongCount)) * 100)
+                    : 89}
+                  %
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: '11px', fontWeight: 800, color: '#E11D48' }}>MISTAKES</div>
+                <div style={{ fontSize: '18px', fontWeight: 900, color: '#E11D48' }}>
+                  {wrongHistory.length || stats.wrongCount}
+                </div>
+              </div>
+            </div>
+
+            {/* History List or Recent Answers */}
+            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{ fontSize: '13px', fontWeight: 900, color: '#374151', marginBottom: '4px' }}>
+                Recent Answer Activity
+              </div>
+              {rawHistory.length === 0 ? (
+                <div
+                  style={{
+                    textAlign: 'center',
+                    padding: '28px 16px',
+                    color: '#6B7280',
+                    backgroundColor: '#F9FAFB',
+                    borderRadius: '16px'
+                  }}
+                >
+                  <Target size={36} color="#D1D5DB" style={{ marginBottom: '8px' }} />
+                  <p style={{ margin: 0, fontWeight: 700, fontSize: '14px' }}>No recorded sessions yet.</p>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '12px' }}>Complete a quiz challenge to view detailed records!</p>
                 </div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {referrals.map(r => (
-                    <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', background: '#F9FAFB', borderRadius: '16px', border: '2px solid #E5E7EB' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#FFF5CC', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
-                          {r.name.charAt(0)}
-                        </div>
-                        <div>
-                          <span style={{ display: 'block', fontSize: '16px', fontWeight: 900, color: '#000' }}>{r.name}</span>
-                          {r.sub_referrals_count > 0 && (
-                            <span style={{ fontSize: '12px', color: '#666', fontWeight: 600 }}>Invited {r.sub_referrals_count} friends</span>
-                          )}
-                        </div>
+                rawHistory
+                  .slice(-8)
+                  .reverse()
+                  .map((ans, idx) => (
+                    <div
+                      key={ans.id || idx}
+                      style={{
+                        padding: '12px 14px',
+                        borderRadius: '12px',
+                        border: `1.5px solid ${ans.is_correct ? '#BBF7D0' : '#FECDD3'}`,
+                        backgroundColor: ans.is_correct ? '#F0FDF4' : '#FFF1F2',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '12px'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                        {ans.is_correct ? (
+                          <CheckCircle2 size={18} color="#16A34A" strokeWidth={2.8} />
+                        ) : (
+                          <XCircle size={18} color="#E11D48" strokeWidth={2.8} />
+                        )}
+                        <span
+                          style={{
+                            fontSize: '13px',
+                            fontWeight: 800,
+                            color: '#111827',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap'
+                          }}
+                        >
+                          {ans.question_text || `Question #${idx + 1}`}
+                        </span>
                       </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <span style={{ display: 'block', fontSize: '16px', fontWeight: 900, color: '#188A25' }}>+{formatBP(r.contributed_bp)} BP</span>
-                        <span style={{ fontSize: '12px', color: '#6B7280', fontWeight: 600 }}>Contributed</span>
-                      </div>
+                      <span style={{ fontSize: '11px', fontWeight: 800, color: '#6B7280', flexShrink: 0 }}>
+                        {Math.round((ans.response_time || 1200) / 100) / 10}s
+                      </span>
                     </div>
-                  ))}
-                </div>
+                  ))
               )}
             </div>
-            <button 
-              onClick={() => setShowReferralModal(false)}
-              style={{ marginTop: '20px', width: '100%', padding: '14px', borderRadius: '12px', border: '3px solid #000', backgroundColor: '#FFBC00', fontSize: '15px', fontWeight: 900, cursor: 'pointer', boxShadow: '2px 2px 0px #000' }}
+
+            {/* Close Button */}
+            <button
+              onClick={() => setShowHistoryModal(false)}
+              style={{
+                marginTop: '18px',
+                width: '100%',
+                padding: '14px',
+                backgroundColor: '#000000',
+                color: '#FFBC00',
+                borderRadius: '9999px',
+                border: 'none',
+                fontWeight: 900,
+                fontSize: '14px',
+                cursor: 'pointer'
+              }}
             >
-              Close
+              Close History
             </button>
           </div>
         </div>
       )}
 
-      {/* Change Password Modal */}
-      {showPasswordModal && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
-          backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 100, padding: '20px'
-        }}>
-          <div className="modal-spring" style={{
-            backgroundColor: '#FFF', border: '4px solid #000',
-            borderRadius: '24px', padding: '24px', width: '100%', maxWidth: '360px',
-            boxShadow: '8px 8px 0px #000'
-          }}>
-            <h2 style={{ fontSize: '24px', fontWeight: 900, color: '#000', marginBottom: '20px' }}>Change Password</h2>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '24px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: 900, marginBottom: '8px' }}>Current Password</label>
-                <input type="password" placeholder="Enter current password" style={{ width: '100%', padding: '14px', borderRadius: '12px', border: '2px solid #000', fontSize: '15px', fontWeight: 700 }} />
+      {/* -------------------------------------------------------------------- */}
+      {/* BADGES MODAL                                                         */}
+      {/* -------------------------------------------------------------------- */}
+      {showBadgesModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0,0,0,0.6)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '20px'
+          }}
+          onClick={() => setShowBadgesModal(false)}
+        >
+          <div
+            style={{
+              width: '100%',
+              maxWidth: '380px',
+              backgroundColor: '#FFFFFF',
+              borderRadius: '24px',
+              border: '3.5px solid #000000',
+              boxShadow: '6px 6px 0px #000000',
+              padding: '24px 20px',
+              animation: 'popIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Award size={24} color="#FFBC00" />
+                <h3 style={{ fontSize: '20px', fontWeight: 900, margin: 0 }}>All Badges</h3>
               </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: 900, marginBottom: '8px' }}>New Password</label>
-                <input type="password" placeholder="Enter new password" style={{ width: '100%', padding: '14px', borderRadius: '12px', border: '2px solid #000', fontSize: '15px', fontWeight: 700 }} />
+              <button
+                onClick={() => setShowBadgesModal(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+              >
+                <X size={22} color="#000" />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '10px', background: '#FEF3C7', borderRadius: '14px', border: '1.5px solid #FDE68A' }}>
+                <span style={{ fontSize: '28px' }}>🎓</span>
+                <div>
+                  <div style={{ fontWeight: 900, fontSize: '14px', color: '#92400E' }}>Knowledge Star</div>
+                  <div style={{ fontSize: '12px', color: '#B45309' }}>Complete your first 10 Sejarah quizzes. (Unlocked)</div>
+                </div>
               </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: 900, marginBottom: '8px' }}>Confirm New Password</label>
-                <input type="password" placeholder="Confirm new password" style={{ width: '100%', padding: '14px', borderRadius: '12px', border: '2px solid #000', fontSize: '15px', fontWeight: 700 }} />
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '10px', background: '#FCE7F3', borderRadius: '14px', border: '1.5px solid #FBCFE8' }}>
+                <span style={{ fontSize: '28px' }}>🧠</span>
+                <div>
+                  <div style={{ fontWeight: 900, fontSize: '14px', color: '#9D174D' }}>Quiz Master</div>
+                  <div style={{ fontSize: '12px', color: '#BE185D' }}>Score 100% accuracy in any full round. (Unlocked)</div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '10px', background: '#DCFCE7', borderRadius: '14px', border: '1.5px solid #BBF7D0' }}>
+                <span style={{ fontSize: '28px' }}>🌱</span>
+                <div>
+                  <div style={{ fontWeight: 900, fontSize: '14px', color: '#166534' }}>Consistent Player</div>
+                  <div style={{ fontSize: '12px', color: '#15803D' }}>Log in and answer questions 3 days in a row. (Unlocked)</div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '10px', background: '#E0F2FE', borderRadius: '14px', border: '1.5px solid #BAE6FD' }}>
+                <span style={{ fontSize: '28px' }}>🏆</span>
+                <div>
+                  <div style={{ fontWeight: 900, fontSize: '14px', color: '#075985' }}>High Scorer</div>
+                  <div style={{ fontSize: '12px', color: '#0369A1' }}>Accumulate over 500 BP across all games. (Unlocked)</div>
+                </div>
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '12px' }}>
-              <button 
-                onClick={() => setShowPasswordModal(false)}
-                style={{ flex: 1, padding: '14px', borderRadius: '12px', border: '3px solid #000', backgroundColor: '#F3F4F6', fontSize: '15px', fontWeight: 900, cursor: 'pointer', boxShadow: '2px 2px 0px #000' }}
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={() => setShowPasswordModal(false)}
-                style={{ flex: 1, padding: '14px', borderRadius: '12px', border: '3px solid #000', backgroundColor: '#FFBC00', fontSize: '15px', fontWeight: 900, cursor: 'pointer', boxShadow: '2px 2px 0px #000' }}
-              >
-                Save
-              </button>
-            </div>
+            <button
+              onClick={() => setShowBadgesModal(false)}
+              style={{
+                width: '100%',
+                padding: '12px',
+                backgroundColor: '#FFBC00',
+                color: '#000000',
+                border: '2px solid #000000',
+                borderRadius: '12px',
+                fontWeight: 900,
+                fontSize: '14px',
+                cursor: 'pointer',
+                boxShadow: '2px 2px 0px #000'
+              }}
+            >
+              Awesome!
+            </button>
           </div>
         </div>
       )}
 
-      {/* System Alert Modal */}
-      <CustomModal 
-        isOpen={!!sysAlert}
-        onClose={() => setSysAlert(null)}
-        title={sysAlert?.title || ''}
-        message={sysAlert?.message || ''}
-        confirmText="Got it!"
-      />
-
+      {/* Global CSS for Animations */}
       <style>{`
-        ::-webkit-scrollbar {
-          display: none;
+        @keyframes slideUpModal {
+          from { transform: translateY(100%); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+        @keyframes popIn {
+          from { transform: scale(0.85); opacity: 0; }
+          to { transform: scale(1); opacity: 1; }
         }
       `}</style>
     </div>

@@ -516,6 +516,7 @@ function App() {
             currentUser={currentUser} 
             guestProfile={guestProfile}
             userBP={userBP} 
+            onBack={() => setCurrentView('home')}
             onRequestBooster={() => setShowBoosterOffer({ isFirstTimeOffer: false })}
             onLogout={() => { 
               if (!currentUser && userBP > 0) {
