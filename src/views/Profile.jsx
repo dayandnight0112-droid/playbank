@@ -855,12 +855,14 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
               borderTopRightRadius: '28px',
               border: '3px solid #000000',
               borderBottom: 'none',
-              padding: '24px 20px 32px 20px',
-              maxHeight: '82vh',
+              padding: '20px 20px 24px 20px',
+              height: '86vh',
+              maxHeight: '86vh',
               display: 'flex',
               flexDirection: 'column',
               boxShadow: '0 -8px 30px rgba(0,0,0,0.25)',
-              animation: 'slideUpModal 0.24s cubic-bezier(0.16, 1, 0.3, 1)'
+              animation: 'slideUpModal 0.24s cubic-bezier(0.16, 1, 0.3, 1)',
+              overflow: 'hidden'
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -870,9 +872,10 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                marginBottom: '16px',
-                paddingBottom: '12px',
-                borderBottom: '2px solid #F0F0F0'
+                marginBottom: '14px',
+                paddingBottom: '10px',
+                borderBottom: '2px solid #F0F0F0',
+                flexShrink: 0
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -897,8 +900,9 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
                 border: '2px solid #FDE68A',
                 borderRadius: '16px',
                 padding: '12px',
-                marginBottom: '16px',
-                textAlign: 'center'
+                marginBottom: '12px',
+                textAlign: 'center',
+                flexShrink: 0
               }}
             >
               <div>
@@ -924,8 +928,34 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
               </div>
             </div>
 
+            {/* Scroll Hint / Section Header */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '0 4px 6px 4px',
+                flexShrink: 0
+              }}
+            >
+              <span style={{ fontSize: '12px', fontWeight: 800, color: '#374151' }}>对局详情明细</span>
+              <span style={{ fontSize: '11px', fontWeight: 700, color: '#6B7280' }}>👇 可下滑查看全部题目</span>
+            </div>
+
             {/* Accordion List of Game Sessions (以局为单位的手风琴折叠) */}
-            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div
+              className="history-scroll-container"
+              style={{
+                flex: 1,
+                minHeight: 0,
+                overflowY: 'auto',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px',
+                paddingRight: '6px',
+                paddingBottom: '8px'
+              }}
+            >
               {loading ? (
                 <div style={{ padding: '40px 16px', textAlign: 'center', color: '#6B7280' }}>
                   <RefreshCw size={36} color="#000" style={{ marginBottom: '14px', animation: 'spin 1s linear infinite' }} />
@@ -1175,16 +1205,17 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
             <button
               onClick={() => setShowHistoryModal(false)}
               style={{
-                marginTop: '18px',
+                marginTop: '12px',
                 width: '100%',
-                padding: '14px',
+                padding: '13px',
                 backgroundColor: '#000000',
                 color: '#FFBC00',
                 borderRadius: '9999px',
                 border: 'none',
                 fontWeight: 900,
                 fontSize: '14px',
-                cursor: 'pointer'
+                cursor: 'pointer',
+                flexShrink: 0
               }}
             >
               关闭历史记录 (Close)
