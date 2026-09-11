@@ -125,21 +125,50 @@ const BadgeShield = ({ type, title, ribbonText, colorScheme, iconSvg }) => {
 const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) => {
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showBadgesModal, setShowBadgesModal] = useState(false);
+  const [historyTab, setHistoryTab] = useState('sessions'); // 'sessions' | 'mistakes'
+  const [cloudStats, setCloudStats] = useState(null);
+  const [isLoadingStats, setIsLoadingStats] = useState(true);
 
   // Compute or format stats from actual data or realistic progression
   const effectivePlayerId = currentUser?.id || 'guest';
   const rawHistory = useMemo(() => quizService.getAnswerHistory(effectivePlayerId), [effectivePlayerId]);
   const wrongHistory = useMemo(() => quizService.getWrongQuestionsHistory(effectivePlayerId), [effectivePlayerId]);
 
+  // Load cloud stats on mount
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      try {
+        const data = await quizService.getPlayerSummaryStats(effectivePlayerId);
+        if (isMounted && data) {
+          setCloudStats(data);
+        }
+      } catch (err) {
+        console.warn('[Profile] Failed to load cloud stats:', err);
+      } finally {
+        if (isMounted) setIsLoadingStats(false);
+      }
+    })();
+    return () => { isMounted = false; };
+  }, [effectivePlayerId]);
+
   const stats = useMemo(() => {
+    if (cloudStats) {
+      return {
+        playTimeHours: cloudStats.totalHours,
+        correctCount: cloudStats.totalCorrect,
+        wrongCount: cloudStats.totalWrong,
+        bestScore: cloudStats.bestScore,
+        completedSessions: cloudStats.completedSessionsCount,
+        recentSessions: cloudStats.recentSessions || [],
+        wrongQuestions: cloudStats.wrongQuestions || []
+      };
+    }
+
     const totalAnswers = rawHistory.length;
     const correctAnswers = rawHistory.filter((a) => a.is_correct).length;
     const wrongAnswers = rawHistory.filter((a) => !a.is_correct).length;
-
-    // Best Score: derived from userBP or mock storage
     const bestScore = userBP > 0 ? Math.max(userBP, 980) : 980;
-
-    // Play Time: derived from answer response times or default display
     const totalMs = rawHistory.reduce((acc, a) => acc + (a.response_time || 3000), 0);
     const hours = Math.max(1, Math.round(totalMs / 3600000) || 128);
 
@@ -147,9 +176,12 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
       playTimeHours: hours,
       correctCount: totalAnswers > 0 ? correctAnswers : 2480,
       wrongCount: totalAnswers > 0 ? wrongAnswers : 312,
-      bestScore: bestScore
+      bestScore: bestScore,
+      completedSessions: totalAnswers > 0 ? Math.ceil(totalAnswers / 8) : 48,
+      recentSessions: [],
+      wrongQuestions: wrongHistory
     };
-  }, [rawHistory, userBP]);
+  }, [cloudStats, rawHistory, userBP, wrongHistory]);
 
   // Player Name & Code Display
   const displayName = useMemo(() => {
@@ -828,69 +860,175 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
               </div>
             </div>
 
-            {/* History List or Recent Answers */}
-            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <div style={{ fontSize: '13px', fontWeight: 900, color: '#374151', marginBottom: '4px' }}>
-                Recent Answer Activity
-              </div>
-              {rawHistory.length === 0 ? (
-                <div
-                  style={{
-                    textAlign: 'center',
-                    padding: '28px 16px',
-                    color: '#6B7280',
-                    backgroundColor: '#F9FAFB',
-                    borderRadius: '16px'
-                  }}
-                >
-                  <Target size={36} color="#D1D5DB" style={{ marginBottom: '8px' }} />
-                  <p style={{ margin: 0, fontWeight: 700, fontSize: '14px' }}>No recorded sessions yet.</p>
-                  <p style={{ margin: '4px 0 0 0', fontSize: '12px' }}>Complete a quiz challenge to view detailed records!</p>
-                </div>
-              ) : (
-                rawHistory
-                  .slice(-8)
-                  .reverse()
-                  .map((ans, idx) => (
+            {/* Tab Navigation */}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '14px', borderBottom: '2px solid #F0F0F0', paddingBottom: '8px' }}>
+              <button
+                onClick={() => setHistoryTab('sessions')}
+                style={{
+                  flex: 1,
+                  padding: '10px 14px',
+                  borderRadius: '12px',
+                  border: 'none',
+                  backgroundColor: historyTab === 'sessions' ? '#000000' : '#F3F4F6',
+                  color: historyTab === 'sessions' ? '#FFBC00' : '#4B5563',
+                  fontWeight: 900,
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <Gamepad2 size={16} />
+                <span>每局结算 ({stats.recentSessions?.length || 0})</span>
+              </button>
+              <button
+                onClick={() => setHistoryTab('mistakes')}
+                style={{
+                  flex: 1,
+                  padding: '10px 14px',
+                  borderRadius: '12px',
+                  border: 'none',
+                  backgroundColor: historyTab === 'mistakes' ? '#000000' : '#F3F4F6',
+                  color: historyTab === 'mistakes' ? '#FFBC00' : '#4B5563',
+                  fontWeight: 900,
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <XCircle size={16} />
+                <span>错题记录 ({stats.wrongQuestions?.length || wrongHistory.length || 0})</span>
+              </button>
+            </div>
+
+            {/* Tab 1: Game Sessions */}
+            {historyTab === 'sessions' && (
+              <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {(!stats.recentSessions || stats.recentSessions.length === 0) ? (
+                  <div
+                    style={{
+                      textAlign: 'center',
+                      padding: '28px 16px',
+                      color: '#6B7280',
+                      backgroundColor: '#F9FAFB',
+                      borderRadius: '16px'
+                    }}
+                  >
+                    <Gamepad2 size={36} color="#D1D5DB" style={{ marginBottom: '8px' }} />
+                    <p style={{ margin: 0, fontWeight: 700, fontSize: '14px' }}>暂无已完成的游戏场次</p>
+                    <p style={{ margin: '4px 0 0 0', fontSize: '12px' }}>完成一局答题即可在此查看每局得分、BP及正确率！</p>
+                  </div>
+                ) : (
+                  stats.recentSessions.map((sess, idx) => (
                     <div
-                      key={ans.id || idx}
+                      key={sess.id || idx}
                       style={{
-                        padding: '12px 14px',
-                        borderRadius: '12px',
-                        border: `1.5px solid ${ans.is_correct ? '#BBF7D0' : '#FECDD3'}`,
-                        backgroundColor: ans.is_correct ? '#F0FDF4' : '#FFF1F2',
+                        padding: '14px 16px',
+                        borderRadius: '14px',
+                        border: '1.5px solid #E5E7EB',
+                        backgroundColor: '#FFFFFF',
+                        boxShadow: '0 2px 6px rgba(0,0,0,0.03)',
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: '12px'
+                        justifyContent: 'space-between'
                       }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
-                        {ans.is_correct ? (
-                          <CheckCircle2 size={18} color="#16A34A" strokeWidth={2.8} />
-                        ) : (
-                          <XCircle size={18} color="#E11D48" strokeWidth={2.8} />
-                        )}
-                        <span
-                          style={{
-                            fontSize: '13px',
-                            fontWeight: 800,
-                            color: '#111827',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap'
-                          }}
-                        >
-                          {ans.question_text || `Question #${idx + 1}`}
-                        </span>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                          <span style={{ fontSize: '13px', fontWeight: 900, color: '#000' }}>
+                            第 {stats.recentSessions.length - idx} 局挑战
+                          </span>
+                          <span
+                            style={{
+                              fontSize: '10.5px',
+                              fontWeight: 800,
+                              padding: '2px 8px',
+                              borderRadius: '9999px',
+                              backgroundColor: sess.status === 'completed' ? '#DCFCE7' : '#FEE2E2',
+                              color: sess.status === 'completed' ? '#166534' : '#991B1B'
+                            }}
+                          >
+                            {sess.status === 'completed' ? '已完成' : '未完成'}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#6B7280', fontWeight: 600 }}>
+                          对 {sess.correct_count ?? 0} 题 · 错 {sess.wrong_count ?? 0} 题 · 共 {sess.total_questions ?? 8} 题
+                        </div>
                       </div>
-                      <span style={{ fontSize: '11px', fontWeight: 800, color: '#6B7280', flexShrink: 0 }}>
-                        {Math.round((ans.response_time || 1200) / 100) / 10}s
-                      </span>
+
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: '16px', fontWeight: 900, color: '#FF9800' }}>
+                          +{sess.earned_bp ?? (sess.correct_count * 10)} BP
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#9CA3AF', fontWeight: 600 }}>
+                          {sess.created_at ? new Date(sess.created_at).toLocaleDateString() : '刚刚'}
+                        </div>
+                      </div>
                     </div>
                   ))
-              )}
-            </div>
+                )}
+              </div>
+            )}
+
+            {/* Tab 2: Mistakes History */}
+            {historyTab === 'mistakes' && (
+              <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {((!stats.wrongQuestions || stats.wrongQuestions.length === 0) && wrongHistory.length === 0) ? (
+                  <div
+                    style={{
+                      textAlign: 'center',
+                      padding: '28px 16px',
+                      color: '#6B7280',
+                      backgroundColor: '#F9FAFB',
+                      borderRadius: '16px'
+                    }}
+                  >
+                    <CheckCircle2 size={36} color="#10B981" style={{ marginBottom: '8px' }} />
+                    <p style={{ margin: 0, fontWeight: 700, fontSize: '14px' }}>太棒了，目前没有错题记录！</p>
+                    <p style={{ margin: '4px 0 0 0', fontSize: '12px' }}>答题中做错的题目将自动归档至此处供针对性复习。</p>
+                  </div>
+                ) : (
+                  (stats.wrongQuestions && stats.wrongQuestions.length > 0 ? stats.wrongQuestions : wrongHistory).map((m, idx) => (
+                    <div
+                      key={m.id || m.question_id || idx}
+                      style={{
+                        padding: '14px 16px',
+                        borderRadius: '14px',
+                        border: '1.5px solid #FECDD3',
+                        backgroundColor: '#FFF1F2',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '6px'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span style={{ fontSize: '11px', fontWeight: 900, color: '#E11D48', textTransform: 'uppercase' }}>
+                          错题 #{idx + 1} {m.wrong_count ? `· 累计错 ${m.wrong_count} 次` : ''}
+                        </span>
+                        <span style={{ fontSize: '10.5px', color: '#9CA3AF', fontWeight: 600 }}>
+                          {m.last_wrong_at ? new Date(m.last_wrong_at).toLocaleDateString() : '近期'}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '13px', fontWeight: 800, color: '#111827', lineHeight: 1.4 }}>
+                        {m.question_text || m.question || `题目 ID: ${String(m.question_id || m.id).substring(0, 12)}...`}
+                      </div>
+                      {m.correct_option_id && (
+                        <div style={{ fontSize: '12px', fontWeight: 700, color: '#15803D', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <CheckCircle2 size={14} color="#15803D" /> 正确答案: {m.correct_option_id}
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
 
             {/* Close Button */}
             <button
@@ -908,7 +1046,7 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
                 cursor: 'pointer'
               }}
             >
-              Close History
+              关闭历史记录 (Close)
             </button>
           </div>
         </div>

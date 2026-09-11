@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { X, Zap } from 'lucide-react';
 import { mockDb } from '../lib/mockDb';
+import { playerAuthService } from '../lib/playerAuthService';
 
 const SaveScoreModal = ({ onClose, onRegisterSuccess, currentBP, registerContext }) => {
   const [email, setEmail] = useState('');
@@ -9,8 +10,9 @@ const SaveScoreModal = ({ onClose, onRegisterSuccess, currentBP, registerContext
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!email || !whatsapp || !password || !confirmPassword) {
       setError("Please fill in all required fields.");
@@ -20,8 +22,30 @@ const SaveScoreModal = ({ onClose, onRegisterSuccess, currentBP, registerContext
       setError("Passwords do not match.");
       return;
     }
+
+    setIsSubmitting(true);
+    setError(null);
+
     const fullWhatsapp = `${countryCode} ${whatsapp}`;
+
+    // Step 4.4: Upgrade current anonymous player session to permanent registered user in Supabase
+    try {
+      const upgradeRes = await playerAuthService.upgradeGuestToRegistered({
+        email,
+        password,
+        nickname: email.split('@')[0],
+        metadata: { whatsapp: fullWhatsapp }
+      });
+      if (upgradeRes.error) {
+        console.warn('[SaveScoreModal] Supabase account upgrade info:', upgradeRes.error);
+      }
+    } catch (err) {
+      console.warn('[SaveScoreModal] Account upgrade fallback:', err);
+    }
+
     const result = mockDb.registerUser(email, password, fullWhatsapp, currentBP);
+    setIsSubmitting(false);
+
     if (result.error) {
       setError(result.error);
     } else {

@@ -126,6 +126,57 @@ class PlayerAuthService {
   }
 
   /**
+   * Step 4.4: Upgrade an Anonymous Guest to a Registered Account
+   * Preserves identical auth.uid() so all foreign keys, BP, and history remain intact!
+   */
+  async upgradeGuestToRegistered({ email, password, nickname, metadata = {} }) {
+    if (!isSupabaseConfigured || !supabase) {
+      return { success: false, error: 'Supabase is not configured' };
+    }
+
+    try {
+      await this.initAuth();
+      const user = this._currentUser;
+      if (!user) {
+        throw new Error('No active player session found to upgrade');
+      }
+
+      // Update user credentials in auth.users
+      const { data, error } = await supabase.auth.updateUser({
+        email,
+        password,
+        data: {
+          ...metadata,
+          nickname: nickname || user.user_metadata?.nickname || 'Player',
+          is_guest: false
+        }
+      });
+
+      if (error) {
+        console.error('[playerAuthService] upgradeGuestToRegistered error:', error.message);
+        return { success: false, error: error.message };
+      }
+
+      // Sync public.profiles to is_guest = false
+      await supabase
+        .from('profiles')
+        .update({
+          is_guest: false,
+          nickname: nickname || user.user_metadata?.nickname || 'Player',
+          last_active_at: new Date().toISOString()
+        })
+        .eq('id', user.id);
+
+      this._currentUser = data.user;
+      this._isAnonymous = false;
+
+      return { success: true, user: data.user };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  }
+
+  /**
    * Listen to auth state changes
    */
   onAuthStateChange(callback) {

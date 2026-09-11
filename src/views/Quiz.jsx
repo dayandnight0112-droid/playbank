@@ -196,7 +196,7 @@ const Quiz = ({
     loadQuizQuestions();
   }, [loadQuizQuestions]);
 
-  // Step 7: Quiz 挑战完成进入结算时，自动推进 Daily Missions 进度（不直接给水，只推进度）
+  // Step 4 & 7: Quiz 挑战完成进入结算时，保存 game_sessions 并自动推进 Daily Missions
   useEffect(() => {
     if (status === 'result' && questions.length > 0 && !hasRecordedMissionsRef.current) {
       hasRecordedMissionsRef.current = true;
@@ -205,8 +205,22 @@ const Quiz = ({
         questionsAnswered: questions.length,
         correctAnswers: correctCount
       });
+
+      // Step 4: Record Game Session in Supabase & local storage
+      quizService.recordGameSession({
+        chapterId: quizParams?.chapterId || null,
+        chapterVersion: quizParams?.versionNo || 1,
+        startedAt: new Date(startTime).toISOString(),
+        endedAt: new Date().toISOString(),
+        totalQuestions: questions.length,
+        correctCount: correctCount,
+        wrongCount: questions.length - correctCount - skippedCount,
+        score: correctCount * scorePerQuestion,
+        earnedBP: sessionBP,
+        status: 'completed'
+      }).catch(err => console.warn('[Quiz] Failed to record game session:', err));
     }
-  }, [status, questions.length, correctCount]);
+  }, [status, questions.length, correctCount, quizParams, startTime, skippedCount, sessionBP]);
 
   // Step 16: Setup Question with fixed option IDs and post-shuffle A/B/C/D labeling
   const setupQuestion = (question) => {
