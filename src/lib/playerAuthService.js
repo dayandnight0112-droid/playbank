@@ -112,9 +112,17 @@ class PlayerAuthService {
   }
 
   /**
-   * Get current auth.uid()
+   * Get current auth.uid() (synchronous)
    */
   getUserId() {
+    return this._currentUser?.id || null;
+  }
+
+  /**
+   * Guaranteed async resolution of auth.uid()
+   */
+  async getAuthUserId() {
+    await this.initAuth();
     return this._currentUser?.id || null;
   }
 

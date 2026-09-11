@@ -22,6 +22,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { quizService } from '../lib/quizService';
+import { playerAuthService } from '../lib/playerAuthService';
 import { mockDb } from '../lib/mockDb';
 
 /* -------------------------------------------------------------------------- */
@@ -137,14 +138,14 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const effectivePlayerId = currentUser?.id || 'guest';
-
-  // Step 4.1 & 4.3: Cloud load with async/await in useEffect, no silence on Supabase error
+  // Step 4.1 & 4.3 & Rule 6: Cloud load with guaranteed auth.uid(), never 'guest'
   const loadProfileData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await quizService.getPlayerFullStats(effectivePlayerId);
+      const authUserId = await playerAuthService.getAuthUserId();
+      const targetPlayerId = (currentUser?.id && currentUser.id !== 'guest') ? currentUser.id : authUserId;
+      const data = await quizService.getPlayerFullStats(targetPlayerId);
       setSessions(Array.isArray(data?.sessions) ? data.sessions : []);
       setAnswers(Array.isArray(data?.answers) ? data.answers : []);
     } catch (err) {
@@ -153,7 +154,7 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
     } finally {
       setLoading(false);
     }
-  }, [effectivePlayerId]);
+  }, [currentUser]);
 
   useEffect(() => {
     loadProfileData();

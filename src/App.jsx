@@ -23,6 +23,7 @@ import ExitRetentionModal from './components/home/ExitRetentionModal';
 import BossBattle from './views/BossBattle';
 import { evaluateBossTrigger } from './lib/bossTrigger';
 import OnboardingFlow from './views/onboarding/OnboardingFlow';
+import { quizService } from './lib/quizService';
 import { playerAuthService } from './lib/playerAuthService';
 
 function App() {
@@ -30,7 +31,19 @@ function App() {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showExitRetention, setShowExitRetention] = useState(false);
   const [tutorialStats, setTutorialStats] = useState({ earnedBP: 120, maxCombo: 6 });
-  const [quizParams, setQuizParams] = useState({ subject: 'History', subjectTitle: 'History', form: 4, chapter: 1 });
+  const [quizParams, setQuizParams] = useState({
+    gradeId: 'form-4',
+    gradeName: 'Form 4',
+    form: 4,
+    subject: 'sejarah',
+    subjectTitle: 'History',
+    chapterId: '8bde7fd7-a4c0-485c-8328-5e08a6eb3db8',
+    chapterTitle: 'Warisan Negara Bangsa',
+    babNumber: 'Bab 1',
+    versionNo: 1,
+    questionCount: 8,
+    randomQuestions: true
+  });
   const [bossBattleParams, setBossBattleParams] = useState(null);
   const [bossEncounterAlert, setBossEncounterAlert] = useState(false);
 
@@ -200,13 +213,16 @@ function App() {
     setCurrentView('quiz');
   };
 
-  const handleQuitQuiz = (sessionBP = 0) => {
+  const handleQuitQuiz = (sessionBP = 0, sessionId = null) => {
     openModal({
       title: 'Quit Quiz?',
       message: `Are you sure you want to exit? You currently have ${sessionBP} BP in this session. If you exit, it will be lost.`,
       showCancel: true,
       confirmText: 'Quit',
       onConfirm: () => {
+        if (sessionId) {
+          quizService.abandonGameSession(sessionId).catch(err => console.warn('[App] Failed to mark session abandoned:', err));
+        }
         setBossBattleParams(null);
         setCurrentView('home');
         closeModal();
@@ -470,7 +486,7 @@ function App() {
         return (
           <Quiz
             onComplete={handleQuizComplete}
-            onBack={handleQuitQuiz}
+            onBack={(bp, sid) => handleQuitQuiz(bp, sid)}
             currentBP={userBP}
             currentUser={currentUser}
             onGoGarden={() => setCurrentView('garden')}

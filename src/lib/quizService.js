@@ -748,166 +748,268 @@ export const quizService = {
   },
 
   /**
-   * Step 4: Record Game Session in Supabase & local storage
-   * Supports both cloud RPC/table insertion and local fallback
+   * Helper: Save detailed question breakdown for a specific session
    */
-  async recordGameSession({
+  saveSessionDetails(sessionId, details) {
+    if (!sessionId) return;
+    try {
+      const key = `playbank_sess_details_${sessionId}`;
+      this.saveStorage(key, JSON.stringify(details));
+    } catch (e) {
+      console.warn('[quizService] Failed to save session details:', e);
+    }
+  },
+
+  /**
+   * Helper: Get detailed question breakdown for a specific session
+   */
+  getSessionDetails(sessionId) {
+    if (!sessionId) return null;
+    try {
+      const key = `playbank_sess_details_${sessionId}`;
+      const raw = this.getStorage(key);
+      if (raw) return JSON.parse(raw);
+    } catch (e) {
+      // Ignore
+    }
+    return null;
+  },
+
+  /**
+   * Step 4.2 & Requirement 1-2: Create Game Session in Supabase BEFORE quiz starts
+   * Strictly validates UUID and creates game_sessions with started_at
+   */
+  async createGameSession({
+    chapterId,
+    chapterVersion = 1,
+    chapterTitle = 'Sejarah',
+    totalQuestions = 8
+  }) {
+    // 1. Strict UUID validation from source
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(chapterId);
+    if (!isUUID) {
+      const errMsg = `对局建立失败: 章节ID不是有效的UUID (${chapterId})，请返回关卡选择`;
+      console.error('[quizService] Invalid chapter UUID:', chapterId);
+      throw new Error(errMsg);
+    }
+
+    const effectiveStartedAt = new Date().toISOString();
+    let sessionId = generateUUID();
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const userId = await playerAuthService.getAuthUserId();
+        if (!userId) {
+          throw new Error('未检测到有效的玩家登录态，请重试');
+        }
+
+        // Try inserting with 'in_progress'
+        let statusToUse = 'in_progress';
+        let { data: insertData, error: insertErr } = await supabase
+          .from('game_sessions')
+          .insert({
+            player_id: userId,
+            chapter_id: chapterId,
+            chapter_version: chapterVersion,
+            started_at: effectiveStartedAt,
+            total_questions: totalQuestions,
+            correct_count: 0,
+            wrong_count: 0,
+            score: 0,
+            earned_bp: 0,
+            status: statusToUse
+          })
+          .select('id, started_at')
+          .single();
+
+        // If check constraint in Supabase rejects 'in_progress' (code 23514), fallback to initial 'abandoned'
+        if (insertErr && insertErr.code === '23514') {
+          statusToUse = 'abandoned';
+          const retry = await supabase
+            .from('game_sessions')
+            .insert({
+              player_id: userId,
+              chapter_id: chapterId,
+              chapter_version: chapterVersion,
+              started_at: effectiveStartedAt,
+              total_questions: totalQuestions,
+              correct_count: 0,
+              wrong_count: 0,
+              score: 0,
+              earned_bp: 0,
+              status: statusToUse
+            })
+            .select('id, started_at')
+            .single();
+
+          insertData = retry.data;
+          insertErr = retry.error;
+        }
+
+        if (insertErr) {
+          console.error('[quizService] Supabase createGameSession error:', insertErr);
+          throw new Error(`对局建立失败，请重试: ${insertErr.message}`);
+        }
+
+        if (insertData?.id) {
+          sessionId = insertData.id;
+        }
+      } catch (err) {
+        console.error('[quizService] createGameSession failed:', err);
+        throw err;
+      }
+    }
+
+    // Cache initial session info
+    this.saveSessionDetails(sessionId, {
+      id: sessionId,
+      chapter_id: chapterId,
+      chapter_title: chapterTitle,
+      chapter_version: chapterVersion,
+      started_at: effectiveStartedAt,
+      total_questions: totalQuestions,
+      status: 'in_progress',
+      questions: []
+    });
+
+    return { sessionId, startedAt: effectiveStartedAt };
+  },
+
+  /**
+   * Requirement 4: Complete the exact same Game Session upon finishing 8 questions
+   */
+  async completeGameSession({
+    sessionId,
     chapterId,
     chapterTitle = 'Sejarah',
     chapterVersion = 1,
     startedAt,
-    endedAt,
     totalQuestions = 8,
     correctCount = 0,
     wrongCount = 0,
     score = 0,
     earnedBP = 0,
-    status = 'completed',
     questionsDetails = []
   }) {
-    const effectiveStartedAt = startedAt || new Date().toISOString();
-    const effectiveEndedAt = endedAt || new Date().toISOString();
-    let sessionId = generateUUID();
+    const endedAt = new Date().toISOString();
 
-    // 1. Try Cloud insertion if Supabase configured
-    if (isSupabaseConfigured && supabase) {
+    if (isSupabaseConfigured && supabase && sessionId) {
       try {
-        await playerAuthService.initAuth();
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
-          // Direct table insert
-          const { data: insertData, error: insertErr } = await supabase
+        const updateRes = await supabase
+          .from('game_sessions')
+          .update({
+            status: 'completed',
+            ended_at: endedAt,
+            total_questions: totalQuestions,
+            correct_count: correctCount,
+            wrong_count: wrongCount,
+            score: score,
+            earned_bp: earnedBP
+          })
+          .eq('id', sessionId)
+          .select('id');
+
+        // If UPDATE privilege is denied (code 42501) because grant SQL hasn't been executed, insert completed session directly
+        if (updateRes.error && updateRes.error.code === '42501') {
+          console.warn('[quizService] UPDATE on game_sessions permission denied (42501), inserting completed record directly.');
+          const userId = await playerAuthService.getAuthUserId();
+          await supabase
             .from('game_sessions')
             .insert({
-              player_id: session.user.id,
+              id: sessionId,
+              player_id: userId,
               chapter_id: chapterId,
               chapter_version: chapterVersion,
-              started_at: effectiveStartedAt,
-              ended_at: effectiveEndedAt,
+              started_at: startedAt || endedAt,
+              ended_at: endedAt,
               total_questions: totalQuestions,
               correct_count: correctCount,
               wrong_count: wrongCount,
               score: score,
               earned_bp: earnedBP,
-              status: status
-            })
-            .select('id')
-            .single();
-
-          if (!insertErr && insertData?.id) {
-            sessionId = insertData.id;
-          }
+              status: 'completed'
+            });
         }
       } catch (err) {
-        console.warn('[quizService] Cloud record_game_session fallback to local:', err.message);
+        console.error('[quizService] completeGameSession cloud error:', err);
       }
     }
 
-    // 2. Local storage persistence (preserves full question & option text for instant accordion history)
-    const effectivePlayerId = playerAuthService.getUserId() || 'guest';
-    const storageKey = `playbank_game_sessions_${effectivePlayerId}`;
-    try {
-      const existingRaw = this.getStorage(storageKey);
-      const existingList = existingRaw ? JSON.parse(existingRaw) : [];
-      const sessionEntry = {
-        id: sessionId,
-        player_id: effectivePlayerId,
-        chapter_id: chapterId,
-        chapter_title: chapterTitle || 'Sejarah 答题对局',
-        chapter_version: chapterVersion,
-        started_at: effectiveStartedAt,
-        ended_at: effectiveEndedAt,
-        total_questions: totalQuestions,
-        correct_count: correctCount,
-        wrong_count: wrongCount,
-        score: score,
-        earned_bp: earnedBP,
-        status: status,
-        questions: questionsDetails || [],
-        created_at: new Date().toISOString()
-      };
-      existingList.unshift(sessionEntry);
-      if (existingList.length > 50) existingList.pop();
-      this.saveStorage(storageKey, JSON.stringify(existingList));
-    } catch (e) {
-      console.warn('[quizService] Failed to save local game session:', e);
-    }
+    // Save questions details associated with this exact session
+    this.saveSessionDetails(sessionId, {
+      id: sessionId,
+      chapter_id: chapterId,
+      chapter_title: chapterTitle,
+      chapter_version: chapterVersion,
+      started_at: startedAt,
+      ended_at: endedAt,
+      total_questions: totalQuestions,
+      correct_count: correctCount,
+      wrong_count: wrongCount,
+      score: score,
+      earned_bp: earnedBP,
+      status: 'completed',
+      questions: questionsDetails
+    });
 
-    return { id: sessionId, status };
+    return { sessionId, status: 'completed' };
   },
 
   /**
-   * Step 4: Get Game Sessions List
+   * Requirement 4: Mark Session as abandoned if player quits early
+   */
+  async abandonGameSession(sessionId) {
+    if (!sessionId || !isSupabaseConfigured || !supabase) return;
+    try {
+      await supabase
+        .from('game_sessions')
+        .update({
+          status: 'abandoned',
+          ended_at: new Date().toISOString()
+        })
+        .eq('id', sessionId);
+    } catch (e) {
+      console.warn('[quizService] Failed to mark session as abandoned:', e);
+    }
+  },
+
+  /**
+   * Backward-compatible recordGameSession
+   */
+  async recordGameSession(params) {
+    return this.completeGameSession({
+      sessionId: params.sessionId || generateUUID(),
+      ...params
+    });
+  },
+
+  /**
+   * Step 4: Get Game Sessions List (Only completed sessions)
    */
   async getGameSessions(playerId = null, limit = 20) {
-    const effectivePlayerId = playerId || playerAuthService.getUserId() || 'guest';
-    const storageKey = `playbank_game_sessions_${effectivePlayerId}`;
-
-    let localSessions = [];
-    try {
-      const raw = this.getStorage(storageKey);
-      if (raw) localSessions = JSON.parse(raw);
-    } catch (e) {}
-
-    // Try Cloud fetch to merge with cloud sessions
-    if (isSupabaseConfigured && supabase) {
-      try {
-        await playerAuthService.initAuth();
-        const { data: { session } } = await supabase.auth.getSession();
-        let query = supabase
-          .from('game_sessions')
-          .select('*, chapters(title, bab_number, grade_id, subjects(title_zh, title_en))')
-          .order('created_at', { ascending: false })
-          .limit(limit);
-
-        if (session?.user?.id) {
-          query = query.eq('player_id', session.user.id);
-        }
-
-        const { data, error } = await query;
-
-        if (!error && Array.isArray(data)) {
-          // Merge cloud sessions with local session details
-          return data.map((cloudSess) => {
-            const matchedLocal = localSessions.find(ls => ls.id === cloudSess.id || (Math.abs(new Date(ls.started_at || 0) - new Date(cloudSess.started_at || 0)) < 15000));
-            const subName = cloudSess.chapters?.subjects?.title_zh || cloudSess.chapters?.subjects?.title_en || matchedLocal?.subject_name || '历史';
-            const chapTitle = cloudSess.chapters?.title || matchedLocal?.chapter_title || 'Sejarah 答题对局';
-            return {
-              ...cloudSess,
-              subject_name: subName,
-              chapter_title: chapTitle,
-              questions: matchedLocal?.questions || []
-            };
-          });
-        }
-      } catch (err) {
-        // Fallback to local
-      }
-    }
-
-    return localSessions;
+    const { sessions } = await this.getPlayerFullStats(playerId);
+    return (sessions || []).slice(0, limit);
   },
 
   /**
    * Step 4: Get Full Player Stats (Sessions & Answers) with Supabase Cloud Priority
+   * Strictly adheres to Rule 5: NO guessing or auto-synthesizing sessions from answers!
    */
   async getPlayerFullStats(playerId = null) {
-    const effectivePlayerId = playerId || playerAuthService.getUserId() || 'guest';
     let cloudSessions = [];
     let cloudAnswers = [];
     let fetchError = null;
 
     if (isSupabaseConfigured && supabase) {
       try {
-        await playerAuthService.initAuth();
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
-          const authUserId = session.user.id;
+        const authUserId = playerId && playerId !== 'guest' ? playerId : await playerAuthService.getAuthUserId();
+        if (authUserId) {
           const [sessRes, ansRes] = await Promise.all([
             supabase
               .from('game_sessions')
               .select('*, chapters(title, bab_number, grade_id, subjects(title_zh, title_en))')
               .eq('player_id', authUserId)
+              .eq('status', 'completed')
               .order('created_at', { ascending: false })
               .limit(50),
             supabase
@@ -938,89 +1040,42 @@ export const quizService = {
       }
     }
 
-    // Local sessions
-    const storageKey = `playbank_game_sessions_${effectivePlayerId}`;
-    let localSessions = [];
-    try {
-      const raw = this.getStorage(storageKey);
-      if (raw) localSessions = JSON.parse(raw);
-    } catch (e) {}
-
-    // Merge sessions
-    let mergedSessions = [];
-    if (cloudSessions.length > 0) {
-      mergedSessions = cloudSessions.map((cs) => {
-        const localMatch = localSessions.find(ls => ls.id === cs.id || (Math.abs(new Date(ls.started_at || 0) - new Date(cs.started_at || 0)) < 15000));
-        let questions = localMatch?.questions || [];
-
-        // If local questions missing, reconstruct from cloudAnswers
-        if (questions.length === 0 && cloudAnswers.length > 0) {
-          const matchedAnswers = cloudAnswers.filter(ca => {
-            if (ca.chapter_id !== cs.chapter_id) return false;
-            const aTime = new Date(ca.answered_at).getTime();
-            const sStart = new Date(cs.started_at).getTime() - 15000;
-            const sEnd = new Date(cs.ended_at || cs.created_at).getTime() + 15000;
-            return aTime >= sStart && aTime <= sEnd;
-          });
-
-          if (matchedAnswers.length > 0) {
-            questions = matchedAnswers.map((ca, idx) => {
-              const qData = ca.questions;
-              const opts = qData?.options || [];
-              const selOpt = opts.find(o => o.id === ca.selected_option_id);
-              const corrOpt = opts.find(o => o.id === ca.correct_option_id);
-
-              return {
-                question_no: idx + 1,
-                question_text: qData?.question || `第 ${idx + 1} 题`,
-                selected_option_text: (ca.selected_option_id === 'timeout' || !ca.selected_option_id) ? '未作答 / Time Out' : (selOpt?.text || '未作答'),
-                correct_option_text: corrOpt?.text || '正确答案',
-                explanation: qData?.explanation || '',
-                is_correct: Boolean(ca.is_correct),
-                response_time_ms: ca.response_time_ms || 0
-              };
-            });
-          }
-        }
-
-        const subName = cs.chapters?.subjects?.title_zh || cs.chapters?.subjects?.title_en || localMatch?.subject_name || '历史';
-        const chapTitle = cs.chapters?.title || localMatch?.chapter_title || 'Sejarah 答题对局';
-        const durationSec = cs.active_duration_seconds != null
-          ? Number(cs.active_duration_seconds)
-          : (cs.started_at && cs.ended_at ? Math.max(0, Math.round((new Date(cs.ended_at) - new Date(cs.started_at)) / 1000)) : 0);
-
-        return {
-          id: cs.id,
-          player_id: cs.player_id,
-          chapter_id: cs.chapter_id,
-          chapter_title: chapTitle,
-          subject_name: subName,
-          started_at: cs.started_at,
-          ended_at: cs.ended_at,
-          total_questions: cs.total_questions || 8,
-          correct_count: cs.correct_count ?? 0,
-          wrong_count: cs.wrong_count ?? 0,
-          score: cs.score ?? 0,
-          earned_bp: cs.earned_bp ?? 0,
-          status: cs.status || 'completed',
-          active_duration_seconds: durationSec,
-          created_at: cs.created_at || cs.started_at,
-          questions: questions
-        };
-      });
-    } else {
-      mergedSessions = localSessions;
-    }
-
-    if (fetchError && mergedSessions.length === 0) {
+    if (fetchError && cloudSessions.length === 0 && cloudAnswers.length === 0) {
       throw new Error(fetchError.message || '无法连接到云端数据库，请检查网络连接');
     }
 
-    const effectiveAnswers = cloudAnswers.length > 0 ? cloudAnswers : this.getAnswerHistory(effectivePlayerId);
+    // Attach question details saved for each completed session
+    const formattedSessions = cloudSessions.map((cs) => {
+      const details = this.getSessionDetails(cs.id);
+      const subName = cs.chapters?.subjects?.title_zh || cs.chapters?.subjects?.title_en || details?.subject_name || '历史';
+      const chapTitle = cs.chapters?.title || details?.chapter_title || 'Sejarah 答题对局';
+      const durationSec = cs.active_duration_seconds != null
+        ? Number(cs.active_duration_seconds)
+        : (cs.started_at && cs.ended_at ? Math.max(0, Math.round((new Date(cs.ended_at) - new Date(cs.started_at)) / 1000)) : 0);
+
+      return {
+        id: cs.id,
+        player_id: cs.player_id,
+        chapter_id: cs.chapter_id,
+        chapter_title: chapTitle,
+        subject_name: subName,
+        started_at: cs.started_at,
+        ended_at: cs.ended_at,
+        total_questions: cs.total_questions || 8,
+        correct_count: cs.correct_count ?? 0,
+        wrong_count: cs.wrong_count ?? 0,
+        score: cs.score ?? 0,
+        earned_bp: cs.earned_bp ?? 0,
+        status: cs.status,
+        active_duration_seconds: durationSec,
+        created_at: cs.created_at || cs.started_at,
+        questions: details?.questions || []
+      };
+    });
 
     return {
-      sessions: mergedSessions,
-      answers: effectiveAnswers
+      sessions: formattedSessions,
+      answers: cloudAnswers
     };
   },
 

@@ -3,6 +3,7 @@ import { ArrowLeft, Clock, Check, Trophy, Flame, ChevronRight, CheckCircle2, Min
 import { mockDb } from '../lib/mockDb';
 import { getMatchingQuestions } from '../lib/bossTrigger';
 import { quizService } from '../lib/quizService.js';
+import { playerAuthService } from '../lib/playerAuthService.js';
 import Confetti from 'react-confetti';
 import { useWindowSize } from 'react-use';
 
@@ -139,21 +140,62 @@ const Quiz = ({
   const [isAnimating, setIsAnimating] = useState(false);
   const [animVars, setAnimVars] = useState({});
   const hasRecordedMissionsRef = useRef(false);
+  const currentSessionIdRef = useRef(null);
+  const currentChapterIdRef = useRef(null);
   const [cycleInfo, setCycleInfo] = useState(null);
   const [isLoadingQuestions, setIsLoadingQuestions] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [submitError, setSubmitError] = useState(null);
 
-  // Step 2.1 & 2.6: Initialize quiz with secure candidate pool and explicit error state
+  // Step 2.1 & 2.6 & Requirements 1-3: Initialize quiz with real chapter UUID and pre-created session
   const loadQuizQuestions = useCallback(async () => {
     setIsLoadingQuestions(true);
     setLoadError(null);
     setSubmitError(null);
 
     try {
-      const chapterId = quizParams?.chapterId || `chap_${quizParams?.subject || 'history'}_f${quizParams?.form || 4}`;
+      const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      let resolvedChapterId = quizParams?.chapterId;
+      let resolvedChapterTitle = quizParams?.chapterTitle || quizParams?.chapterName || 'Sejarah';
+      let resolvedVersionNo = quizParams?.versionNo || 1;
+
+      // If chapterId is missing or is an invalid legacy string like chap_history_f4, resolve from published_chapters
+      if (!resolvedChapterId || !UUID_REGEX.test(resolvedChapterId)) {
+        try {
+          const grade = quizParams?.gradeId || `form-${quizParams?.form || 4}`;
+          const subj = quizParams?.subject || 'sejarah';
+          const pubChapters = await quizService.getPublishedChapters(grade, subj);
+          if (pubChapters && pubChapters.length > 0) {
+            resolvedChapterId = pubChapters[0].id;
+            resolvedChapterTitle = pubChapters[0].title || resolvedChapterTitle;
+            resolvedVersionNo = pubChapters[0].versionNo || resolvedVersionNo;
+          }
+        } catch (resolveErr) {
+          console.warn('[Quiz] Failed to query published_chapters for UUID fallback:', resolveErr);
+        }
+      }
+
+      // Rule 1: Validate UUID strictly. If still not a valid UUID, block game start!
+      if (!resolvedChapterId || !UUID_REGEX.test(resolvedChapterId)) {
+        throw new Error('对局建立失败，请重试：未能获取对应章节的发布记录或Chapter UUID无效。');
+      }
+
+      currentChapterIdRef.current = resolvedChapterId;
+
+      // Rule 2 & 6: Pre-create session before questions start with real auth.uid()
+      const authUserId = await playerAuthService.getAuthUserId();
+      const playerId = (currentUser?.id && currentUser.id !== 'guest') ? currentUser.id : authUserId;
+
+      const sessionResult = await quizService.createGameSession({
+        chapterId: resolvedChapterId,
+        chapterTitle: resolvedChapterTitle,
+        chapterVersion: resolvedVersionNo,
+        totalQuestions: 8
+      });
+
+      currentSessionIdRef.current = sessionResult?.sessionId;
+
       const randomEnabled = quizParams?.randomQuestions !== undefined ? quizParams.randomQuestions : true;
-      const playerId = currentUser?.id || 'guest';
 
       // Safe local fallback questions ONLY for non-cloud offline demo mode
       const matched = getMatchingQuestions(
@@ -163,11 +205,11 @@ const Quiz = ({
       const fallbackQuestions = (matched && matched.length >= 4) ? matched : rawQuestions;
 
       const batch = await quizService.getNextQuestions({
-        chapterId,
+        chapterId: resolvedChapterId,
         limit: 8,
         playerId,
         randomEnabled,
-        versionNo: quizParams?.versionNo || 1,
+        versionNo: resolvedVersionNo,
         fallbackQuestions
       });
 
@@ -187,7 +229,7 @@ const Quiz = ({
       setIsLoadingQuestions(false);
     } catch (err) {
       console.error('[Quiz] loadQuizQuestions failed:', err);
-      setLoadError(err.message || '加载题目失败，请重试。');
+      setLoadError(err.message || '对局建立失败，请重试。');
       setIsLoadingQuestions(false);
     }
   }, [quizParams, currentUser]);
@@ -236,21 +278,20 @@ const Quiz = ({
         };
       });
 
-      // Step 4: Record Game Session in Supabase & local storage
-      quizService.recordGameSession({
-        chapterId: quizParams?.chapterId || null,
+      // Step 4: Complete Game Session in Supabase & local storage
+      quizService.completeGameSession({
+        sessionId: currentSessionIdRef.current,
+        chapterId: currentChapterIdRef.current || quizParams?.chapterId,
         chapterTitle: quizParams?.chapterTitle || quizParams?.chapterName || 'Sejarah',
         chapterVersion: quizParams?.versionNo || 1,
-        startedAt: new Date(startTime).toISOString(),
-        endedAt: new Date().toISOString(),
+        startedAt: startTime ? new Date(startTime).toISOString() : new Date().toISOString(),
         totalQuestions: questions.length,
         correctCount: correctCount,
         wrongCount: questions.length - correctCount - skippedCount,
         score: correctCount * scorePerQuestion,
         earnedBP: sessionBP,
-        status: 'completed',
         questionsDetails: questionsDetails
-      }).catch(err => console.warn('[Quiz] Failed to record game session:', err));
+      }).catch(err => console.warn('[Quiz] Failed to complete game session:', err));
     }
   }, [status, questions, correctCount, quizParams, startTime, skippedCount, sessionBP, scorePerQuestion]);
 
@@ -352,7 +393,8 @@ const Quiz = ({
       // Step 18: Record answer and cumulative wrong history on timeout
       quizService.recordAnswer({
         playerId: currentUser?.id || 'guest',
-        chapterId: quizParams?.chapterId || `chap_${quizParams?.subject || 'history'}_f${quizParams?.form || 4}`,
+        sessionId: currentSessionIdRef.current,
+        chapterId: currentChapterIdRef.current || quizParams?.chapterId,
         questionId: String(question.question_id || question.id || `q_${currentIndex + 1}`),
         chapterVersion: quizParams?.versionNo || 1,
         selectedOptionId: 'timeout',
@@ -444,7 +486,8 @@ const Quiz = ({
     // Step 18: Record detailed answer event & cumulative wrong question history
     quizService.recordAnswer({
       playerId: currentUser?.id || 'guest',
-      chapterId: quizParams?.chapterId || `chap_${quizParams?.subject || 'history'}_f${quizParams?.form || 4}`,
+      sessionId: currentSessionIdRef.current,
+      chapterId: currentChapterIdRef.current || quizParams?.chapterId,
       questionId: String(question.question_id || question.id || `q_${currentIndex + 1}`),
       chapterVersion: quizParams?.versionNo || 1,
       selectedOptionId: optId,
@@ -805,7 +848,7 @@ const Quiz = ({
       
       {/* Header */}
       <header className="flex-between" style={{ padding: '24px 20px 16px' }}>
-        <button onClick={() => onBack(sessionBP)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-primary)' }}>
+        <button onClick={() => onBack(sessionBP, currentSessionIdRef.current)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-primary)' }}>
           <ArrowLeft size={24} />
         </button>
         <div style={{ textAlign: 'center' }}>
