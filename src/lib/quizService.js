@@ -753,6 +753,7 @@ export const quizService = {
    */
   async recordGameSession({
     chapterId,
+    chapterTitle = 'Sejarah',
     chapterVersion = 1,
     startedAt,
     endedAt,
@@ -761,7 +762,8 @@ export const quizService = {
     wrongCount = 0,
     score = 0,
     earnedBP = 0,
-    status = 'completed'
+    status = 'completed',
+    questionsDetails = []
   }) {
     const effectiveStartedAt = startedAt || new Date().toISOString();
     const effectiveEndedAt = endedAt || new Date().toISOString();
@@ -773,45 +775,27 @@ export const quizService = {
         await playerAuthService.initAuth();
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
-          // Attempt RPC record_game_session first
-          const { data: rpcData, error: rpcErr } = await supabase.rpc('record_game_session', {
-            p_chapter_id: chapterId,
-            p_chapter_version: chapterVersion,
-            p_started_at: effectiveStartedAt,
-            p_ended_at: effectiveEndedAt,
-            p_total_questions: totalQuestions,
-            p_correct_count: correctCount,
-            p_wrong_count: wrongCount,
-            p_score: score,
-            p_earned_bp: earnedBP,
-            p_status: status
-          });
+          // Direct table insert
+          const { data: insertData, error: insertErr } = await supabase
+            .from('game_sessions')
+            .insert({
+              player_id: session.user.id,
+              chapter_id: chapterId,
+              chapter_version: chapterVersion,
+              started_at: effectiveStartedAt,
+              ended_at: effectiveEndedAt,
+              total_questions: totalQuestions,
+              correct_count: correctCount,
+              wrong_count: wrongCount,
+              score: score,
+              earned_bp: earnedBP,
+              status: status
+            })
+            .select('id')
+            .single();
 
-          if (!rpcErr && rpcData?.session_id) {
-            sessionId = rpcData.session_id;
-          } else {
-            // Direct table insert fallback
-            const { data: insertData, error: insertErr } = await supabase
-              .from('game_sessions')
-              .insert({
-                player_id: session.user.id,
-                chapter_id: chapterId,
-                chapter_version: chapterVersion,
-                started_at: effectiveStartedAt,
-                ended_at: effectiveEndedAt,
-                total_questions: totalQuestions,
-                correct_count: correctCount,
-                wrong_count: wrongCount,
-                score: score,
-                earned_bp: earnedBP,
-                status: status
-              })
-              .select('id')
-              .single();
-
-            if (!insertErr && insertData?.id) {
-              sessionId = insertData.id;
-            }
+          if (!insertErr && insertData?.id) {
+            sessionId = insertData.id;
           }
         }
       } catch (err) {
@@ -819,7 +803,7 @@ export const quizService = {
       }
     }
 
-    // 2. Local storage persistence
+    // 2. Local storage persistence (preserves full question & option text for instant accordion history)
     const effectivePlayerId = playerAuthService.getUserId() || 'guest';
     const storageKey = `playbank_game_sessions_${effectivePlayerId}`;
     try {
@@ -829,6 +813,7 @@ export const quizService = {
         id: sessionId,
         player_id: effectivePlayerId,
         chapter_id: chapterId,
+        chapter_title: chapterTitle || 'Sejarah 答题对局',
         chapter_version: chapterVersion,
         started_at: effectiveStartedAt,
         ended_at: effectiveEndedAt,
@@ -838,6 +823,7 @@ export const quizService = {
         score: score,
         earned_bp: earnedBP,
         status: status,
+        questions: questionsDetails || [],
         created_at: new Date().toISOString()
       };
       existingList.unshift(sessionEntry);
@@ -855,34 +841,45 @@ export const quizService = {
    */
   async getGameSessions(playerId = null, limit = 20) {
     const effectivePlayerId = playerId || playerAuthService.getUserId() || 'guest';
-    
-    // Try Cloud fetch
+    const storageKey = `playbank_game_sessions_${effectivePlayerId}`;
+
+    let localSessions = [];
+    try {
+      const raw = this.getStorage(storageKey);
+      if (raw) localSessions = JSON.parse(raw);
+    } catch (e) {}
+
+    // Try Cloud fetch to merge with cloud sessions
     if (isSupabaseConfigured && supabase) {
       try {
         const { data, error } = await supabase
           .from('game_sessions')
-          .select('*')
+          .select('*, chapters(title)')
           .order('created_at', { ascending: false })
           .limit(limit);
 
         if (!error && Array.isArray(data) && data.length > 0) {
-          return data;
+          // Merge cloud sessions with local session details
+          return data.map((cloudSess) => {
+            const matchedLocal = localSessions.find(ls => ls.id === cloudSess.id);
+            return {
+              ...cloudSess,
+              chapter_title: cloudSess.chapters?.title || matchedLocal?.chapter_title || 'Sejarah 答题对局',
+              questions: matchedLocal?.questions || []
+            };
+          });
         }
       } catch (err) {
         // Fallback to local
       }
     }
 
-    const storageKey = `playbank_game_sessions_${effectivePlayerId}`;
-    try {
-      const raw = this.getStorage(storageKey);
-      if (raw) return JSON.parse(raw);
-    } catch (e) {}
-    return [];
+    return localSessions;
   },
 
   /**
    * Step 4: Get Aggregated Summary Stats for Player Profile
+   * Strictly calculates REAL statistics (NO hardcoded 128h / 980 / 2480 / 312)
    */
   async getPlayerSummaryStats(playerId = null) {
     const effectivePlayerId = playerId || playerAuthService.getUserId() || 'guest';
@@ -897,14 +894,19 @@ export const quizService = {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
           const [sessRes, ansRes, histRes] = await Promise.all([
-            supabase.from('game_sessions').select('*').order('created_at', { ascending: false }).limit(20),
-            supabase.from('player_answers').select('*').limit(200),
+            supabase.from('game_sessions').select('*, chapters(title)').order('created_at', { ascending: false }).limit(20),
+            supabase.from('player_answers').select('*, questions(question, options, explanation), chapters(title)').limit(200),
             supabase.from('player_question_history').select('*').gt('wrong_count', 0).order('last_wrong_at', { ascending: false }).limit(50)
           ]);
 
-          if (sessRes.data) sessions = sessRes.data;
-          if (ansRes.data) answers = ansRes.data;
-          if (histRes.data) wrongHistory = histRes.data;
+          if (sessRes.data && sessRes.data.length > 0) {
+            sessions = sessRes.data.map(s => ({
+              ...s,
+              chapter_title: s.chapters?.title || 'Sejarah 答题对局'
+            }));
+          }
+          if (ansRes.data && ansRes.data.length > 0) answers = ansRes.data;
+          if (histRes.data && histRes.data.length > 0) wrongHistory = histRes.data;
         }
       } catch (e) {
         console.warn('[quizService] Cloud getPlayerSummaryStats error:', e.message);
@@ -912,9 +914,20 @@ export const quizService = {
     }
 
     // Local fallback/merge
+    const localSessions = await this.getGameSessions(effectivePlayerId);
     if (sessions.length === 0) {
-      sessions = await this.getGameSessions(effectivePlayerId);
+      sessions = localSessions;
+    } else {
+      // Enrich cloud sessions with local question details if missing
+      sessions = sessions.map(s => {
+        const matched = localSessions.find(ls => ls.id === s.id);
+        return {
+          ...s,
+          questions: (s.questions && s.questions.length > 0) ? s.questions : (matched?.questions || [])
+        };
+      });
     }
+
     if (answers.length === 0) {
       answers = this.getAnswerHistory(effectivePlayerId);
     }
@@ -922,9 +935,16 @@ export const quizService = {
       wrongHistory = this.getWrongQuestionsHistory(effectivePlayerId);
     }
 
+    // Real computations
     const completedSessionsCount = sessions.filter(s => s.status === 'completed').length;
-    const totalCorrect = answers.filter(a => a.is_correct).length;
-    const totalWrong = answers.filter(a => !a.is_correct).length;
+    const sessionCorrectSum = sessions.reduce((acc, s) => acc + (Number(s.correct_count) || 0), 0);
+    const sessionWrongSum = sessions.reduce((acc, s) => acc + (Number(s.wrong_count) || 0), 0);
+    const answerCorrectCount = answers.filter(a => a.is_correct).length;
+    const answerWrongCount = answers.filter(a => !a.is_correct).length;
+
+    // Use most accurate count
+    const totalCorrect = Math.max(sessionCorrectSum, answerCorrectCount);
+    const totalWrong = Math.max(sessionWrongSum, answerWrongCount);
 
     let bestScore = 0;
     let totalSeconds = 0;
@@ -940,14 +960,15 @@ export const quizService = {
       totalSeconds += ((a.response_time || a.response_time_ms || 2000) / 1000);
     }
 
-    const totalHours = Math.max(1, Math.round(totalSeconds / 3600) || 128);
+    const totalMinutes = Math.round(totalSeconds / 60);
 
     return {
-      completedSessionsCount: completedSessionsCount || (totalCorrect > 0 ? Math.ceil(totalCorrect / 8) : 48),
-      totalCorrect: totalCorrect || 2480,
-      totalWrong: totalWrong || 312,
-      bestScore: Math.max(bestScore, 980),
-      totalHours: totalHours,
+      completedSessionsCount: completedSessionsCount,
+      totalCorrect: totalCorrect,
+      totalWrong: totalWrong,
+      bestScore: bestScore,
+      totalSeconds: totalSeconds,
+      totalMinutes: totalMinutes,
       recentSessions: sessions,
       wrongQuestions: wrongHistory
     };

@@ -7,6 +7,8 @@ import {
   XCircle,
   BarChart2,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Star,
   Gamepad2,
   Crown,
@@ -125,14 +127,13 @@ const BadgeShield = ({ type, title, ribbonText, colorScheme, iconSvg }) => {
 const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) => {
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showBadgesModal, setShowBadgesModal] = useState(false);
-  const [historyTab, setHistoryTab] = useState('sessions'); // 'sessions' | 'mistakes'
+  const [expandedSessionId, setExpandedSessionId] = useState(null);
   const [cloudStats, setCloudStats] = useState(null);
   const [isLoadingStats, setIsLoadingStats] = useState(true);
 
-  // Compute or format stats from actual data or realistic progression
+  // Compute or format stats from actual data
   const effectivePlayerId = currentUser?.id || 'guest';
   const rawHistory = useMemo(() => quizService.getAnswerHistory(effectivePlayerId), [effectivePlayerId]);
-  const wrongHistory = useMemo(() => quizService.getWrongQuestionsHistory(effectivePlayerId), [effectivePlayerId]);
 
   // Load cloud stats on mount
   useEffect(() => {
@@ -153,35 +154,37 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
   }, [effectivePlayerId]);
 
   const stats = useMemo(() => {
+    let minutes = 0;
+    let totalCorrect = 0;
+    let totalWrong = 0;
+    let bestScore = 0;
+    let sessions = [];
+
     if (cloudStats) {
-      return {
-        playTimeHours: cloudStats.totalHours,
-        correctCount: cloudStats.totalCorrect,
-        wrongCount: cloudStats.totalWrong,
-        bestScore: cloudStats.bestScore,
-        completedSessions: cloudStats.completedSessionsCount,
-        recentSessions: cloudStats.recentSessions || [],
-        wrongQuestions: cloudStats.wrongQuestions || []
-      };
+      totalCorrect = cloudStats.totalCorrect || 0;
+      totalWrong = cloudStats.totalWrong || 0;
+      bestScore = cloudStats.bestScore || 0;
+      minutes = cloudStats.totalMinutes || 0;
+      sessions = cloudStats.recentSessions || [];
+    } else {
+      totalCorrect = rawHistory.filter((a) => a.is_correct).length;
+      totalWrong = rawHistory.filter((a) => !a.is_correct).length;
+      const totalMs = rawHistory.reduce((acc, a) => acc + (a.response_time || a.responseTimeMs || 2000), 0);
+      minutes = Math.round(totalMs / 60000);
+      sessions = quizService.getGameSessions(effectivePlayerId);
+      bestScore = sessions.reduce((max, s) => Math.max(max, s.score || 0), userBP || 0);
     }
 
-    const totalAnswers = rawHistory.length;
-    const correctAnswers = rawHistory.filter((a) => a.is_correct).length;
-    const wrongAnswers = rawHistory.filter((a) => !a.is_correct).length;
-    const bestScore = userBP > 0 ? Math.max(userBP, 980) : 980;
-    const totalMs = rawHistory.reduce((acc, a) => acc + (a.response_time || 3000), 0);
-    const hours = Math.max(1, Math.round(totalMs / 3600000) || 128);
+    const playTimeText = minutes >= 60 ? `${(minutes / 60).toFixed(1)} h` : `${minutes} m`;
 
     return {
-      playTimeHours: hours,
-      correctCount: totalAnswers > 0 ? correctAnswers : 2480,
-      wrongCount: totalAnswers > 0 ? wrongAnswers : 312,
+      playTimeText,
+      correctCount: totalCorrect,
+      wrongCount: totalWrong,
       bestScore: bestScore,
-      completedSessions: totalAnswers > 0 ? Math.ceil(totalAnswers / 8) : 48,
-      recentSessions: [],
-      wrongQuestions: wrongHistory
+      recentSessions: sessions
     };
-  }, [cloudStats, rawHistory, userBP, wrongHistory]);
+  }, [cloudStats, rawHistory, userBP, effectivePlayerId]);
 
   // Player Name & Code Display
   const displayName = useMemo(() => {
@@ -554,7 +557,7 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
                 </span>
               </div>
               <div style={{ fontSize: '26px', fontWeight: 900, color: '#000000', lineHeight: 1 }}>
-                {stats.playTimeHours} h
+                {stats.playTimeText}
               </div>
             </div>
 
@@ -838,197 +841,210 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
               }}
             >
               <div>
-                <div style={{ fontSize: '11px', fontWeight: 800, color: '#92400E' }}>ATTEMPTS</div>
+                <div style={{ fontSize: '11px', fontWeight: 800, color: '#92400E' }}>累计场次</div>
                 <div style={{ fontSize: '18px', fontWeight: 900, color: '#000000' }}>
-                  {rawHistory.length || stats.correctCount + stats.wrongCount}
+                  {stats.recentSessions.length} 局
                 </div>
               </div>
               <div>
-                <div style={{ fontSize: '11px', fontWeight: 800, color: '#16A34A' }}>ACCURACY</div>
+                <div style={{ fontSize: '11px', fontWeight: 800, color: '#16A34A' }}>对题率</div>
                 <div style={{ fontSize: '18px', fontWeight: 900, color: '#16A34A' }}>
                   {stats.correctCount + stats.wrongCount > 0
                     ? Math.round((stats.correctCount / (stats.correctCount + stats.wrongCount)) * 100)
-                    : 89}
+                    : 0}
                   %
                 </div>
               </div>
               <div>
-                <div style={{ fontSize: '11px', fontWeight: 800, color: '#E11D48' }}>MISTAKES</div>
+                <div style={{ fontSize: '11px', fontWeight: 800, color: '#E11D48' }}>累计错题</div>
                 <div style={{ fontSize: '18px', fontWeight: 900, color: '#E11D48' }}>
-                  {wrongHistory.length || stats.wrongCount}
+                  {stats.wrongCount} 题
                 </div>
               </div>
             </div>
 
-            {/* Tab Navigation */}
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '14px', borderBottom: '2px solid #F0F0F0', paddingBottom: '8px' }}>
-              <button
-                onClick={() => setHistoryTab('sessions')}
-                style={{
-                  flex: 1,
-                  padding: '10px 14px',
-                  borderRadius: '12px',
-                  border: 'none',
-                  backgroundColor: historyTab === 'sessions' ? '#000000' : '#F3F4F6',
-                  color: historyTab === 'sessions' ? '#FFBC00' : '#4B5563',
-                  fontWeight: 900,
-                  fontSize: '13px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px',
-                  transition: 'all 0.15s ease'
-                }}
-              >
-                <Gamepad2 size={16} />
-                <span>每局结算 ({stats.recentSessions?.length || 0})</span>
-              </button>
-              <button
-                onClick={() => setHistoryTab('mistakes')}
-                style={{
-                  flex: 1,
-                  padding: '10px 14px',
-                  borderRadius: '12px',
-                  border: 'none',
-                  backgroundColor: historyTab === 'mistakes' ? '#000000' : '#F3F4F6',
-                  color: historyTab === 'mistakes' ? '#FFBC00' : '#4B5563',
-                  fontWeight: 900,
-                  fontSize: '13px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px',
-                  transition: 'all 0.15s ease'
-                }}
-              >
-                <XCircle size={16} />
-                <span>错题记录 ({stats.wrongQuestions?.length || wrongHistory.length || 0})</span>
-              </button>
-            </div>
+            {/* Accordion List of Game Sessions (以局为单位的手风琴折叠) */}
+            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {(!stats.recentSessions || stats.recentSessions.length === 0) ? (
+                <div
+                  style={{
+                    textAlign: 'center',
+                    padding: '36px 16px',
+                    color: '#6B7280',
+                    backgroundColor: '#F9FAFB',
+                    borderRadius: '16px',
+                    border: '1.5px dashed #E5E7EB'
+                  }}
+                >
+                  <Gamepad2 size={40} color="#D1D5DB" style={{ marginBottom: '8px' }} />
+                  <p style={{ margin: 0, fontWeight: 800, fontSize: '15px', color: '#111' }}>暂无已完成的对局记录</p>
+                  <p style={{ margin: '6px 0 0 0', fontSize: '12.5px' }}>去挑战一局答题，结算后即可在此展开核查每局题目与错题解析！</p>
+                </div>
+              ) : (
+                stats.recentSessions.map((sess, idx) => {
+                  const sessKey = sess.id || `sess_${idx}`;
+                  const isExpanded = expandedSessionId === sessKey;
+                  const roundNum = stats.recentSessions.length - idx;
+                  const sessDate = sess.created_at || sess.ended_at || sess.started_at;
 
-            {/* Tab 1: Game Sessions */}
-            {historyTab === 'sessions' && (
-              <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {(!stats.recentSessions || stats.recentSessions.length === 0) ? (
-                  <div
-                    style={{
-                      textAlign: 'center',
-                      padding: '28px 16px',
-                      color: '#6B7280',
-                      backgroundColor: '#F9FAFB',
-                      borderRadius: '16px'
-                    }}
-                  >
-                    <Gamepad2 size={36} color="#D1D5DB" style={{ marginBottom: '8px' }} />
-                    <p style={{ margin: 0, fontWeight: 700, fontSize: '14px' }}>暂无已完成的游戏场次</p>
-                    <p style={{ margin: '4px 0 0 0', fontSize: '12px' }}>完成一局答题即可在此查看每局得分、BP及正确率！</p>
-                  </div>
-                ) : (
-                  stats.recentSessions.map((sess, idx) => (
+                  return (
                     <div
-                      key={sess.id || idx}
+                      key={sessKey}
                       style={{
-                        padding: '14px 16px',
-                        borderRadius: '14px',
-                        border: '1.5px solid #E5E7EB',
+                        borderRadius: '16px',
+                        border: '2px solid #000000',
                         backgroundColor: '#FFFFFF',
-                        boxShadow: '0 2px 6px rgba(0,0,0,0.03)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between'
+                        boxShadow: '3px 3px 0px #000000',
+                        overflow: 'hidden',
+                        transition: 'all 0.15s ease'
                       }}
                     >
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                          <span style={{ fontSize: '13px', fontWeight: 900, color: '#000' }}>
-                            第 {stats.recentSessions.length - idx} 局挑战
-                          </span>
-                          <span
-                            style={{
-                              fontSize: '10.5px',
-                              fontWeight: 800,
-                              padding: '2px 8px',
-                              borderRadius: '9999px',
-                              backgroundColor: sess.status === 'completed' ? '#DCFCE7' : '#FEE2E2',
-                              color: sess.status === 'completed' ? '#166534' : '#991B1B'
-                            }}
-                          >
-                            {sess.status === 'completed' ? '已完成' : '未完成'}
-                          </span>
+                      {/* Accordion Header (Click to toggle) */}
+                      <div
+                        onClick={() => setExpandedSessionId(isExpanded ? null : sessKey)}
+                        style={{
+                          padding: '14px 16px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          backgroundColor: isExpanded ? '#FFFDF5' : '#FFFFFF',
+                          borderBottom: isExpanded ? '2px solid #000000' : 'none'
+                        }}
+                      >
+                        <div style={{ flex: 1, minWidth: 0, paddingRight: '12px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                            <span style={{ fontSize: '14px', fontWeight: 900, color: '#000000' }}>
+                              第 {roundNum} 局 · {sess.chapter_title || 'Sejarah 答题对局'}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '12px', color: '#6B7280', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span>{sessDate ? new Date(sessDate).toLocaleString() : '近期'}</span>
+                            <span>·</span>
+                            <span style={{ color: '#16A34A' }}>{sess.correct_count ?? 0} 对</span>
+                            <span style={{ color: '#DC2626' }}>{sess.wrong_count ?? 0} 错</span>
+                          </div>
                         </div>
-                        <div style={{ fontSize: '12px', color: '#6B7280', fontWeight: 600 }}>
-                          对 {sess.correct_count ?? 0} 题 · 错 {sess.wrong_count ?? 0} 题 · 共 {sess.total_questions ?? 8} 题
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ fontSize: '15px', fontWeight: 900, color: '#D97706' }}>
+                              {sess.score ?? (sess.correct_count * 10)} 分
+                            </div>
+                            <div style={{ fontSize: '11px', color: '#2563EB', fontWeight: 800 }}>
+                              +{sess.earned_bp ?? (sess.correct_count * 10)} BP
+                            </div>
+                          </div>
+                          <div style={{ color: '#000000' }}>
+                            {isExpanded ? <ChevronUp size={20} strokeWidth={2.5} /> : <ChevronDown size={20} strokeWidth={2.5} />}
+                          </div>
                         </div>
                       </div>
 
-                      <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontSize: '16px', fontWeight: 900, color: '#FF9800' }}>
-                          +{sess.earned_bp ?? (sess.correct_count * 10)} BP
-                        </div>
-                        <div style={{ fontSize: '11px', color: '#9CA3AF', fontWeight: 600 }}>
-                          {sess.created_at ? new Date(sess.created_at).toLocaleDateString() : '刚刚'}
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
+                      {/* Accordion Expanded Content: Questions Breakdown */}
+                      {isExpanded && (
+                        <div
+                          style={{
+                            padding: '14px 16px',
+                            backgroundColor: '#FAF9F6',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '12px'
+                          }}
+                        >
+                          {sess.questions && sess.questions.length > 0 ? (
+                            sess.questions.map((q, qIdx) => {
+                              const isQCorrect = Boolean(q.is_correct);
 
-            {/* Tab 2: Mistakes History */}
-            {historyTab === 'mistakes' && (
-              <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {((!stats.wrongQuestions || stats.wrongQuestions.length === 0) && wrongHistory.length === 0) ? (
-                  <div
-                    style={{
-                      textAlign: 'center',
-                      padding: '28px 16px',
-                      color: '#6B7280',
-                      backgroundColor: '#F9FAFB',
-                      borderRadius: '16px'
-                    }}
-                  >
-                    <CheckCircle2 size={36} color="#10B981" style={{ marginBottom: '8px' }} />
-                    <p style={{ margin: 0, fontWeight: 700, fontSize: '14px' }}>太棒了，目前没有错题记录！</p>
-                    <p style={{ margin: '4px 0 0 0', fontSize: '12px' }}>答题中做错的题目将自动归档至此处供针对性复习。</p>
-                  </div>
-                ) : (
-                  (stats.wrongQuestions && stats.wrongQuestions.length > 0 ? stats.wrongQuestions : wrongHistory).map((m, idx) => (
-                    <div
-                      key={m.id || m.question_id || idx}
-                      style={{
-                        padding: '14px 16px',
-                        borderRadius: '14px',
-                        border: '1.5px solid #FECDD3',
-                        backgroundColor: '#FFF1F2',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '6px'
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <span style={{ fontSize: '11px', fontWeight: 900, color: '#E11D48', textTransform: 'uppercase' }}>
-                          错题 #{idx + 1} {m.wrong_count ? `· 累计错 ${m.wrong_count} 次` : ''}
-                        </span>
-                        <span style={{ fontSize: '10.5px', color: '#9CA3AF', fontWeight: 600 }}>
-                          {m.last_wrong_at ? new Date(m.last_wrong_at).toLocaleDateString() : '近期'}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: '13px', fontWeight: 800, color: '#111827', lineHeight: 1.4 }}>
-                        {m.question_text || m.question || `题目 ID: ${String(m.question_id || m.id).substring(0, 12)}...`}
-                      </div>
-                      {m.correct_option_id && (
-                        <div style={{ fontSize: '12px', fontWeight: 700, color: '#15803D', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <CheckCircle2 size={14} color="#15803D" /> 正确答案: {m.correct_option_id}
+                              return (
+                                <div
+                                  key={qIdx}
+                                  style={{
+                                    backgroundColor: '#FFFFFF',
+                                    borderRadius: '12px',
+                                    border: isQCorrect ? '1.5px solid #BBF7D0' : '1.5px solid #FECDD3',
+                                    padding: '12px',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '8px',
+                                    boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+                                  }}
+                                >
+                                  {/* Question Title */}
+                                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px' }}>
+                                    <span style={{ fontWeight: 900, fontSize: '13px', color: isQCorrect ? '#16A34A' : '#DC2626' }}>
+                                      {isQCorrect ? '✔️' : '❌'} Q{q.question_no || qIdx + 1}.
+                                    </span>
+                                    <span style={{ fontWeight: 800, fontSize: '13px', color: '#111827', lineHeight: 1.45 }}>
+                                      {q.question_text}
+                                    </span>
+                                  </div>
+
+                                  {/* Answers Comparison */}
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '2px' }}>
+                                    {!isQCorrect && (
+                                      <div
+                                        style={{
+                                          padding: '7px 10px',
+                                          backgroundColor: '#FEF2F2',
+                                          borderRadius: '8px',
+                                          border: '1px solid #FCA5A5',
+                                          fontSize: '12px',
+                                          fontWeight: 700,
+                                          color: '#B91C1C'
+                                        }}
+                                      >
+                                        ❌ 你的选择: {q.selected_option_text}
+                                      </div>
+                                    )}
+
+                                    <div
+                                      style={{
+                                        padding: '7px 10px',
+                                        backgroundColor: '#F0FDF4',
+                                        borderRadius: '8px',
+                                        border: '1px solid #86EFAC',
+                                        fontSize: '12px',
+                                        fontWeight: 700,
+                                        color: '#15803D'
+                                      }}
+                                    >
+                                      ✔️ 正确答案: {q.correct_option_text}
+                                    </div>
+                                  </div>
+
+                                  {/* Explanation */}
+                                  {q.explanation && (
+                                    <div
+                                      style={{
+                                        padding: '7px 10px',
+                                        backgroundColor: '#FFFBEB',
+                                        borderRadius: '8px',
+                                        border: '1px solid #FDE68A',
+                                        fontSize: '11.5px',
+                                        fontWeight: 600,
+                                        color: '#92400E',
+                                        lineHeight: 1.4
+                                      }}
+                                    >
+                                      💡 <strong>解析：</strong>{q.explanation}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })
+                          ) : (
+                            <div style={{ padding: '12px', textAlign: 'center', color: '#6B7280', fontSize: '12.5px' }}>
+                              本局共 {sess.total_questions || 8} 道题目，答对 {sess.correct_count ?? 0} 题，做错 {sess.wrong_count ?? 0} 题，结算得分 {sess.score ?? 0} 分。
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
-                  ))
-                )}
-              </div>
-            )}
+                  );
+                })
+              )}
+            </div>
 
             {/* Close Button */}
             <button

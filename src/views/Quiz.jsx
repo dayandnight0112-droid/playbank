@@ -206,9 +206,29 @@ const Quiz = ({
         correctAnswers: correctCount
       });
 
+      // Build clean question details array for this session (prevents ID mangling/loss)
+      const questionsDetails = questions.map((q, idx) => {
+        const rawOpts = q.options || [];
+        const selectedOpt = rawOpts.find(o => o.id === q.selectedOptionId);
+        const correctOpt = rawOpts.find(o => o.id === (q.revealedCorrectOptionId || q.correct_option_id));
+        const isUserCorrect = q.isUserCorrect !== undefined
+          ? q.isUserCorrect
+          : (q.revealedCorrectOptionId ? q.revealedCorrectOptionId === q.selectedOptionId : false);
+
+        return {
+          question_no: idx + 1,
+          question_text: q.question || q.text || `题目 #${idx + 1}`,
+          selected_option_text: q.selectedOptionText || selectedOpt?.text || '未作答',
+          correct_option_text: (correctOpt?.text) || (q.revealedCorrectText) || (q.correctAnswer) || '正确答案',
+          explanation: q.revealedExplanation || q.explanation || '',
+          is_correct: isUserCorrect
+        };
+      });
+
       // Step 4: Record Game Session in Supabase & local storage
       quizService.recordGameSession({
         chapterId: quizParams?.chapterId || null,
+        chapterTitle: quizParams?.chapterTitle || quizParams?.chapterName || 'Sejarah',
         chapterVersion: quizParams?.versionNo || 1,
         startedAt: new Date(startTime).toISOString(),
         endedAt: new Date().toISOString(),
@@ -217,10 +237,11 @@ const Quiz = ({
         wrongCount: questions.length - correctCount - skippedCount,
         score: correctCount * scorePerQuestion,
         earnedBP: sessionBP,
-        status: 'completed'
+        status: 'completed',
+        questionsDetails: questionsDetails
       }).catch(err => console.warn('[Quiz] Failed to record game session:', err));
     }
-  }, [status, questions.length, correctCount, quizParams, startTime, skippedCount, sessionBP]);
+  }, [status, questions, correctCount, quizParams, startTime, skippedCount, sessionBP, scorePerQuestion]);
 
   // Step 16: Setup Question with fixed option IDs and post-shuffle A/B/C/D labeling
   const setupQuestion = (question) => {
@@ -390,6 +411,9 @@ const Quiz = ({
     // Attach revealed server grading result for UI rendering
     question.revealedCorrectOptionId = correctOptId;
     question.revealedExplanation = explanation;
+    question.selectedOptionId = optId;
+    question.selectedOptionText = optText;
+    question.isUserCorrect = isCorrect;
     const correctOpt = shuffledOptions.find(o => o.id === correctOptId);
     if (correctOpt) {
       question.revealedCorrectText = `${correctOpt.letter}. ${correctOpt.text}`;
