@@ -287,6 +287,10 @@ const Quiz = ({
 
       question.revealedCorrectOptionId = correctOptId;
       question.revealedExplanation = explanation;
+      const correctOpt = shuffledOptions.find(o => o.id === correctOptId);
+      if (correctOpt) {
+        question.revealedCorrectText = `${correctOpt.letter}. ${correctOpt.text}`;
+      }
 
       // Step 18: Record answer and cumulative wrong history on timeout
       quizService.recordAnswer({
@@ -313,7 +317,7 @@ const Quiz = ({
         source: 'normal_quiz_timeout'
       });
     }
-    scheduleNextQuestion();
+    scheduleNextQuestion(explanation ? 3200 : 2500);
   };
 
   // Step 2 & 16: Handle option selection with Secure RPC Grading & Shuffled Option IDs
@@ -372,6 +376,10 @@ const Quiz = ({
     // Attach revealed server grading result for UI rendering
     question.revealedCorrectOptionId = correctOptId;
     question.revealedExplanation = explanation;
+    const correctOpt = shuffledOptions.find(o => o.id === correctOptId);
+    if (correctOpt) {
+      question.revealedCorrectText = `${correctOpt.letter}. ${correctOpt.text}`;
+    }
 
     // Step 18: Record detailed answer event & cumulative wrong question history
     quizService.recordAnswer({
@@ -416,10 +424,10 @@ const Quiz = ({
       setCombo(0);
     }
 
-    scheduleNextQuestion();
+    scheduleNextQuestion(isCorrect ? 1800 : (explanation ? 3200 : 2500));
   };
 
-  const scheduleNextQuestion = useCallback(() => {
+  const scheduleNextQuestion = useCallback((delayMs = 2000) => {
     setTimeout(() => {
       const nextIndex = currentIndex + 1;
       if (nextIndex < questions.length) {
@@ -449,7 +457,7 @@ const Quiz = ({
 
         setStatus('result');
       }
-    }, 2000);
+    }, delayMs);
   }, [currentIndex, questions, startTime, onCheckBossTrigger, sessionBP, correctCount, skippedCount, maxCombo]);
 
   if (loadError) {
@@ -824,7 +832,7 @@ const Quiz = ({
               const optLetter = opt.letter || String.fromCharCode(65 + idx);
 
               const isSelected = selectedOptionId === optId || selectedOption === optText;
-              const correctOptId = currentQ.correct_option_id || currentQ.correctOptionId || currentQ._raw?.correctOptionId;
+              const correctOptId = currentQ.revealedCorrectOptionId || currentQ.correct_option_id || currentQ.correctOptionId || currentQ._raw?.correctOptionId;
               const isCorrectAnswer = (correctOptId && optId === correctOptId) || optText === currentQ.correctAnswer;
               
               let bg = 'var(--bg-primary)';
@@ -832,9 +840,9 @@ const Quiz = ({
               let textColor = 'var(--text-primary)';
 
               if (feedback !== null) {
-                if (isCorrectAnswer && isSelected) {
-                  bg = 'var(--brand-primary)';
-                  border = 'var(--brand-primary)';
+                if (isCorrectAnswer) {
+                  bg = isSelected ? 'var(--brand-primary)' : '#E8F5E9';
+                  border = isSelected ? 'var(--brand-primary)' : '#4CAF50';
                   textColor = '#000';
                 } else if (isSelected) {
                   bg = '#FFEFE5';
@@ -850,7 +858,7 @@ const Quiz = ({
                   style={{
                     padding: '16px',
                     borderRadius: 'var(--radius-sm)',
-                    border: `1px solid ${border}`,
+                    border: `2px solid ${border}`,
                     background: bg,
                     color: textColor,
                     display: 'flex',
@@ -879,8 +887,17 @@ const Quiz = ({
                   </div>
                   <span className="text-body-bold" style={{ flex: 1 }}>{optText}</span>
                   
-                  {feedback !== null && isCorrectAnswer && isSelected && (
-                    <Check size={20} color="#000" strokeWidth={3} />
+                  {feedback !== null && isCorrectAnswer && (
+                    <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '4px', color: '#2E7D32', fontWeight: 800, fontSize: '13px' }}>
+                      <Check size={18} color="#2E7D32" strokeWidth={3} />
+                      <span>正确</span>
+                    </div>
+                  )}
+                  {feedback !== null && isSelected && !isCorrectAnswer && (
+                    <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '4px', color: '#D32F2F', fontWeight: 800, fontSize: '13px' }}>
+                      <XCircle size={18} color="#D32F2F" strokeWidth={2.5} />
+                      <span>错误</span>
+                    </div>
                   )}
                 </button>
               );
@@ -915,9 +932,19 @@ const Quiz = ({
                   </div>
                 )}
               </div>
-              <p style={{ fontSize: '14px', color: 'inherit', fontWeight: 500 }}>
-                {feedback === 'correct' ? (combo >= 3 ? "Great job! You're on fire! 🔥" : "Good job!") : feedback === 'timeout' ? "Time's up! Be faster next time." : "Oops! Wrong answer."}
+              <p style={{ fontSize: '15px', color: 'inherit', fontWeight: 800, margin: 0 }}>
+                {feedback === 'correct' ? (combo >= 3 ? "太棒了！连击暴击！🔥" : "回答正确！") : feedback === 'timeout' ? "时间到！下次要更快哦。" : "回答错误！"}
               </p>
+              {feedback !== 'correct' && currentQ.revealedCorrectText && (
+                <div style={{ fontSize: '13px', fontWeight: 800, marginTop: '6px', opacity: 0.95 }}>
+                  正确答案: {currentQ.revealedCorrectText}
+                </div>
+              )}
+              {feedback !== 'correct' && currentQ.revealedExplanation && (
+                <div style={{ fontSize: '12px', fontWeight: 500, marginTop: '4px', opacity: 0.9, lineHeight: 1.4 }}>
+                  解析: {currentQ.revealedExplanation}
+                </div>
+              )}
             </div>
           </div>
         )}
