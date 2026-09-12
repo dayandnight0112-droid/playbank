@@ -947,21 +947,23 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
                 flex: 1,
                 minHeight: 0,
                 overflowY: 'auto',
+                WebkitOverflowScrolling: 'touch',
+                touchAction: 'pan-y',
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '12px',
-                paddingRight: '6px',
-                paddingBottom: '8px'
+                paddingRight: '8px',
+                paddingBottom: '24px'
               }}
             >
               {loading ? (
-                <div style={{ padding: '40px 16px', textAlign: 'center', color: '#6B7280' }}>
+                <div style={{ padding: '40px 16px', textAlign: 'center', color: '#6B7280', flexShrink: 0 }}>
                   <RefreshCw size={36} color="#000" style={{ marginBottom: '14px', animation: 'spin 1s linear infinite' }} />
                   <p style={{ margin: 0, fontWeight: 800, fontSize: '14.5px', color: '#000' }}>正在从云端读取对局记录...</p>
                   <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
                 </div>
               ) : error ? (
-                <div style={{ padding: '30px 16px', textAlign: 'center', color: '#DC2626' }}>
+                <div style={{ padding: '30px 16px', textAlign: 'center', color: '#DC2626', flexShrink: 0 }}>
                   <AlertCircle size={36} color="#DC2626" style={{ marginBottom: '12px' }} />
                   <p style={{ margin: 0, fontWeight: 800, fontSize: '14.5px' }}>{error}</p>
                   <button
@@ -989,7 +991,8 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
                     color: '#6B7280',
                     backgroundColor: '#F9FAFB',
                     borderRadius: '16px',
-                    border: '1.5px dashed #E5E7EB'
+                    border: '1.5px dashed #E5E7EB',
+                    flexShrink: 0
                   }}
                 >
                   <Gamepad2 size={40} color="#D1D5DB" style={{ marginBottom: '8px' }} />
@@ -1016,6 +1019,7 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
                     <div
                       key={sessKey}
                       style={{
+                        flexShrink: 0,
                         borderRadius: '16px',
                         border: '2px solid #000000',
                         backgroundColor: '#FFFFFF',
