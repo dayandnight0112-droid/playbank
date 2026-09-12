@@ -157,9 +157,11 @@ const BossBattle = ({
     const isRevealedCorrect = revealedCorrectIndex === index;
     const isAnswerLocked = battlePhase !== BATTLE_PHASES.QUESTION;
 
-    let bg = '#1E293B';
-    let border = 'rgba(255, 255, 255, 0.15)';
-    let color = '#FFFFFF';
+    let bg = '#FFFFFF';
+    let border = 'rgba(0, 0, 0, 0.12)';
+    let color = '#000000';
+    let badgeBg = '#000000';
+    let badgeColor = '#FFBC00';
     let icon = null;
 
     if (isAnswerLocked) {
@@ -172,28 +174,41 @@ const BossBattle = ({
 
       // Case 1: Option is the revealed correct answer (on wrong/timeout)
       if (isRevealedCorrect) {
-        bg = 'rgba(34, 197, 94, 0.25)';
-        border = '#22C55E';
-        color = '#4ADE80';
-        icon = <Check size={18} color="#22C55E" strokeWidth={3} />;
+        bg = '#DCFCE7';
+        border = '#16A34A';
+        color = '#15803D';
+        badgeBg = '#16A34A';
+        badgeColor = '#FFFFFF';
+        icon = <Check size={18} color="#16A34A" strokeWidth={3} />;
       }
       // Case 2: Selected option that is CORRECT -> Immediately Green (青色)
       else if (isSelected && isSelectedCorrect) {
-        bg = 'rgba(34, 197, 94, 0.25)';
-        border = '#22C55E';
-        color = '#4ADE80';
-        icon = <Check size={18} color="#22C55E" strokeWidth={3} />;
+        bg = '#DCFCE7';
+        border = '#16A34A';
+        color = '#15803D';
+        badgeBg = '#16A34A';
+        badgeColor = '#FFFFFF';
+        icon = <Check size={18} color="#16A34A" strokeWidth={3} />;
       }
       // Case 3: Selected option that is WRONG -> Red (红色)
       else if (isSelected && !isSelectedCorrect) {
-        bg = 'rgba(239, 68, 68, 0.25)';
+        bg = '#FEE2E2';
         border = '#EF4444';
-        color = '#F87171';
+        color = '#B91C1C';
+        badgeBg = '#EF4444';
+        badgeColor = '#FFFFFF';
         icon = <X size={18} color="#EF4444" strokeWidth={3} />;
+      } else {
+        // Other non-selected options while answer is locked
+        bg = 'rgba(255, 255, 255, 0.7)';
+        border = 'rgba(0, 0, 0, 0.08)';
+        color = '#64748B';
+        badgeBg = '#E2E8F0';
+        badgeColor = '#64748B';
       }
     }
 
-    return { bg, border, color, icon };
+    return { bg, border, color, badgeBg, badgeColor, icon };
   };
 
   // Progress timer percentage
@@ -728,21 +743,32 @@ const BossBattle = ({
       {/* ============================================================ */}
       <div
         style={{
-          background: '#0F172A',
-          borderTop: '2px solid rgba(255, 255, 255, 0.1)',
-          padding: '18px 16px 24px',
+          background: 'var(--brand-primary, #FFBC00)',
+          borderTop: '3px solid #000000',
+          padding: '18px 16px calc(20px + env(safe-area-inset-bottom, 0px))',
           borderTopLeftRadius: '24px',
           borderTopRightRadius: '24px',
-          boxShadow: '0 -8px 30px rgba(0,0,0,0.5)',
+          boxShadow: '0 -8px 32px rgba(0, 0, 0, 0.45)',
           zIndex: 20
         }}
       >
         {/* Question Text Box with snappy refresh animation */}
         <div key={questionIndex} style={{ marginBottom: '16px', minHeight: '52px', animation: 'fadeInQuick 0.15s ease-out' }}>
-          <div style={{ fontSize: '10px', color: '#F59E0B', fontWeight: 800, textTransform: 'uppercase', marginBottom: '4px' }}>
+          <div style={{
+            display: 'inline-block',
+            fontSize: '10px',
+            color: '#000000',
+            background: 'rgba(0, 0, 0, 0.12)',
+            padding: '2px 8px',
+            borderRadius: '6px',
+            fontWeight: 900,
+            textTransform: 'uppercase',
+            marginBottom: '6px',
+            letterSpacing: '0.8px'
+          }}>
             {currentQuestion?.subject || 'SPM Trial'}
           </div>
-          <h2 style={{ fontSize: '15px', fontWeight: 800, color: '#F8FAFC', margin: 0, lineHeight: 1.4 }}>
+          <h2 style={{ fontSize: '16px', fontWeight: 900, color: '#000000', margin: 0, lineHeight: 1.35 }}>
             {currentQuestion?.text || 'Loading question...'}
           </h2>
         </div>
@@ -750,7 +776,7 @@ const BossBattle = ({
         {/* 4 Large Action Options Buttons */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
           {currentQuestion?.options?.map((opt, idx) => {
-            const { bg, border, color, icon } = getOptionStyle(idx);
+            const { bg, border, color, badgeBg, badgeColor, icon } = getOptionStyle(idx);
             const isClickLocked = battlePhase !== BATTLE_PHASES.QUESTION;
 
             return (
@@ -771,7 +797,7 @@ const BossBattle = ({
                   textAlign: 'left',
                   cursor: isClickLocked ? 'default' : 'pointer',
                   transition: 'all 0.10s ease-out',
-                  boxShadow: '0 2px 6px rgba(0,0,0,0.2)'
+                  boxShadow: '0 3px 8px rgba(0, 0, 0, 0.08)'
                 }}
               >
                 {/* Option Letter (A, B, C, D) */}
@@ -780,19 +806,21 @@ const BossBattle = ({
                     width: '28px',
                     height: '28px',
                     borderRadius: '8px',
-                    background: 'rgba(255, 255, 255, 0.1)',
+                    background: badgeBg,
+                    color: badgeColor,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    fontSize: '12px',
-                    fontWeight: 900
+                    fontSize: '13px',
+                    fontWeight: 900,
+                    transition: 'all 0.15s ease'
                   }}
                 >
                   {String.fromCharCode(65 + idx)}
                 </div>
 
                 {/* Option text */}
-                <span style={{ flex: 1, fontSize: '13px', fontWeight: 700, lineHeight: 1.3 }}>
+                <span style={{ flex: 1, fontSize: '14px', fontWeight: 800, lineHeight: 1.3 }}>
                   {opt}
                 </span>
 

@@ -609,37 +609,39 @@ function App() {
       )}
 
       {/* Temporary Debug Button for Resetting Plays */}
-      <button 
-        onClick={() => {
-          if (!currentUser && userBP > 0) {
-            setShowExitRetention(true);
-          } else {
-            resetAttempts();
-          }
-        }}
-        style={{
-          position: 'absolute',
-          bottom: '150px',
-          right: '20px',
-          zIndex: 100,
-          background: 'var(--brand-primary)',
-          color: '#000',
-          border: '1px solid var(--border-color)',
-          borderRadius: '50%',
-          width: '40px',
-          height: '40px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          cursor: 'pointer',
-          boxShadow: 'var(--card-shadow-sm)',
-          fontSize: '12px',
-          fontWeight: 'bold'
-        }}
-        title="Reset Attempts"
-      >
-        ↺
-      </button>
+      {currentView === 'home' && (
+        <button 
+          onClick={() => {
+            if (!currentUser && userBP > 0) {
+              setShowExitRetention(true);
+            } else {
+              resetAttempts();
+            }
+          }}
+          style={{
+            position: 'absolute',
+            bottom: '150px',
+            right: '20px',
+            zIndex: 100,
+            background: 'var(--brand-primary)',
+            color: '#000',
+            border: '1px solid var(--border-color)',
+            borderRadius: '50%',
+            width: '40px',
+            height: '40px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            boxShadow: 'var(--card-shadow-sm)',
+            fontSize: '12px',
+            fontWeight: 'bold'
+          }}
+          title="Reset Attempts"
+        >
+          ↺
+        </button>
+      )}
 
       {/* Dev Test Button for Boss Battle: strictly hidden in Production, only visible in Dev mode */}
       {import.meta.env.DEV && currentView === 'home' && (
