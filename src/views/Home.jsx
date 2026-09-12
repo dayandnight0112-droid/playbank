@@ -89,7 +89,7 @@ const Home = ({
           overflow: 'hidden',
           pointerEvents: 'none',
           zIndex: 0,
-          background: activeScene?.skyGradient || activeScene?.background || 'linear-gradient(180deg, #0B132B 0%, #1C2541 35%, #1F3A3B 70%, #0D2818 100%)'
+          background: activeScene?.skyGradient || 'linear-gradient(180deg, #38BDF8 0%, #60A5FA 35%, #93C5FD 70%, #FEF08A 100%)'
         }}
       >
         {(!activeScene?.id || activeScene?.id === 'trainingCamp') && (
@@ -101,7 +101,7 @@ const Home = ({
           style={{
             position: 'absolute',
             inset: 0,
-            background: 'linear-gradient(180deg, rgba(11, 19, 43, 0.45) 0%, transparent 20%, transparent 70%, rgba(5, 16, 11, 0.65) 100%), radial-gradient(circle at 50% 35%, rgba(255, 188, 0, 0.12) 0%, transparent 65%)',
+            background: 'linear-gradient(180deg, rgba(15, 23, 42, 0.25) 0%, transparent 18%, transparent 75%, rgba(15, 23, 42, 0.4) 100%)',
             pointerEvents: 'none'
           }}
         />

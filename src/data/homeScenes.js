@@ -10,14 +10,14 @@ export const HOME_SCENES = {
     progress: '3/8',
     locked: false,
     theme: 'adventure-camp',
-    backgroundImage: null, // Supports future external art asset URL
+    backgroundImage: '/backgrounds/home_world_tree.png',
     foregroundImage: null,
-    skyGradient: 'linear-gradient(180deg, #0B132B 0%, #1C2541 35%, #1F3A3B 70%, #0D2818 100%)',
+    skyGradient: 'linear-gradient(180deg, #38BDF8 0%, #60A5FA 35%, #93C5FD 70%, #FEF08A 100%)',
     ambientColor: '#F59E0B',
     pathColor: '#B45309',
     gateStatus: 'open_path',
-    particleEffect: 'fireflies',
-    description: '通往初阶试炼的森林古道与营地帐篷。'
+    particleEffect: 'golden_leaves',
+    description: '神圣世界树与云上浮岛城堡。'
   },
   mysticLibrary: {
     id: 'mysticLibrary',
