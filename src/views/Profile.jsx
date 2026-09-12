@@ -228,9 +228,11 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
       className="view-content"
       style={{
         padding: 0,
+        paddingBottom: 'calc(110px + env(safe-area-inset-bottom, 24px))',
         backgroundColor: '#F8F9FA',
         minHeight: '100%',
         overflowY: 'auto',
+        WebkitOverflowScrolling: 'touch',
         display: 'flex',
         flexDirection: 'column'
       }}
@@ -928,18 +930,14 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
               </div>
             </div>
 
-            {/* Scroll Hint / Section Header */}
+            {/* Section Header */}
             <div
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
                 padding: '0 4px 6px 4px',
                 flexShrink: 0
               }}
             >
               <span style={{ fontSize: '12px', fontWeight: 800, color: '#374151' }}>对局详情明细</span>
-              <span style={{ fontSize: '11px', fontWeight: 700, color: '#6B7280' }}>👇 可下滑查看全部题目</span>
             </div>
 
             {/* Accordion List of Game Sessions (以局为单位的手风琴折叠) */}
@@ -1090,18 +1088,14 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
                             WebkitOverflowScrolling: 'touch'
                           }}
                         >
-                          {/* Inner Scroll Hint */}
+                          {/* Inner Header */}
                           <div style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
                             padding: '0 2px 2px 2px',
                             fontSize: '11px',
                             color: '#B45309',
                             fontWeight: 800
                           }}>
                             <span>作答题目明细（共 {sess.questions?.length || 8} 题）</span>
-                            <span>↕️ 可在此区域内滑动查看</span>
                           </div>
 
                           {sess.questions && sess.questions.length > 0 ? (
