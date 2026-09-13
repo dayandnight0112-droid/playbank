@@ -89,11 +89,24 @@ function App() {
         console.log(`[App] Player auth initialized: ${res.user.id} (anonymous: ${res.isAnonymous})`);
         try {
           const profile = await playerAuthService.getCloudProfile(res.user.id);
+          const currentGuest = mockDb.getGuestProfile();
+          const localName = currentGuest?.guestName?.trim();
+          const isLocalCustomName = localName && !localName.startsWith('Guest_') && localName !== '冒险家';
+          const isCloudGeneric = !profile?.nickname || profile.nickname.startsWith('Guest_') || profile.nickname === '冒险家';
+
+          // If local player has a custom name (e.g. 'ABC') but cloud has generic 'Guest_xxxx',
+          // sync custom name UP to cloud so Admin sees 'ABC' too!
+          if (isLocalCustomName && isCloudGeneric) {
+            await playerAuthService.syncProfileMetadata({ nickname: localName });
+          }
+
           if (profile?.player_code) {
-            const updated = mockDb.updateGuestProfile({
-              player_code: profile.player_code,
-              guestName: profile.nickname || undefined
-            });
+            const guestUpdates = { player_code: profile.player_code };
+            // NEVER overwrite local custom name with generic 'Guest_xxxx'
+            if (profile.nickname && !profile.nickname.startsWith('Guest_')) {
+              guestUpdates.guestName = profile.nickname;
+            }
+            const updated = mockDb.updateGuestProfile(guestUpdates);
             if (updated) {
               setGuestProfile(updated);
             }

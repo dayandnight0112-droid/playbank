@@ -238,13 +238,24 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
     };
   }, [sessions, answers]);
 
-  // Player Name & Code Display
+  // Player Name & Code Display: NEVER replace player's custom name with generic Guest_xxxx
   const displayName = useMemo(() => {
-    if (cloudProfile?.nickname) return cloudProfile.nickname.toUpperCase();
-    if (currentUser?.nickname) return currentUser.nickname.toUpperCase();
-    if (guestProfile?.guestName) return guestProfile.guestName.toUpperCase();
+    const currentNick = currentUser?.nickname?.trim() || currentUser?.ic_name?.trim();
+    if (currentNick) return currentNick.toUpperCase();
     if (currentUser?.email) return currentUser.email.split('@')[0].toUpperCase();
-    return 'PLAYBANK PLAYER';
+
+    const guestNick = guestProfile?.guestName?.trim();
+    const cloudNick = cloudProfile?.nickname?.trim();
+
+    // Prioritize real custom nickname over system fallback 'Guest_xxxx'
+    if (guestNick && !guestNick.startsWith('Guest_') && guestNick !== '冒险家') {
+      return guestNick.toUpperCase();
+    }
+    if (cloudNick && !cloudNick.startsWith('Guest_') && cloudNick !== '冒险家') {
+      return cloudNick.toUpperCase();
+    }
+
+    return (guestNick || cloudNick || 'PLAYBANK PLAYER').toUpperCase();
   }, [cloudProfile, currentUser, guestProfile]);
 
   const playerCode = useMemo(() => {
