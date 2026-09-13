@@ -14,6 +14,9 @@ import { mockDb } from '../lib/mockDb';
 import { playModalSwooshSound } from '../lib/soundEffects';
 import PlayerAvatar from '../components/common/PlayerAvatar';
 
+// 控制大厅右侧活动入口（Event/Boss/Badge）的显隐，待正式开放给玩家时切为 true 即可
+const SHOW_RIGHT_LOBBY_ACTIONS = false;
+
 const Home = ({
   currentUser,
   guestProfile,
@@ -273,51 +276,56 @@ const Home = ({
           onContinue={onGoBattle || onStartChallenge}
         />
 
-        {/* Right Action Column (Event, Boss Gate, Achievements - Step 22) */}
-        <div
-          className="side-action-col"
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'flex-start',
-            gap: '12px',
-            zIndex: 15,
-            width: '56px'
-          }}
-        >
-          {/* 1. 限时活动 (Event - HOT 标识) */}
-          <LobbySideAction
-            icon="⚡"
-            label="Event"
-            badgeType="pill"
-            badgeText="HOT"
-            badgeColor="#A855F7"
-            glowColor="rgba(168, 85, 247, 0.4)"
-            onClick={() => handleOpenModal('event')}
-          />
+        {/* Right Action Column (Event, Boss Gate, Achievements - Temporarily hidden until officially unlocked) */}
+        {SHOW_RIGHT_LOBBY_ACTIONS ? (
+          <div
+            className="side-action-col"
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'flex-start',
+              gap: '12px',
+              zIndex: 15,
+              width: '56px'
+            }}
+          >
+            {/* 1. 限时活动 (Event - HOT 标识) */}
+            <LobbySideAction
+              icon="⚡"
+              label="Event"
+              badgeType="pill"
+              badgeText="HOT"
+              badgeColor="#A855F7"
+              glowColor="rgba(168, 85, 247, 0.4)"
+              onClick={() => handleOpenModal('event')}
+            />
 
-          {/* 2. 领主封印巨门 (Boss Gate - 显示 LOCKED) */}
-          <LobbySideAction
-            icon="💀"
-            label="Boss"
-            badgeType="pill"
-            badgeText="LOCKED"
-            badgeColor="#EF4444"
-            glowColor="rgba(239, 68, 68, 0.35)"
-            onClick={() => handleOpenModal('boss')}
-          />
+            {/* 2. 领主封印巨门 (Boss Gate - 显示 LOCKED) */}
+            <LobbySideAction
+              icon="💀"
+              label="Boss"
+              badgeType="pill"
+              badgeText="LOCKED"
+              badgeColor="#EF4444"
+              glowColor="rgba(239, 68, 68, 0.35)"
+              onClick={() => handleOpenModal('boss')}
+            />
 
-          {/* 3. 成就勋章 (Achievements - 显示进度 1/12) */}
-          <LobbySideAction
-            icon="🏆"
-            label="Badge"
-            badgeType="pill"
-            badgeText="1/12"
-            badgeColor="#EAB308"
-            glowColor="rgba(234, 179, 8, 0.4)"
-            onClick={() => handleOpenModal('achievements')}
-          />
-        </div>
+            {/* 3. 成就勋章 (Achievements - 显示进度 1/12) */}
+            <LobbySideAction
+              icon="🏆"
+              label="Badge"
+              badgeType="pill"
+              badgeText="1/12"
+              badgeColor="#EAB308"
+              glowColor="rgba(234, 179, 8, 0.4)"
+              onClick={() => handleOpenModal('achievements')}
+            />
+          </div>
+        ) : (
+          /* 保持左右对称留白，使中间内容（CONTINUE 按钮与关卡信息）视觉严格居中 */
+          <div style={{ width: '56px', pointerEvents: 'none' }} aria-hidden="true" />
+        )}
       </div>
 
       {/* Dedicated Daily Missions Modal (Step 26) */}
