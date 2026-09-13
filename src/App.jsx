@@ -230,12 +230,15 @@ function App() {
     });
   };
 
-  const handleEvaluateBossTrigger = (quizStats) => {
-    return evaluateBossTrigger({
-      subject: quizParams.subjectTitle || quizParams.subject || 'History',
+  const handleEvaluateBossTrigger = async (quizStats, cycleInfo) => {
+    return await evaluateBossTrigger({
+      chapterId: quizParams.chapterId,
+      subjectId: quizParams.subject,
+      subjectTitle: quizParams.subjectTitle || 'History',
       form: quizParams.form || 4,
       chapter: quizParams.chapter || 1,
       quizStats,
+      cycleInfo,
       currentUser
     });
   };
@@ -265,8 +268,8 @@ function App() {
     }, 1400);
   };
 
-  const handleCheckBossTrigger = (quizStats) => {
-    const triggerResult = handleEvaluateBossTrigger(quizStats);
+  const handleCheckBossTrigger = async (quizStats, cycleInfo) => {
+    const triggerResult = await handleEvaluateBossTrigger(quizStats, cycleInfo);
     if (triggerResult.shouldTrigger) {
       handleTriggerBossEncounter(triggerResult, quizStats);
       return true; // Boss encounter triggered!
@@ -506,6 +509,7 @@ function App() {
           <BossBattle
             encounter={bossBattleParams?.encounter}
             questions={bossBattleParams?.questions}
+            chapterId={bossBattleParams?.chapterId || quizParams?.chapterId}
             subject={bossBattleParams?.subject || quizParams?.subjectTitle}
             form={bossBattleParams?.form || quizParams?.form}
             chapter={bossBattleParams?.chapter || quizParams?.chapter}

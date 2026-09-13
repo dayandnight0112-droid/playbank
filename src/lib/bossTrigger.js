@@ -1,78 +1,28 @@
-import { mockDb, safeGetJSON, safeSetJSON } from './mockDb.js';
+import { safeGetJSON, safeSetJSON } from './mockDb.js';
 import { BOSS_TYPE_KEYS, getEnabledBossTypes, getBossTypeConfig } from '../data/bossTypes.js';
 import { createBossEncounter } from '../data/bossRegistry.js';
-
-const shuffleArray = (arr) => [...arr].sort(() => Math.random() - 0.5);
-
-/**
- * Normalizes subject string/id into matching keywords
- */
-export const normalizeSubjectName = (subject) => {
-  if (!subject) return '';
-  const str = String(subject).toLowerCase();
-  if (str === '1' || str.includes('history') || str.includes('sejarah')) return 'sejarah';
-  if (str === '2' || str.includes('science') || str.includes('sains')) return 'science';
-  if (str === '3' || str.includes('math')) return 'mathematics';
-  return str;
-};
+import { quizService } from './quizService.js';
+import { playerAuthService } from './playerAuthService.js';
 
 /**
- * Filter questions from question bank matching active subject and form
- */
-export const getMatchingQuestions = (subject, form = 4) => {
-  const allQuestions = mockDb.getQuestions();
-  const normalizedSubj = normalizeSubjectName(subject);
-  const formNum = Number(form) || 4;
-
-  const matched = allQuestions.filter(q => {
-    // 1. Check form
-    const matchesForm = (q.form && Number(q.form) === formNum) ||
-      (q.subject && q.subject.includes(String(formNum)));
-    if (!matchesForm) return false;
-
-    // 2. Check subject
-    const qSubj = (q.subject || '').toLowerCase();
-    const qSubjName = (q.subjectName || '').toLowerCase();
-
-    if (normalizedSubj === 'sejarah') {
-      return qSubj.includes('sejarah') || qSubjName.includes('history');
-    }
-    if (normalizedSubj === 'science') {
-      return qSubj.includes('science') || qSubjName.includes('science') || qSubj.includes('sains');
-    }
-    if (normalizedSubj === 'mathematics') {
-      return qSubj.includes('math') || qSubjName.includes('math');
-    }
-
-    return qSubj.includes(normalizedSubj) || qSubjName.includes(normalizedSubj);
-  });
-
-  return matched;
-};
-
-/**
- * Evaluates whether a Boss Encounter should be triggered after a normal quiz.
- * 
+ * Evaluates whether a Boss Encounter should be triggered after a normal quiz
+ * and draws genuine, unserved questions from Supabase for the Boss Battle.
+ *
  * Rules:
  * 1. Only enabled Boss Types are considered (currently strictly SPEED).
- * 2. Questions must match current subject/form.
- * 3. Safe fallback: if matched questions < 10, do NOT trigger.
- * 4. Generates 10 normalized questions ready for BossBattle.
- * 
- * @param {Object} params
- * @param {string|number} params.subject - Active subject
- * @param {number} params.form - Active form
- * @param {number} [params.chapter=1] - Active chapter
- * @param {Object} [params.quizStats] - Quiz performance stats
- * @param {Object} [params.currentUser] - Current user/session
- * @param {boolean} [params.forceTrigger=false] - Testing override
- * @returns {Object} Trigger evaluation result
+ * 2. Requires a valid chapter UUID from Supabase.
+ * 3. Strict Cycle Rule: Boss can ONLY draw questions that have not yet appeared in the current cycle.
+ *    If remainingInCycle < requiredCount (10), safe fallback: do NOT trigger Boss.
+ * 4. Server-Authoritative: Questions fetched via get_next_questions RPC contain zero correct answers/explanations.
  */
-export const evaluateBossTrigger = ({
-  subject = 'History',
+export const evaluateBossTrigger = async ({
+  chapterId,
+  subjectId,
+  subjectTitle,
   form = 4,
   chapter = 1,
   quizStats = null,
+  cycleInfo = null,
   currentUser = null,
   forceTrigger = false
 }) => {
@@ -89,78 +39,116 @@ export const evaluateBossTrigger = ({
     };
   }
 
-  // 2. Pull available questions for current subject/form
-  const matchedQuestions = getMatchingQuestions(subject, form);
+  const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!chapterId || !UUID_REGEX.test(chapterId)) {
+    console.warn(`[BossTrigger] Invalid or missing chapter UUID: ${chapterId}. Boss cannot be triggered.`);
+    return {
+      shouldTrigger: false,
+      reason: 'invalid_chapter_uuid',
+      encounter: null,
+      questions: []
+    };
+  }
+
   const requiredCount = getBossTypeConfig(BOSS_TYPE_KEYS.SPEED)?.questionCount || 10;
+  const remainingInCycle = cycleInfo?.remainingInCycle;
 
-  // Safe fallback: if fewer than 10 questions exist in the pool, DO NOT trigger!
-  if (matchedQuestions.length < requiredCount) {
-    console.warn(`[BossTrigger] Insufficient questions (${matchedQuestions.length}/${requiredCount}) for subject: ${subject}, form: ${form}. Safe fallback active.`);
+  // 2. Strict Cycle Rule: If unserved questions in current cycle < 10, DO NOT trigger Boss!
+  if (remainingInCycle !== undefined && remainingInCycle !== null && remainingInCycle < requiredCount && !forceTrigger) {
+    console.warn(
+      `[BossTrigger] Insufficient unserved questions in current cycle (${remainingInCycle}/${requiredCount}) for chapter: ${chapterId}. Safe fallback active: Boss not triggered.`
+    );
     return {
       shouldTrigger: false,
-      reason: 'insufficient_questions',
-      availableCount: matchedQuestions.length,
+      reason: 'insufficient_cycle_questions',
+      availableCount: remainingInCycle,
       requiredCount,
+      chapterId,
       encounter: null,
       questions: []
     };
   }
 
-  // 3. Trigger Condition Check
-  const triggerHistory = safeGetJSON('playbank_boss_trigger_state', { totalTriggers: 0, lastTriggerAt: null });
-  
-  // Step 11: Enabled trigger upon successful quiz completion (or forceTrigger)
-  const shouldTrigger = true;
+  // 3. Draw genuine unserved questions from Supabase via get_next_questions RPC
+  try {
+    const authUserId = await playerAuthService.getAuthUserId();
+    const playerId = (currentUser?.id && currentUser.id !== 'guest') ? currentUser.id : authUserId;
 
-  if (!shouldTrigger && !forceTrigger) {
+    const batch = await quizService.getNextQuestions({
+      chapterId,
+      limit: requiredCount,
+      playerId,
+      randomEnabled: true
+    });
+
+    const questions = batch?.questions || [];
+
+    if (questions.length < requiredCount) {
+      console.warn(
+        `[BossTrigger] Insufficient questions returned from cloud RPC (${questions.length}/${requiredCount}) for chapter: ${chapterId}. Safe fallback active: Boss not triggered.`
+      );
+      return {
+        shouldTrigger: false,
+        reason: 'insufficient_questions',
+        availableCount: questions.length,
+        requiredCount,
+        chapterId,
+        encounter: null,
+        questions: []
+      };
+    }
+
+    // 4. Console Evidence Logging
+    console.log(`[BossTrigger] Boss Encounter Ready!
+- Source: Supabase RPC (get_next_questions)
+- Chapter ID (UUID): ${chapterId}
+- Subject: ${subjectTitle || subjectId || 'Subject'} (Form ${form})
+- Questions Fetched: ${questions.length} (Cycle ${batch.cycle_number}, remaining: ${batch.remaining_in_cycle})
+- Trigger Result: SUCCESS`);
+
+    // 5. Build Decoupled Encounter
+    const encounter = createBossEncounter('chrono_lynx', BOSS_TYPE_KEYS.SPEED, {
+      metadata: {
+        chapterId,
+        subjectId,
+        subjectTitle,
+        form,
+        chapter,
+        triggeredAt: new Date().toISOString()
+      }
+    });
+
+    // Update trigger state history
+    const triggerHistory = safeGetJSON('playbank_boss_trigger_state', { totalTriggers: 0, lastTriggerAt: null });
+    safeSetJSON('playbank_boss_trigger_state', {
+      totalTriggers: (triggerHistory.totalTriggers || 0) + 1,
+      lastTriggerAt: new Date().toISOString(),
+      lastSubject: subjectTitle || subjectId,
+      lastChapterId: chapterId,
+      lastForm: form
+    });
+
     return {
-      shouldTrigger: false,
-      reason: 'condition_not_met',
-      encounter: null,
-      questions: []
-    };
-  }
-
-  // 4. Draw 10 genuine questions from current subject pool
-  const shuffled = shuffleArray(matchedQuestions).slice(0, requiredCount);
-  const normalizedQuestions = shuffled.map(q => {
-    const options = q.options || shuffleArray([q.correctAnswer, ...q.incorrectAnswers]);
-    const correctIndex = options.indexOf(q.correctAnswer);
-    return {
-      ...q,
-      subject: q.subject || `${subject} Form ${form}`,
-      chapter: q.chapter || chapter || 1,
-      options,
-      correctIndex
-    };
-  });
-
-  // 5. Build Decoupled Encounter (Boss Character = Chrono Lynx, Boss Type = SPEED)
-  const encounter = createBossEncounter('chrono_lynx', BOSS_TYPE_KEYS.SPEED, {
-    metadata: {
-      subject,
+      shouldTrigger: true,
+      bossType: BOSS_TYPE_KEYS.SPEED,
+      bossId: 'chrono_lynx',
+      encounter,
+      questions,
+      chapterId,
+      subject: subjectTitle || subjectId,
       form,
       chapter,
-      triggeredAt: new Date().toISOString()
-    }
-  });
-
-  // Update trigger state
-  safeSetJSON('playbank_boss_trigger_state', {
-    totalTriggers: (triggerHistory.totalTriggers || 0) + 1,
-    lastTriggerAt: new Date().toISOString(),
-    lastSubject: subject,
-    lastForm: form
-  });
-
-  return {
-    shouldTrigger: true,
-    bossType: BOSS_TYPE_KEYS.SPEED,
-    bossId: 'chrono_lynx',
-    encounter,
-    questions: normalizedQuestions,
-    subject,
-    form,
-    chapter
-  };
+      cycleNumber: batch.cycle_number,
+      remainingInCycle: batch.remaining_in_cycle
+    };
+  } catch (err) {
+    console.error(`[BossTrigger] Error fetching Boss questions for chapter ${chapterId}:`, err);
+    return {
+      shouldTrigger: false,
+      reason: 'rpc_fetch_error',
+      error: err.message,
+      encounter: null,
+      questions: []
+    };
+  }
 };

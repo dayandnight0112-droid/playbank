@@ -7,6 +7,7 @@ import {
   BATTLE_TIMINGS
 } from '../data/battleConstants.js';
 import { mockDb } from '../lib/mockDb.js';
+import { quizService } from '../lib/quizService.js';
 
 /**
  * Universal Boss Battle Engine Hook (V1)
@@ -20,11 +21,13 @@ import { mockDb } from '../lib/mockDb.js';
  * @param {Object} params
  * @param {Object} params.encounter - Encounter configuration from createBossEncounter
  * @param {Array} params.questions - Questions array for the battle
+ * @param {string} [params.sessionId] - Active game session ID for remote RPC grading
  * @param {Function} [params.onComplete] - Callback on battle termination
  */
 export const useBossBattleEngine = ({
   encounter,
   questions = [],
+  sessionId = null,
   onComplete
 }) => {
   // 1. Immutable Boss & Type Identity
@@ -55,6 +58,7 @@ export const useBossBattleEngine = ({
   // 6. Visual Feedback States (Damage Float, Last Locked Answer)
   const [damageFloat, setDamageFloat] = useState(null); // { label, isCrit, isBlock }
   const [lastSelectedOption, setLastSelectedOption] = useState(null);
+  const [isLastSelectionCorrect, setIsLastSelectionCorrect] = useState(null);
 
   // Timer Ref for clean lifecycle orchestration
   const timerRef = useRef(null);
@@ -122,6 +126,8 @@ export const useBossBattleEngine = ({
     setBossAnimation(BOSS_ANIMATIONS.IDLE);
     setDamageFloat(null);
     setLastSelectedOption(null);
+    setIsLastSelectionCorrect(null);
+    setRevealedCorrectIndex(null);
 
     const nextDelay = encounter?.type?.cadence?.nextTransitionMs || BATTLE_TIMINGS.NEXT_TRANSITION_MS;
     scheduleTransition(() => {
@@ -139,7 +145,7 @@ export const useBossBattleEngine = ({
   // -------------------------------------------------------------
   // Core Action: Submit Answer (Click an option)
   // -------------------------------------------------------------
-  const submitAnswer = useCallback((selectedIndex, timeTaken = 0) => {
+  const submitAnswer = useCallback(async (selectedIndex, timeTaken = 0) => {
     if (battlePhase !== BATTLE_PHASES.QUESTION) return;
 
     clearPendingTimer();
@@ -150,20 +156,52 @@ export const useBossBattleEngine = ({
     const currentQ = questions[questionIndex];
     if (!currentQ) return;
 
-    // Direct answer comparison (supports index or value)
-    const isCorrect = typeof currentQ.correctIndex === 'number'
-      ? selectedIndex === currentQ.correctIndex
-      : currentQ.options
-        ? currentQ.options[selectedIndex] === currentQ.correctAnswer
-        : selectedIndex === currentQ.correctAnswer;
+    // Determine option ID
+    const selectedOpt = Array.isArray(currentQ.options) ? currentQ.options[selectedIndex] : null;
+    const selectedOptId = selectedOpt
+      ? (typeof selectedOpt === 'string' ? `opt_${selectedIndex + 1}` : (selectedOpt.id || `opt_${selectedIndex + 1}`))
+      : `opt_${selectedIndex + 1}`;
 
-    // Find correct index for revealing later if wrong
+    let isCorrect = false;
     let actualCorrectIndex = -1;
-    if (typeof currentQ.correctIndex === 'number') {
-      actualCorrectIndex = currentQ.correctIndex;
-    } else if (currentQ.options && currentQ.correctAnswer) {
-      actualCorrectIndex = currentQ.options.indexOf(currentQ.correctAnswer);
+
+    // 1. Authoritative remote grading via submit_answer RPC if impression_id & sessionId exist
+    if (currentQ.impression_id && sessionId) {
+      try {
+        const res = await quizService.submitAnswerRPC({
+          impressionId: currentQ.impression_id,
+          selectedOptionId: selectedOptId,
+          responseTimeMs: Math.max(100, Math.round(timeTaken * 1000)),
+          sessionId
+        });
+
+        isCorrect = Boolean(res.is_correct);
+
+        if (res.correct_option_id && Array.isArray(currentQ.options)) {
+          actualCorrectIndex = currentQ.options.findIndex(o => {
+            if (typeof o === 'string') return o === res.correct_option_id;
+            return o.id === res.correct_option_id;
+          });
+        }
+      } catch (err) {
+        console.warn('[BossBattle] submitAnswerRPC failed, fallback to local:', err);
+      }
+    } else {
+      // Fallback local comparison for offline demo/test mode
+      isCorrect = typeof currentQ.correctIndex === 'number'
+        ? selectedIndex === currentQ.correctIndex
+        : currentQ.options
+          ? currentQ.options[selectedIndex] === currentQ.correctAnswer
+          : selectedIndex === currentQ.correctAnswer;
+
+      if (typeof currentQ.correctIndex === 'number') {
+        actualCorrectIndex = currentQ.correctIndex;
+      } else if (currentQ.options && currentQ.correctAnswer) {
+        actualCorrectIndex = currentQ.options.indexOf(currentQ.correctAnswer);
+      }
     }
+
+    setIsLastSelectionCorrect(isCorrect);
 
     // Dynamic Cadence: Speed Type scales with combo momentum ("越来越快")
     const customCadence = encounter?.type?.cadence;
@@ -198,41 +236,28 @@ export const useBossBattleEngine = ({
           source: 'boss_battle'
         });
 
-        // Player attacks -> Boss Hit (ultra snappy)
         scheduleTransition(() => {
-          setBossAnimation(BOSS_ANIMATIONS.HIT);
+          // Boss Reaction: Hit & HP - 1
+          const newHP = Math.max(0, bossHP - 1);
+          setBossHP(newHP);
+          setBossAnimation(BOSS_ANIMATIONS.HURT);
           setBattlePhase(BATTLE_PHASES.BOSS_HIT);
 
-          // Calculate V1 damage: exactly 1 HP per correct answer
-          const newBossHp = Math.max(0, bossHP - 1);
-          setBossHP(newBossHp);
+          const tier = encounter?.type?.getComboTier ? encounter.type.getComboTier(nextCombo) : null;
+          const floatLabel = tier?.floatLabel || (isCrit ? 'CRIT! -1' : '-1 HP');
+          setDamageFloat({ label: floatLabel, isCrit, isBlock: false });
 
-          // Step 8: Speed Combo Visual Progression (Level 1 ~ 8)
-          const damageCalc = encounter?.type?.damageRule?.calculatePlayerDamage
-            ? encounter.type.damageRule.calculatePlayerDamage({ isCorrect: true, timeTaken, combo: nextCombo })
-            : null;
-
-          const floatLabel = damageCalc?.floatLabel || (isCrit ? `SPEED CRIT! -1` : `-1 HP`);
-          setDamageFloat({
-            label: floatLabel,
-            isCrit,
-            isBlock: false,
-            comboTier: damageCalc?.comboTier
-          });
-
-          // Boss Hit Reaction finishes -> Next Question (0.5s ~ 0.7s total turnaround)
+          // Advance to next question after Hit Reaction
           scheduleTransition(() => {
-            transitionToNextOrFinish(newBossHp);
+            transitionToNextOrFinish(newHP);
           }, reactionDelay);
         }, attackDelay);
 
       } else {
-        // --- BRANCH B: WRONG ANSWER ---
-        // Player Attack -> Boss Block -> Show Correct Answer -> Next Question
+        // --- BRANCH B: WRONG / MISS ---
         setWrong(prev => prev + 1);
-        setCombo(0);
+        setCombo(0); // Combo broken
 
-        // Long-term learning & WRONG question bank tracking (saved permanently for RECALL / Memory Boss)
         mockDb.recordQuestionAnswer({
           question: currentQ,
           isCorrect: false,
@@ -264,7 +289,9 @@ export const useBossBattleEngine = ({
     questionIndex,
     combo,
     bossHP,
+    sessionId,
     revealAnswerMs,
+    encounter,
     clearPendingTimer,
     scheduleTransition,
     transitionToNextOrFinish
@@ -273,12 +300,13 @@ export const useBossBattleEngine = ({
   // -------------------------------------------------------------
   // Core Action: Timeout (Timer reaches 0)
   // -------------------------------------------------------------
-  const handleTimeout = useCallback(() => {
+  const handleTimeout = useCallback(async () => {
     if (battlePhase !== BATTLE_PHASES.QUESTION) return;
 
     clearPendingTimer();
     setBattlePhase(BATTLE_PHASES.ANSWER_LOCKED);
     setLastSelectedOption(null);
+    setIsLastSelectionCorrect(false);
     setRevealedCorrectIndex(null);
     setSkipped(prev => prev + 1);
     setCombo(0);
@@ -286,10 +314,29 @@ export const useBossBattleEngine = ({
     const currentQ = questions[questionIndex];
     let actualCorrectIndex = -1;
     if (currentQ) {
-      if (typeof currentQ.correctIndex === 'number') {
-        actualCorrectIndex = currentQ.correctIndex;
-      } else if (currentQ.options && currentQ.correctAnswer) {
-        actualCorrectIndex = currentQ.options.indexOf(currentQ.correctAnswer);
+      if (currentQ.impression_id && sessionId) {
+        try {
+          const res = await quizService.submitAnswerRPC({
+            impressionId: currentQ.impression_id,
+            selectedOptionId: 'timeout',
+            responseTimeMs: 10000,
+            sessionId
+          });
+          if (res?.correct_option_id && Array.isArray(currentQ.options)) {
+            actualCorrectIndex = currentQ.options.findIndex(o => {
+              if (typeof o === 'string') return o === res.correct_option_id;
+              return o?.id === res.correct_option_id;
+            });
+          }
+        } catch (err) {
+          console.warn('[BossBattle] handleTimeout submitAnswerRPC failed:', err);
+        }
+      } else {
+        if (typeof currentQ.correctIndex === 'number') {
+          actualCorrectIndex = currentQ.correctIndex;
+        } else if (currentQ.options && currentQ.correctAnswer) {
+          actualCorrectIndex = currentQ.options.indexOf(currentQ.correctAnswer);
+        }
       }
 
       // Record timeout into wrong question bank
@@ -326,6 +373,7 @@ export const useBossBattleEngine = ({
     questions,
     questionIndex,
     bossHP,
+    sessionId,
     revealAnswerMs,
     clearPendingTimer,
     scheduleTransition,
@@ -388,6 +436,7 @@ export const useBossBattleEngine = ({
     setBattleResult(null);
     setDamageFloat(null);
     setLastSelectedOption(null);
+    setIsLastSelectionCorrect(null);
     setRevealedCorrectIndex(null);
     setBattlePhase(BATTLE_PHASES.INTRO);
 
@@ -432,6 +481,7 @@ export const useBossBattleEngine = ({
     // 7. Visual Feedback
     damageFloat,
     lastSelectedOption,
+    isLastSelectionCorrect,
     revealedCorrectIndex,
 
     // 8. Control Dispatchers

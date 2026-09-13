@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ArrowLeft, Clock, Check, Trophy, Flame, ChevronRight, CheckCircle2, MinusCircle, XCircle, AlertCircle, RefreshCw } from 'lucide-react';
 import { mockDb } from '../lib/mockDb';
-import { getMatchingQuestions } from '../lib/bossTrigger';
 import { quizService } from '../lib/quizService.js';
 import { playerAuthService } from '../lib/playerAuthService.js';
 import Confetti from 'react-confetti';
@@ -194,12 +193,7 @@ const Quiz = ({
       const playerId = (currentUser?.id && currentUser.id !== 'guest') ? currentUser.id : authUserId;
       const randomEnabled = quizParams?.randomQuestions !== undefined ? quizParams.randomQuestions : true;
 
-      // Safe local fallback questions ONLY for non-cloud offline demo mode
-      const matched = getMatchingQuestions(
-        quizParams?.subjectTitle || quizParams?.subject || 'History',
-        quizParams?.form || 4
-      );
-      const fallbackQuestions = (matched && matched.length >= 4) ? matched : rawQuestions;
+      const fallbackQuestions = rawQuestions || [];
 
       const batch = await quizService.getNextQuestions({
         chapterId: chapterId,
@@ -313,13 +307,17 @@ const Quiz = ({
 
       setIsSaving(false);
 
-      // 保存成功后：如果触发Boss，才进入Boss Encounter；如果没有触发Boss，进入普通Quiz结算页
-      const bossTrigger = customBossTrigger !== undefined ? customBossTrigger : pendingBossTriggerRef.current;
+      // 保存成功后：异步评估是否触发 Boss (使用真实的 chapterId 与 cycleInfo)
+      let bossTrigger = null;
+      if (onEvaluateBossTrigger) {
+        bossTrigger = await onEvaluateBossTrigger(statsToUse || { sessionBP: effBP, correctCount: effCorrect, wrongCount: effWrong }, cycleInfo);
+      } else if (onCheckBossTrigger) {
+        bossTrigger = await onCheckBossTrigger(statsToUse || { sessionBP: effBP, correctCount: effCorrect, wrongCount: effWrong }, cycleInfo);
+      }
+
       if (bossTrigger && (bossTrigger.shouldTrigger || bossTrigger === true)) {
         if (onTriggerBossEncounter) {
           onTriggerBossEncounter(bossTrigger, statsToUse || { sessionBP: effBP, correctCount: effCorrect, wrongCount: effWrong });
-        } else if (onCheckBossTrigger) {
-          onCheckBossTrigger(statsToUse || { sessionBP: effBP, correctCount: effCorrect, wrongCount: effWrong });
         }
       } else {
         setStatus('result');
@@ -596,22 +594,12 @@ const Quiz = ({
         };
         pendingFinalStatsRef.current = finalStats;
 
-        // 2. 判断是否需要触发Boss，但此时不能立即跳转
-        let bossTriggerResult = null;
-        if (onEvaluateBossTrigger) {
-          bossTriggerResult = onEvaluateBossTrigger(finalStats);
-        } else if (onCheckBossTrigger) {
-          bossTriggerResult = onCheckBossTrigger(finalStats, true);
-        }
-        pendingBossTriggerRef.current = bossTriggerResult;
-
-        // 3. 设置页面状态为 saving
+        // 2. 设置页面状态为 saving 并完赛保存
         setStatus('saving');
 
-        // 4. await finalizeGameSession(finalStats)
-        // 必须确认Supabase返回该Session的 status = completed
-        // 保存成功后：如果触发Boss才进入Boss Encounter；如果没有触发Boss进入普通Quiz结算页
-        await finalizeGameSession(finalStats, bossTriggerResult);
+        // 3. await finalizeGameSession(finalStats)
+        // 必须确认Supabase返回该Session的 status = completed 后，再进行 Boss 评估与取题
+        await finalizeGameSession(finalStats);
       }
     }, delayMs);
   }, [currentIndex, questions, startTime, onEvaluateBossTrigger, onCheckBossTrigger, sessionBP, skippedCount, maxCombo, finalizeGameSession]);

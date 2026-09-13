@@ -7,6 +7,7 @@ import { createBossEncounter } from '../data/bossRegistry.js';
 import { BATTLE_PHASES, PLAYER_ANIMATIONS, BOSS_ANIMATIONS, BATTLE_RESULTS } from '../data/battleConstants.js';
 import { getSpeedComboTier } from '../data/bossTypes.js';
 import { mockDb } from '../lib/mockDb.js';
+import { quizService } from '../lib/quizService.js';
 
 const shuffleArray = (array) => [...array].sort(() => Math.random() - 0.5);
 
@@ -14,7 +15,7 @@ const shuffleArray = (array) => [...array].sort(() => Math.random() - 0.5);
  * Standard Boss Battle Prototype View (Step 4)
  * 
  * V1 PRINCIPLES:
- * - 5 Test Questions
+ * - 10 Test Questions
  * - Strict pipeline: Correct -> Attack -> Hit -> HP-1 / Wrong -> Attack -> Block -> Show Correct
  * - Anti-repeat click & strict input lock
  * - Timer stability: single-source interval that cleans up on lock/phase change
@@ -24,6 +25,7 @@ const shuffleArray = (array) => [...array].sort(() => Math.random() - 0.5);
 const BossBattle = ({
   encounter: customEncounter,
   questions: customQuestions,
+  chapterId,
   subject,
   form,
   chapter,
@@ -32,11 +34,17 @@ const BossBattle = ({
   onBack
 }) => {
   const hasClaimedRef = useRef(false);
+  const [bossSessionId, setBossSessionId] = useState(null);
+
   // 1. Prepare 10 Questions for Speed Battle
   const battleQuestions = useMemo(() => {
     const targetCount = customEncounter?.type?.questionCount || 10;
     if (customQuestions && customQuestions.length >= targetCount) {
-      return customQuestions.slice(0, targetCount);
+      return customQuestions.slice(0, targetCount).map(q => ({
+        ...q,
+        text: q.question || q.text,
+        options: q.options || []
+      }));
     }
     const raw = mockDb.getQuestions();
     const sliced = shuffleArray(raw).slice(0, targetCount);
@@ -46,6 +54,7 @@ const BossBattle = ({
       const correctIndex = options.indexOf(q.correctAnswer);
       return {
         ...q,
+        text: q.question || q.text,
         options,
         correctIndex
       };
@@ -58,10 +67,34 @@ const BossBattle = ({
     return createBossEncounter('chrono_lynx', 'SPEED');
   }, [customEncounter]);
 
-  // 3. Connect Generic Boss Battle Engine
+  // 3. Create dedicated Boss Game Session in Supabase so submit_answer RPC can grade authoritatively
+  useEffect(() => {
+    let isMounted = true;
+    const initBossSession = async () => {
+      if (!chapterId) return;
+      try {
+        const targetCount = customEncounter?.type?.questionCount || 10;
+        const res = await quizService.createGameSession({
+          chapterId,
+          totalQuestions: targetCount,
+          chapterTitle: `Boss Battle - ${subject || 'Boss'}`
+        });
+        if (isMounted && res?.session?.id) {
+          setBossSessionId(res.session.id);
+        }
+      } catch (err) {
+        console.warn('[BossBattle] Failed to create dedicated boss game_session:', err);
+      }
+    };
+    initBossSession();
+    return () => { isMounted = false; };
+  }, [chapterId, subject, customEncounter]);
+
+  // 4. Connect Generic Boss Battle Engine
   const engine = useBossBattleEngine({
     encounter,
     questions: battleQuestions,
+    sessionId: bossSessionId,
     onComplete: (stats) => {
       // Callback handled via Result Modal button click
     }
@@ -86,6 +119,7 @@ const BossBattle = ({
     battleResult,
     damageFloat,
     lastSelectedOption,
+    isLastSelectionCorrect,
     revealedCorrectIndex,
     submitAnswer,
     handleTimeout,
@@ -165,12 +199,8 @@ const BossBattle = ({
     let icon = null;
 
     if (isAnswerLocked) {
-      // Determine if current selected option is correct based on question data
-      const isSelectedCorrect = typeof currentQuestion?.correctIndex === 'number'
-        ? index === currentQuestion.correctIndex
-        : currentQuestion?.options
-          ? currentQuestion.options[index] === currentQuestion.correctAnswer
-          : index === currentQuestion?.correctAnswer;
+      const isSelectedCorrect = isSelected && isLastSelectionCorrect === true;
+      const isSelectedWrong = isSelected && isLastSelectionCorrect === false;
 
       // Case 1: Option is the revealed correct answer (on wrong/timeout)
       if (isRevealedCorrect) {
@@ -182,7 +212,7 @@ const BossBattle = ({
         icon = <Check size={18} color="#16A34A" strokeWidth={3} />;
       }
       // Case 2: Selected option that is CORRECT -> Immediately Green (青色)
-      else if (isSelected && isSelectedCorrect) {
+      else if (isSelectedCorrect) {
         bg = '#DCFCE7';
         border = '#16A34A';
         color = '#15803D';
@@ -191,7 +221,7 @@ const BossBattle = ({
         icon = <Check size={18} color="#16A34A" strokeWidth={3} />;
       }
       // Case 3: Selected option that is WRONG -> Red (红色)
-      else if (isSelected && !isSelectedCorrect) {
+      else if (isSelectedWrong) {
         bg = '#FEE2E2';
         border = '#EF4444';
         color = '#B91C1C';
@@ -769,7 +799,7 @@ const BossBattle = ({
             {currentQuestion?.subject || 'SPM Trial'}
           </div>
           <h2 style={{ fontSize: '16px', fontWeight: 900, color: '#000000', margin: 0, lineHeight: 1.35 }}>
-            {currentQuestion?.text || 'Loading question...'}
+            {currentQuestion?.question || currentQuestion?.text || 'Loading question...'}
           </h2>
         </div>
 
@@ -821,7 +851,7 @@ const BossBattle = ({
 
                 {/* Option text */}
                 <span style={{ flex: 1, fontSize: '14px', fontWeight: 800, lineHeight: 1.3 }}>
-                  {opt}
+                  {typeof opt === 'string' ? opt : (opt?.text || '')}
                 </span>
 
                 {/* Status Icon */}
@@ -994,25 +1024,45 @@ const BossBattle = ({
               // BOSS ESCAPED: Return to regular training loop, clear encounter, retain long-term learning history
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     if (hasClaimedRef.current) return;
                     hasClaimedRef.current = true;
+
+                    if (bossSessionId) {
+                      try {
+                        await quizService.completeGameSession({
+                          sessionId: bossSessionId,
+                          chapterId,
+                          chapterTitle: `Boss Battle - ${subject || 'Boss'}`,
+                          totalQuestions: totalQuestions || 10,
+                          correctCount: correct,
+                          wrongCount: wrong,
+                          score: earnedBP,
+                          earnedBP
+                        });
+                      } catch (err) {
+                        console.warn('[BossBattle] Error completing boss session:', err);
+                      }
+                    }
+
+                    const payload = {
+                      correct,
+                      wrong,
+                      skipped,
+                      accuracy: Math.round((correct / (totalQuestions || 10)) * 100),
+                      maxCombo,
+                      bossHP,
+                      battleResult,
+                      earnedBP,
+                      subject: subject || encounter?.metadata?.subject || 'History',
+                      form: form || encounter?.metadata?.form || 4,
+                      chapter: chapter || encounter?.metadata?.chapter || 1,
+                      bossId,
+                      bossType
+                    };
+
                     if (onComplete) {
-                      onComplete({
-                        correct,
-                        wrong,
-                        skipped,
-                        accuracy: Math.round((correct / (totalQuestions || 10)) * 100),
-                        maxCombo,
-                        bossHP,
-                        battleResult,
-                        earnedBP,
-                        subject: subject || encounter?.metadata?.subject || 'History',
-                        form: form || encounter?.metadata?.form || 4,
-                        chapter: chapter || encounter?.metadata?.chapter || 1,
-                        bossId,
-                        bossType
-                      });
+                      onComplete(payload);
                     } else if (onBack) {
                       onBack();
                     }
@@ -1041,25 +1091,45 @@ const BossBattle = ({
             ) : (
               // BOSS DEFEATED: Primary Claim & Return Home button
               <button
-                onClick={() => {
+                onClick={async () => {
                   if (hasClaimedRef.current) return;
                   hasClaimedRef.current = true;
+
+                  if (bossSessionId) {
+                    try {
+                      await quizService.completeGameSession({
+                        sessionId: bossSessionId,
+                        chapterId,
+                        chapterTitle: `Boss Battle - ${subject || 'Boss'}`,
+                        totalQuestions: totalQuestions || 10,
+                        correctCount: correct,
+                        wrongCount: wrong,
+                        score: earnedBP,
+                        earnedBP
+                      });
+                    } catch (err) {
+                      console.warn('[BossBattle] Error completing boss session:', err);
+                    }
+                  }
+
+                  const payload = {
+                    correct,
+                    wrong,
+                    skipped,
+                    accuracy: Math.round((correct / (totalQuestions || 10)) * 100),
+                    maxCombo,
+                    bossHP,
+                    battleResult,
+                    earnedBP,
+                    subject: subject || encounter?.metadata?.subject || 'History',
+                    form: form || encounter?.metadata?.form || 4,
+                    chapter: chapter || encounter?.metadata?.chapter || 1,
+                    bossId,
+                    bossType
+                  };
+
                   if (onComplete) {
-                    onComplete({
-                      correct,
-                      wrong,
-                      skipped,
-                      accuracy: Math.round((correct / (totalQuestions || 10)) * 100),
-                      maxCombo,
-                      bossHP,
-                      battleResult,
-                      earnedBP,
-                      subject: subject || encounter?.metadata?.subject || 'History',
-                      form: form || encounter?.metadata?.form || 4,
-                      chapter: chapter || encounter?.metadata?.chapter || 1,
-                      bossId,
-                      bossType
-                    });
+                    onComplete(payload);
                   } else if (onBack) {
                     onBack();
                   }
