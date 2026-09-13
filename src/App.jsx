@@ -510,6 +510,7 @@ function App() {
             encounter={bossBattleParams?.encounter}
             questions={bossBattleParams?.questions}
             chapterId={bossBattleParams?.chapterId || quizParams?.chapterId}
+            sessionId={bossBattleParams?.sessionId}
             subject={bossBattleParams?.subject || quizParams?.subjectTitle}
             form={bossBattleParams?.form || quizParams?.form}
             chapter={bossBattleParams?.chapter || quizParams?.chapter}

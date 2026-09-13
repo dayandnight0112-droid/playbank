@@ -202,6 +202,9 @@ export const useBossBattleEngine = ({
     }
 
     setIsLastSelectionCorrect(isCorrect);
+    if (!isCorrect && actualCorrectIndex >= 0) {
+      setRevealedCorrectIndex(actualCorrectIndex);
+    }
 
     // Dynamic Cadence: Speed Type scales with combo momentum ("越来越快")
     const customCadence = encounter?.type?.cadence;
@@ -346,6 +349,10 @@ export const useBossBattleEngine = ({
         selectedOption: null,
         source: 'boss_battle_timeout'
       });
+
+      if (actualCorrectIndex >= 0) {
+        setRevealedCorrectIndex(actualCorrectIndex);
+      }
     }
 
     scheduleTransition(() => {

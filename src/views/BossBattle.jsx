@@ -26,6 +26,7 @@ const BossBattle = ({
   encounter: customEncounter,
   questions: customQuestions,
   chapterId,
+  sessionId: initialSessionId,
   subject,
   form,
   chapter,
@@ -34,7 +35,13 @@ const BossBattle = ({
   onBack
 }) => {
   const hasClaimedRef = useRef(false);
-  const [bossSessionId, setBossSessionId] = useState(null);
+  const [bossSessionId, setBossSessionId] = useState(initialSessionId || null);
+
+  useEffect(() => {
+    if (initialSessionId) {
+      setBossSessionId(initialSessionId);
+    }
+  }, [initialSessionId]);
 
   // 1. Prepare 10 Questions for Speed Battle
   const battleQuestions = useMemo(() => {
@@ -67,11 +74,11 @@ const BossBattle = ({
     return createBossEncounter('chrono_lynx', 'SPEED');
   }, [customEncounter]);
 
-  // 3. Create dedicated Boss Game Session in Supabase so submit_answer RPC can grade authoritatively
+  // 3. Create dedicated Boss Game Session in Supabase if not already provided
   useEffect(() => {
     let isMounted = true;
     const initBossSession = async () => {
-      if (!chapterId) return;
+      if (!chapterId || bossSessionId) return;
       try {
         const targetCount = customEncounter?.type?.questionCount || 10;
         const res = await quizService.createGameSession({
@@ -79,8 +86,9 @@ const BossBattle = ({
           totalQuestions: targetCount,
           chapterTitle: `Boss Battle - ${subject || 'Boss'}`
         });
-        if (isMounted && res?.session?.id) {
-          setBossSessionId(res.session.id);
+        const sid = res?.id || res?.session?.id;
+        if (isMounted && sid) {
+          setBossSessionId(sid);
         }
       } catch (err) {
         console.warn('[BossBattle] Failed to create dedicated boss game_session:', err);
@@ -88,7 +96,7 @@ const BossBattle = ({
     };
     initBossSession();
     return () => { isMounted = false; };
-  }, [chapterId, subject, customEncounter]);
+  }, [chapterId, subject, customEncounter, bossSessionId]);
 
   // 4. Connect Generic Boss Battle Engine
   const engine = useBossBattleEngine({

@@ -118,6 +118,19 @@ export const evaluateBossTrigger = async ({
       }
     });
 
+    // 6. Pre-create dedicated Boss game session so submit_answer RPC has session ID ready immediately
+    let bossSessionId = null;
+    try {
+      const created = await quizService.createGameSession({
+        chapterId,
+        totalQuestions: requiredCount,
+        chapterTitle: `Boss Battle - ${subjectTitle || subjectId || 'Boss'}`
+      });
+      bossSessionId = created?.id || created?.session?.id || null;
+    } catch (sErr) {
+      console.warn('[BossTrigger] Could not pre-create boss session:', sErr);
+    }
+
     // Update trigger state history
     const triggerHistory = safeGetJSON('playbank_boss_trigger_state', { totalTriggers: 0, lastTriggerAt: null });
     safeSetJSON('playbank_boss_trigger_state', {
@@ -135,6 +148,7 @@ export const evaluateBossTrigger = async ({
       encounter,
       questions,
       chapterId,
+      sessionId: bossSessionId,
       subject: subjectTitle || subjectId,
       form,
       chapter,
