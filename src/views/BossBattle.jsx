@@ -32,9 +32,9 @@ const BossBattle = ({
   onBack
 }) => {
   const hasClaimedRef = useRef(false);
-  // 1. Prepare 8 Questions for Speed Battle
+  // 1. Prepare 10 Questions for Speed Battle
   const battleQuestions = useMemo(() => {
-    const targetCount = customEncounter?.type?.questionCount || 8;
+    const targetCount = customEncounter?.type?.questionCount || 10;
     if (customQuestions && customQuestions.length >= targetCount) {
       return customQuestions.slice(0, targetCount);
     }
@@ -1002,7 +1002,7 @@ const BossBattle = ({
                         correct,
                         wrong,
                         skipped,
-                        accuracy: Math.round((correct / (totalQuestions || 8)) * 100),
+                        accuracy: Math.round((correct / (totalQuestions || 10)) * 100),
                         maxCombo,
                         bossHP,
                         battleResult,
@@ -1049,7 +1049,7 @@ const BossBattle = ({
                       correct,
                       wrong,
                       skipped,
-                      accuracy: Math.round((correct / (totalQuestions || 8)) * 100),
+                      accuracy: Math.round((correct / (totalQuestions || 10)) * 100),
                       maxCombo,
                       bossHP,
                       battleResult,

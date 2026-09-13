@@ -1053,7 +1053,7 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
                           <div style={{ fontSize: '12px', color: '#6B7280', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <span style={{ color: '#D97706', fontWeight: 900 }}>Score {sess.score ?? 0}</span>
                             <span>·</span>
-                            <span style={{ color: '#16A34A' }}>{sess.correct_count ?? 0}/{sess.total_questions || 8} Correct</span>
+                            <span style={{ color: '#16A34A' }}>{sess.correct_count ?? 0}/{sess.total_questions || 10} Correct</span>
                             <span>·</span>
                             <span>{durFormatted}</span>
                           </div>
@@ -1099,7 +1099,7 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
                             color: '#B45309',
                             fontWeight: 800
                           }}>
-                            <span>作答题目明细（共 {sess.questions?.length || 8} 题）</span>
+                            <span>作答题目明细（共 {sess.questions?.length || 10} 题）</span>
                           </div>
 
                           {sess.questions && sess.questions.length > 0 ? (
@@ -1206,7 +1206,7 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
                             })
                           ) : (
                             <div style={{ padding: '14px', textAlign: 'center', color: '#6B7280', fontSize: '13px' }}>
-                              本局共 {sess.total_questions || 8} 道题目，答对 {sess.correct_count ?? 0} 题，做错 {sess.wrong_count ?? 0} 题，结算得分 {sess.score ?? 0} 分。
+                              本局共 {sess.total_questions || 10} 道题目，答对 {sess.correct_count ?? 0} 题，做错 {sess.wrong_count ?? 0} 题，结算得分 {sess.score ?? 0} 分。
                             </div>
                           )}
                         </div>

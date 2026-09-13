@@ -53,30 +53,32 @@ export const SPEED_COMBO_TIERS = {
   5: { level: 5, label: 'ON FIRE!', floatLabel: '🔥 ON FIRE! -1', color: '#EF4444', bg: 'rgba(239, 68, 68, 0.35)', glow: '0 0 25px rgba(239, 68, 68, 0.8)' },
   6: { level: 6, label: 'UNSTOPPABLE!', floatLabel: '⚡ UNSTOPPABLE! -1', color: '#EC4899', bg: 'rgba(236, 72, 153, 0.4)', glow: '0 0 30px rgba(236, 72, 153, 0.85)' },
   7: { level: 7, label: 'MAX SPEED!', floatLabel: '🚀 MAX SPEED! -1', color: '#8B5CF6', bg: 'rgba(139, 92, 246, 0.45)', glow: '0 0 35px rgba(139, 92, 246, 0.9)' },
-  8: { level: 8, label: 'FINISHER!', floatLabel: '💥 FINISHER! -1', color: '#FFBC00', bg: 'linear-gradient(90deg, #EF4444, #F59E0B)', glow: '0 0 45px rgba(255, 188, 0, 1)' }
+  8: { level: 8, label: 'FINISHER!', floatLabel: '💥 FINISHER! -1', color: '#FFBC00', bg: 'linear-gradient(90deg, #EF4444, #F59E0B)', glow: '0 0 45px rgba(255, 188, 0, 1)' },
+  9: { level: 9, label: 'HYPER SPEED!', floatLabel: '⚡ HYPER SPEED! -1', color: '#38BDF8', bg: 'rgba(56, 189, 248, 0.4)', glow: '0 0 40px rgba(56, 189, 248, 0.95)' },
+  10: { level: 10, label: 'SUPREME FINISHER!', floatLabel: '🌟 SUPREME FINISHER! -1', color: '#FFBC00', bg: 'linear-gradient(90deg, #F59E0B, #EC4899, #8B5CF6)', glow: '0 0 50px rgba(255, 188, 0, 1)' }
 };
 
 export const getSpeedComboTier = (combo = 0) => {
   if (combo <= 0) return null;
-  const clamped = Math.min(combo, 8);
-  return SPEED_COMBO_TIERS[clamped] || SPEED_COMBO_TIERS[8];
+  const clamped = Math.min(combo, 10);
+  return SPEED_COMBO_TIERS[clamped] || SPEED_COMBO_TIERS[10];
 };
 
 export const BOSS_TYPE_CONFIGS = {
   /**
    * 1. SPEED Type (Fully Implemented)
-   * 8 rapid consecutive questions, strict 7s timer, fast reaction triggers visual crits
+   * 10 rapid consecutive questions, strict 7s timer, fast reaction triggers visual crits
    */
   [BOSS_TYPE_KEYS.SPEED]: {
     type: BOSS_TYPE_KEYS.SPEED,
     displayName: 'Speed Battle',
-    description: '连续 8 道极速题，反应越快视觉反馈越强！',
+    description: '连续 10 道极速题，反应越快视觉反馈越强！',
     isImplemented: true,
     enabled: true,
     status: 'ENABLED',
 
-    questionCount: 8,
-    bossHp: 8, // Configured per Type independently (not forced to match questionCount)
+    questionCount: 10,
+    bossHp: 10, // Configured per Type independently (not forced to match questionCount)
 
     timerMode: 'FAST',
     timeLimit: 10, // Configurable: currently 10s, can easily be changed to 8s or 6s
@@ -85,7 +87,7 @@ export const BOSS_TYPE_CONFIGS = {
     // Step 6: Dramatic intro banner text
     introBanner: {
       title: 'SPEED BATTLE',
-      subtitle: '8 QUESTIONS',
+      subtitle: '10 QUESTIONS',
       warning: "DON'T SLOW DOWN!"
     },
 

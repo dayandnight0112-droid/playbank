@@ -25,8 +25,8 @@ export const createBossEncounter = (bossId = 'chrono_lynx', typeId = 'speed', cu
   const type = getBossType(typeId);
 
   // Derive initial combat state parameters strictly from type specification
-  const maxBossHp = customOverrides.bossHp || type.bossHp || 8;
-  const questionCount = customOverrides.questionCount || type.questionCount || 8;
+  const maxBossHp = customOverrides.bossHp || type.bossHp || 10;
+  const questionCount = customOverrides.questionCount || type.questionCount || 10;
   const timeLimit = customOverrides.timeLimit || type.timeLimit || 7;
 
   return {

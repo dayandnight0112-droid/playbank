@@ -309,14 +309,14 @@ export const quizService = {
    */
   async getNextQuestions({
     chapterId,
-    limit = 8,
+    limit = 10,
     playerId = 'guest',
     randomEnabled = true,
     versionNo = 1,
     availableQuestions = [],
     fallbackQuestions = []
   }) {
-    const safeLimit = Math.max(1, Math.min(Number(limit) || 8, 20));
+    const safeLimit = Math.max(1, Math.min(Number(limit) || 10, 20));
     // 1. If Supabase is configured, ensure auth session is ready and call Cloud RPC
     if (isSupabaseConfigured && supabase) {
       try {
@@ -787,7 +787,7 @@ export const quizService = {
     chapterId,
     chapterVersion = 1,
     chapterTitle = 'Sejarah',
-    totalQuestions = 8
+    totalQuestions = 10
   }) {
     // 1. Strict UUID validation from source
     const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(chapterId);
@@ -862,7 +862,7 @@ export const quizService = {
     chapterTitle = 'Sejarah',
     chapterVersion = 1,
     startedAt,
-    totalQuestions = 8,
+    totalQuestions = 10,
     correctCount = 0,
     wrongCount = 0,
     score = 0,
@@ -1029,7 +1029,7 @@ export const quizService = {
         subject_name: subName,
         started_at: cs.started_at,
         ended_at: cs.ended_at,
-        total_questions: cs.total_questions || 8,
+        total_questions: cs.total_questions || 10,
         correct_count: cs.correct_count ?? 0,
         wrong_count: cs.wrong_count ?? 0,
         score: cs.score ?? 0,

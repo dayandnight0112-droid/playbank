@@ -1,4 +1,4 @@
-﻿import { mockDb, safeGetJSON, safeSetJSON } from './mockDb.js';
+import { mockDb, safeGetJSON, safeSetJSON } from './mockDb.js';
 import { BOSS_TYPE_KEYS, getEnabledBossTypes, getBossTypeConfig } from '../data/bossTypes.js';
 import { createBossEncounter } from '../data/bossRegistry.js';
 
@@ -56,8 +56,8 @@ export const getMatchingQuestions = (subject, form = 4) => {
  * Rules:
  * 1. Only enabled Boss Types are considered (currently strictly SPEED).
  * 2. Questions must match current subject/form.
- * 3. Safe fallback: if matched questions < 8, do NOT trigger.
- * 4. Generates 8 normalized questions ready for BossBattle.
+ * 3. Safe fallback: if matched questions < 10, do NOT trigger.
+ * 4. Generates 10 normalized questions ready for BossBattle.
  * 
  * @param {Object} params
  * @param {string|number} params.subject - Active subject
@@ -91,9 +91,9 @@ export const evaluateBossTrigger = ({
 
   // 2. Pull available questions for current subject/form
   const matchedQuestions = getMatchingQuestions(subject, form);
-  const requiredCount = getBossTypeConfig(BOSS_TYPE_KEYS.SPEED)?.questionCount || 8;
+  const requiredCount = getBossTypeConfig(BOSS_TYPE_KEYS.SPEED)?.questionCount || 10;
 
-  // Safe fallback: if fewer than 8 questions exist in the pool, DO NOT trigger!
+  // Safe fallback: if fewer than 10 questions exist in the pool, DO NOT trigger!
   if (matchedQuestions.length < requiredCount) {
     console.warn(`[BossTrigger] Insufficient questions (${matchedQuestions.length}/${requiredCount}) for subject: ${subject}, form: ${form}. Safe fallback active.`);
     return {
@@ -121,7 +121,7 @@ export const evaluateBossTrigger = ({
     };
   }
 
-  // 4. Draw 8 genuine questions from current subject pool
+  // 4. Draw 10 genuine questions from current subject pool
   const shuffled = shuffleArray(matchedQuestions).slice(0, requiredCount);
   const normalizedQuestions = shuffled.map(q => {
     const options = q.options || shuffleArray([q.correctAnswer, ...q.incorrectAnswers]);

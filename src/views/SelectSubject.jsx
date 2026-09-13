@@ -113,7 +113,8 @@ const SelectSubject = ({ onBack, onStartQuiz, openModal }) => {
         chapterTitle: selectedChapter.title,
         babNumber: selectedChapter.babNumber,
         versionNo: selectedChapter.versionNo,
-        questionCount: selectedChapter.questionCount,
+        questionCount: 10,
+        totalInChapter: selectedChapter.questionCount,
         randomQuestions: selectedChapter.randomQuestions
       });
     }

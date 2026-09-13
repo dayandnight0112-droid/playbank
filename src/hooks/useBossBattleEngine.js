@@ -30,7 +30,7 @@ export const useBossBattleEngine = ({
   // 1. Immutable Boss & Type Identity
   const bossType = encounter?.type?.id || 'speed';
   const bossId = encounter?.character?.id || 'chrono_lynx';
-  const totalQuestions = questions.length || encounter?.type?.questionCount || 8;
+  const totalQuestions = questions.length || encounter?.type?.questionCount || 10;
   const maxBossHP = encounter?.initialState?.maxBossHP || totalQuestions;
 
   // 2. Core Combat States

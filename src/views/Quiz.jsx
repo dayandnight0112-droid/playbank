@@ -180,7 +180,7 @@ const Quiz = ({
         chapterId: chapterId,
         chapterTitle: quizParams?.chapterTitle || quizParams?.chapterName || 'Sejarah',
         chapterVersion: quizParams?.versionNo || 1,
-        totalQuestions: 8
+        totalQuestions: quizParams?.questionCount || 10
       });
 
       const newSessionId = createdSession?.id || createdSession?.sessionId;
@@ -203,7 +203,7 @@ const Quiz = ({
 
       const batch = await quizService.getNextQuestions({
         chapterId: chapterId,
-        limit: 8,
+        limit: quizParams?.questionCount || 10,
         playerId,
         randomEnabled,
         versionNo: quizParams?.versionNo || 1,
@@ -576,7 +576,7 @@ const Quiz = ({
         setCurrentIndex(nextIndex);
         setupQuestion(activeQuestions[nextIndex]);
       } else {
-        // 1. 第8题完成：计算本局最终Stats
+        // 1. 第10题完成：计算本局最终Stats
         const totalDuration = Math.floor((Date.now() - startTime) / 1000);
         setTimeTaken(totalDuration);
 

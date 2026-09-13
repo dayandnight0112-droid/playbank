@@ -41,7 +41,7 @@ function App() {
     chapterTitle: 'Warisan Negara Bangsa',
     babNumber: 'Bab 1',
     versionNo: 1,
-    questionCount: 8,
+    questionCount: 10,
     randomQuestions: true
   });
   const [bossBattleParams, setBossBattleParams] = useState(null);
