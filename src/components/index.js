@@ -1,4 +1,4 @@
-﻿/**
+/**
  * PlayBank Unified Game Component Library
  * Standardized components for Part A (Entry + Lobby + HUD + Navigation)
  */
@@ -7,6 +7,7 @@
 export { default as PrimaryButton } from './common/PrimaryButton';
 export { default as CurrencyBadge } from './common/CurrencyBadge';
 export { default as MechanismPopup } from './common/MechanismPopup';
+export { default as PlayerAvatar } from './common/PlayerAvatar';
 
 // Lobby Components
 export { default as AdventureScene } from './home/AdventureScene';

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, LogIn, Sparkles, ShieldCheck } from 'lucide-react';
 import { mockDb } from '../lib/mockDb';
+import { playerAuthService } from '../lib/playerAuthService';
 
 const LoginModal = ({
   isOpen,
@@ -23,11 +24,18 @@ const LoginModal = ({
 
   const hasGuestLoot = currentGuestBP > 0 || (guestProfile?.badges && guestProfile.badges.length > 0);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!email || !password) {
       setError('Please fill in both email and password.');
       return;
+    }
+
+    // Direct Registered Login in Supabase (Never creates an anonymous guest)
+    try {
+      await playerAuthService.signInWithPassword({ email, password });
+    } catch (sbErr) {
+      console.warn('[LoginModal] Supabase auth note:', sbErr.message);
     }
 
     const result = mockDb.loginUser(email.trim(), password);

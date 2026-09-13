@@ -170,9 +170,19 @@ function App() {
       window.location.reload();
     };
 
+    const handleAvatarChanged = () => {
+      const session = mockDb.getCurrentSession();
+      setCurrentUser(session);
+      if (!session) {
+        setGuestProfile(mockDb.getGuestProfile());
+      }
+    };
+
     window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('playbank:avatar-changed', handleAvatarChanged);
     return () => {
       window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('playbank:avatar-changed', handleAvatarChanged);
       delete window.__resetOnboarding;
     };
   }, []);
@@ -369,8 +379,23 @@ function App() {
       case 'onboarding':
         return (
           <OnboardingFlow
-            onComplete={(userProfileData) => {
+            onComplete={async (userProfileData) => {
               mockDb.setOnboardingComplete(true);
+
+              // 1. Establish guest session in Supabase now that player confirmed onboarding
+              try {
+                const authRes = await playerAuthService.ensurePlayerAuth();
+                if (authRes?.user?.id) {
+                  console.log('[App] Guest session established on onboarding complete:', authRes.user.id);
+                  const guestName = userProfileData?.nickname?.trim() || '冒险家';
+                  await playerAuthService.syncProfileMetadata({
+                    nickname: guestName,
+                    age_group: userProfileData?.ageGroup || '13-15',
+                  });
+                }
+              } catch (err) {
+                console.error('[App] Failed to establish guest session:', err);
+              }
 
               // Map selected subject to tutorial path
               let tutorialPath = 'chinese';

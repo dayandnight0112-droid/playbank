@@ -19,11 +19,13 @@ class PlayerAuthService {
     this._session = null;
     this._isAnonymous = false;
     this._initPromise = null;
+    this._authLockPromise = null; // Concurrency lock for guest creation
   }
 
   /**
-   * Initialize Auth: Ensure an active session exists (anonymous or registered).
-   * Safe for concurrent calls (memoized promise).
+   * Initialize / restore existing session (Read-Only).
+   * Safe for page load, mount, hot reload, reconnect.
+   * NEVER creates an anonymous guest.
    */
   async initAuth() {
     if (this._initialized && this._currentUser) {
@@ -38,26 +40,27 @@ class PlayerAuthService {
       return this._initPromise;
     }
 
-    this._initPromise = this._doInitAuth();
+    this._initPromise = this._doRestoreSession();
     return this._initPromise;
   }
 
-  async _doInitAuth() {
+  async _doRestoreSession() {
     if (!isSupabaseConfigured || !supabase) {
-      console.warn('[playerAuthService] Supabase not configured. Using offline guest mode.');
-      return { user: null, session: null, isAnonymous: true, offline: true };
+      return { user: null, session: null, isAnonymous: false, offline: true };
     }
 
     try {
-      // 1. Check existing persisted session
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) {
+        console.warn('[playerAuthService] Error reading session:', sessionError.message);
+      }
 
       if (session && session.user) {
         this._session = session;
         this._currentUser = session.user;
         this._isAnonymous = Boolean(session.user.is_anonymous);
         this._initialized = true;
-        console.log(`[playerAuthService] Restored active session: ${session.user.id} (is_anonymous: ${this._isAnonymous})`);
+        console.log(`[playerAuthService] Restored existing session: ${session.user.id} (is_anonymous: ${this._isAnonymous})`);
         return {
           user: session.user,
           session,
@@ -65,43 +68,137 @@ class PlayerAuthService {
         };
       }
 
-      // 2. No session exists: Attempt Anonymous Sign-In
-      console.log('[playerAuthService] No session found. Signing in anonymously...');
-      const { data, error: anonError } = await supabase.auth.signInAnonymously();
-
-      if (anonError) {
-        // If anonymous provider is disabled in dashboard, log informative error
-        if (anonError.code === 'anonymous_provider_disabled' || anonError.status === 422) {
-          console.warn('[playerAuthService] Supabase Anonymous Sign-In is disabled. Please enable it in Supabase Dashboard -> Authentication -> Providers -> Anonymous Sign-ins.');
-        } else {
-          console.error('[playerAuthService] signInAnonymously failed:', anonError.message);
-        }
-        return {
-          user: null,
-          session: null,
-          isAnonymous: true,
-          error: anonError.message,
-          errorCode: anonError.code
-        };
-      }
-
-      if (data && data.session && data.user) {
-        this._session = data.session;
-        this._currentUser = data.user;
-        this._isAnonymous = Boolean(data.user.is_anonymous);
-        this._initialized = true;
-        console.log(`[playerAuthService] Created new anonymous session: ${data.user.id}`);
-        return {
-          user: data.user,
-          session: data.session,
-          isAnonymous: this._isAnonymous
-        };
-      }
+      // No session found: Do NOT call signInAnonymously(). Remain unauthenticated.
+      this._session = null;
+      this._currentUser = null;
+      this._isAnonymous = false;
+      this._initialized = true;
+      return { user: null, session: null, isAnonymous: false };
     } catch (err) {
-      console.error('[playerAuthService] Unexpected error during initAuth:', err);
+      console.error('[playerAuthService] Unexpected error during session restoration:', err);
+      this._session = null;
+      this._currentUser = null;
+      this._isAnonymous = false;
+      return { user: null, session: null, isAnonymous: false };
+    } finally {
+      this._initPromise = null;
+    }
+  }
+
+  /**
+   * Ensure Player Auth (Controlled Guest Creation).
+   * Called ONLY when player confirms entering PlayBank (completing onboarding) or starting a game.
+   * Features:
+   * 1. Concurrency lock (In-flight promise mutex)
+   * 2. Double-check getSession() inside lock
+   * 3. Calls signInAnonymously() only if STILL no session
+   * 4. Releases lock in finally block to allow retries on failure
+   */
+  async ensurePlayerAuth() {
+    // 1. Fast check if already authenticated in memory
+    if (this._currentUser && this._session) {
+      return {
+        user: this._currentUser,
+        session: this._session,
+        isAnonymous: this._isAnonymous
+      };
     }
 
-    return { user: null, session: null, isAnonymous: true };
+    // 2. Concurrency lock: If a creation is already in flight, wait for it
+    if (this._authLockPromise) {
+      return this._authLockPromise;
+    }
+
+    this._authLockPromise = (async () => {
+      try {
+        if (!isSupabaseConfigured || !supabase) {
+          return { user: null, session: null, isAnonymous: true, offline: true };
+        }
+
+        // Double check: inside lock, call getSession() to confirm if another tab or event just established a session
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        if (session && session.user) {
+          this._session = session;
+          this._currentUser = session.user;
+          this._isAnonymous = Boolean(session.user.is_anonymous);
+          this._initialized = true;
+          console.log(`[playerAuthService] ensurePlayerAuth: Reused existing session: ${session.user.id}`);
+          return {
+            user: session.user,
+            session,
+            isAnonymous: this._isAnonymous
+          };
+        }
+
+        // STILL no session: create Anonymous Guest
+        console.log('[playerAuthService] ensurePlayerAuth: Creating new anonymous guest session...');
+        const { data, error: anonError } = await supabase.auth.signInAnonymously();
+
+        if (anonError) {
+          console.error('[playerAuthService] signInAnonymously failed:', anonError.message);
+          throw anonError;
+        }
+
+        if (data && data.session && data.user) {
+          this._session = data.session;
+          this._currentUser = data.user;
+          this._isAnonymous = Boolean(data.user.is_anonymous);
+          this._initialized = true;
+          console.log(`[playerAuthService] Created anonymous session: ${data.user.id}`);
+          return {
+            user: data.user,
+            session: data.session,
+            isAnonymous: this._isAnonymous
+          };
+        }
+
+        throw new Error('Failed to obtain session from signInAnonymously');
+      } finally {
+        // ALWAYS release lock so subsequent attempts can retry if failed
+        this._authLockPromise = null;
+      }
+    })();
+
+    return this._authLockPromise;
+  }
+
+  /**
+   * Direct Sign-In for Registered Players (Never touches signInAnonymously)
+   */
+  async signInWithPassword({ email, password }) {
+    if (!isSupabaseConfigured || !supabase) {
+      throw new Error('Supabase is not configured');
+    }
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password
+    });
+    if (error) throw error;
+    if (data?.session && data?.user) {
+      this._session = data.session;
+      this._currentUser = data.user;
+      this._isAnonymous = Boolean(data.user.is_anonymous);
+      this._initialized = true;
+    }
+    return data;
+  }
+
+  /**
+   * Sync Player Profile metadata (nickname, age_group, avatar) to public.profiles
+   */
+  async syncProfileMetadata({ nickname, age_group, avatar_id, avatar_type, avatar_url } = {}) {
+    if (!isSupabaseConfigured || !supabase || !this._currentUser?.id) return;
+    try {
+      const updates = { last_active_at: new Date().toISOString() };
+      if (nickname) updates.nickname = nickname;
+      if (age_group) updates.age_group = age_group;
+      if (avatar_id) updates.avatar_id = avatar_id;
+      if (avatar_type) updates.avatar_type = avatar_type;
+      if (avatar_url !== undefined) updates.avatar_url = avatar_url;
+      await supabase.from('profiles').update(updates).eq('id', this._currentUser.id);
+    } catch (err) {
+      console.warn('[playerAuthService] syncProfileMetadata error:', err.message);
+    }
   }
 
   /**
@@ -120,10 +217,14 @@ class PlayerAuthService {
 
   /**
    * Guaranteed async resolution of auth.uid()
+   * Checks memory -> checks existing session -> if performing game action without session, ensures auth under concurrency lock.
    */
   async getAuthUserId() {
-    await this.initAuth();
-    return this._currentUser?.id || null;
+    if (this._currentUser?.id) {
+      return this._currentUser.id;
+    }
+    const res = await this.ensurePlayerAuth();
+    return res?.user?.id || null;
   }
 
   /**
@@ -156,6 +257,9 @@ class PlayerAuthService {
         data: {
           ...metadata,
           nickname: nickname || user.user_metadata?.nickname || 'Player',
+          avatar_id: metadata.avatar_id || user.user_metadata?.avatar_id || 'tiger',
+          avatar_type: metadata.avatar_type || user.user_metadata?.avatar_type || 'preset',
+          avatar_url: metadata.avatar_url !== undefined ? metadata.avatar_url : (user.user_metadata?.avatar_url || null),
           is_guest: false
         }
       });
@@ -166,13 +270,18 @@ class PlayerAuthService {
       }
 
       // Sync public.profiles to is_guest = false
+      const profileUpdates = {
+        is_guest: false,
+        nickname: nickname || user.user_metadata?.nickname || 'Player',
+        last_active_at: new Date().toISOString()
+      };
+      if (metadata.avatar_id || user.user_metadata?.avatar_id) {
+        profileUpdates.avatar_id = metadata.avatar_id || user.user_metadata?.avatar_id;
+      }
+
       await supabase
         .from('profiles')
-        .update({
-          is_guest: false,
-          nickname: nickname || user.user_metadata?.nickname || 'Player',
-          last_active_at: new Date().toISOString()
-        })
+        .update(profileUpdates)
         .eq('id', user.id);
 
       this._currentUser = data.user;

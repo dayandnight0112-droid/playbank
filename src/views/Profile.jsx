@@ -24,6 +24,9 @@ import {
 import { quizService } from '../lib/quizService';
 import { playerAuthService } from '../lib/playerAuthService';
 import { mockDb } from '../lib/mockDb';
+import PlayerAvatar from '../components/common/PlayerAvatar';
+import AvatarPickerModal from '../components/AvatarPickerModal';
+import { DEFAULT_AVATAR_ID } from '../data/playerAvatars';
 
 /* -------------------------------------------------------------------------- */
 /* SVG Badges Components                                                      */
@@ -130,7 +133,25 @@ const BadgeShield = ({ type, title, ribbonText, colorScheme, iconSvg }) => {
 const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) => {
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showBadgesModal, setShowBadgesModal] = useState(false);
+  const [showAvatarPicker, setShowAvatarPicker] = useState(false);
   const [expandedSessionId, setExpandedSessionId] = useState(null);
+
+  const [avatarId, setAvatarId] = useState(() => currentUser?.avatarId || guestProfile?.avatarId || DEFAULT_AVATAR_ID);
+
+  useEffect(() => {
+    const current = currentUser?.avatarId || guestProfile?.avatarId || DEFAULT_AVATAR_ID;
+    setAvatarId(current);
+  }, [currentUser?.avatarId, guestProfile?.avatarId]);
+
+  useEffect(() => {
+    const handleAvatarChanged = (e) => {
+      if (e?.detail?.avatarId) {
+        setAvatarId(e.detail.avatarId);
+      }
+    };
+    window.addEventListener('playbank:avatar-changed', handleAvatarChanged);
+    return () => window.removeEventListener('playbank:avatar-changed', handleAvatarChanged);
+  }, []);
 
   // Step 4.1: 4 Strict States for Profile & Game History
   const [sessions, setSessions] = useState([]);
@@ -220,9 +241,6 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
     return 'PB-082741';
   }, [currentUser, guestProfile]);
 
-  // Mascot Image path
-  const mascotImg = `${import.meta.env.BASE_URL}mascot/tiger_welcome.png`;
-
   return (
     <div
       className="view-content"
@@ -287,38 +305,46 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
 
         {/* Profile Card Info: Avatar + Name + Player ID */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-          {/* Avatar (PlayBank Mascot tiger in circular frame) */}
-          <div
-            style={{
-              width: '102px',
-              height: '102px',
-              borderRadius: '50%',
-              backgroundColor: '#FFFFFF',
-              border: '3.5px solid #000000',
-              boxShadow: '0 4px 0 #000000',
-              overflow: 'hidden',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
-              position: 'relative',
-              background: 'radial-gradient(circle, #FFFBEB 40%, #FEF08A 100%)'
-            }}
-          >
-            <img
-              src={mascotImg}
-              alt="PlayBank Mascot"
-              style={{
-                width: '115%',
-                height: '115%',
-                objectFit: 'contain',
-                transform: 'translateY(2px)'
-              }}
-              onError={(e) => {
-                e.target.src = `${import.meta.env.BASE_URL}playbanklogo.png`;
-              }}
-            />
-          </div>
+          {/* Unified Player Avatar with Change Avatar Button */}
+          <PlayerAvatar
+            avatarId={avatarId}
+            size={102}
+            borderWidth={3.5}
+            borderColor="#000000"
+            shadow="0 4px 0 #000000"
+            onClick={() => setShowAvatarPicker(true)}
+            style={{ cursor: 'pointer' }}
+            badge={
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowAvatarPicker(true);
+                }}
+                title="更换头像"
+                aria-label="Change Avatar"
+                style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '50%',
+                  backgroundColor: '#FFCE00',
+                  border: '2.5px solid #000000',
+                  boxShadow: '0 2px 0 #000000',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  transform: 'translate(2px, 2px)',
+                  outline: 'none',
+                  padding: 0,
+                  transition: 'transform 0.1s ease'
+                }}
+                onMouseDown={(e) => (e.currentTarget.style.transform = 'translate(2px, 2px) scale(0.9)')}
+                onMouseUp={(e) => (e.currentTarget.style.transform = 'translate(2px, 2px) scale(1)')}
+              >
+                <Sparkles size={16} color="#000000" strokeWidth={2.5} />
+              </button>
+            }
+          />
 
           {/* Player Name & ID */}
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -1338,6 +1364,16 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
           </div>
         </div>
       )}
+
+      {/* Avatar Picker Modal */}
+      <AvatarPickerModal
+        isOpen={showAvatarPicker}
+        onClose={() => setShowAvatarPicker(false)}
+        currentAvatarId={avatarId}
+        onAvatarUpdated={(newAvatarId) => {
+          setAvatarId(newAvatarId);
+        }}
+      />
 
       {/* Global CSS for Animations */}
       <style>{`

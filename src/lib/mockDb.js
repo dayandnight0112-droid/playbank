@@ -1,5 +1,6 @@
 // Mock Database using LocalStorage
 import { questions as defaultQuestions } from '../data/questions.js';
+import { DEFAULT_AVATAR_ID } from '../data/playerAvatars.js';
 const USERS_KEY = 'playbank_users';
 const CURRENT_SESSION_KEY = 'playbank_session';
 const PRODUCTS_KEY = 'playbank_products';
@@ -53,6 +54,9 @@ const getGuestProfileRaw = () => {
     if (!profile.chapterProgress) {
       profile.chapterProgress = { chapter: 1, chapterName: 'Training Grounds', stage: 1, totalStages: 8 };
     }
+    if (!profile.avatarType) profile.avatarType = 'preset';
+    if (!profile.avatarId) profile.avatarId = DEFAULT_AVATAR_ID;
+    if (profile.avatarUrl === undefined) profile.avatarUrl = null;
   }
   return profile;
 };
@@ -233,6 +237,9 @@ const getUsers = () => {
           ic_no: '090101-14-1234',
           age: 14,
           school: 'SMK Cyberjaya',
+          avatarType: 'preset',
+          avatarId: DEFAULT_AVATAR_ID,
+          avatarUrl: null,
           total_referral_bonus: 0,
           total_bp: 500,
           weekly_bp: 500,
@@ -242,6 +249,12 @@ const getUsers = () => {
         }
       ];
       localStorage.setItem(USERS_KEY, JSON.stringify(users));
+    } else {
+      users.forEach(u => {
+        if (!u.avatarType) u.avatarType = 'preset';
+        if (!u.avatarId) u.avatarId = DEFAULT_AVATAR_ID;
+        if (u.avatarUrl === undefined) u.avatarUrl = null;
+      });
     }
     return users;
   } catch (e) {
@@ -320,6 +333,7 @@ export const mockDb = {
       return { error: 'Email already exists' };
     }
 
+    const guest = getGuestProfileRaw();
     const newUser = {
       id: Date.now().toString(),
       email,
@@ -331,6 +345,9 @@ export const mockDb = {
       ic_no: null,
       age: null,
       school: null,
+      avatarType: guest?.avatarType || 'preset',
+      avatarId: guest?.avatarId || DEFAULT_AVATAR_ID,
+      avatarUrl: guest?.avatarUrl || null,
       total_referral_bonus: 0,
       total_bp: guestBP || 0,
       weekly_bp: guestBP || 0,
@@ -419,6 +436,13 @@ export const mockDb = {
     }
     users[userIndex].badges = Array.from(userBadges);
 
+    // Merge avatar if guest customized it
+    if (guestData.avatarId) {
+      users[userIndex].avatarId = guestData.avatarId;
+      users[userIndex].avatarType = guestData.avatarType || 'preset';
+      users[userIndex].avatarUrl = guestData.avatarUrl || null;
+    }
+
     saveUsers(users);
     const updatedUser = users[userIndex];
     localStorage.setItem(CURRENT_SESSION_KEY, JSON.stringify(updatedUser));
@@ -449,7 +473,13 @@ export const mockDb = {
 
   // Get currently logged in user session
   getCurrentSession: () => {
-    return JSON.parse(localStorage.getItem(CURRENT_SESSION_KEY));
+    const session = safeGetJSON(CURRENT_SESSION_KEY, null);
+    if (session) {
+      if (!session.avatarType) session.avatarType = 'preset';
+      if (!session.avatarId) session.avatarId = DEFAULT_AVATAR_ID;
+      if (session.avatarUrl === undefined) session.avatarUrl = null;
+    }
+    return session;
   },
 
   // Distribute Referral Bonus
@@ -654,6 +684,9 @@ export const mockDb = {
       return {
         id: u.id,
         name: displayName,
+        avatarType: u.avatarType || 'preset',
+        avatarId: u.avatarId || DEFAULT_AVATAR_ID,
+        avatarUrl: u.avatarUrl || null,
         total_bp: u.total_bp || 0,
         weekly_bp: u.weekly_bp || 0,
         total_referral_bonus: u.total_referral_bonus || 0,
@@ -1222,13 +1255,16 @@ export const mockDb = {
   // Guest Management
   getGuestProfile: () => getGuestProfileRaw(),
   saveGuestProfile: (profile) => saveGuestProfileRaw(profile),
-  createGuest: (selectedPath = 'chinese', guestName = null) => {
+  createGuest: (selectedPath = 'chinese', guestName = null, avatarId = null) => {
     const randomId = Math.floor(1000 + Math.random() * 9000);
     const guest = {
       playerId: `guest_${randomId}`,
       id: `guest_${randomId}`,
       guestName: guestName || `Guest ${randomId}`,
       selectedPath, // 'chinese' | 'english' | 'mixed'
+      avatarType: 'preset',
+      avatarId: avatarId || DEFAULT_AVATAR_ID,
+      avatarUrl: null,
       tutorialProgress: 1,
       tutorialStep: 1,
       tutorialComplete: false,
@@ -1264,6 +1300,66 @@ export const mockDb = {
   },
   clearGuestProfile: () => {
     saveGuestProfileRaw(null);
+  },
+
+  // Unified Avatar System: Update player avatar (Guest or Registered User)
+  updatePlayerAvatar: ({ avatarType = 'preset', avatarId = DEFAULT_AVATAR_ID, avatarUrl = null } = {}) => {
+    // 1. If user is logged in with a session
+    const session = mockDb.getCurrentSession();
+    if (session && session.id && session.id !== 'guest') {
+      const users = getUsers();
+      const userIndex = users.findIndex(u => u.id === session.id);
+      if (userIndex !== -1) {
+        users[userIndex].avatarType = avatarType;
+        users[userIndex].avatarId = avatarId;
+        users[userIndex].avatarUrl = avatarUrl;
+        saveUsers(users);
+      }
+      session.avatarType = avatarType;
+      session.avatarId = avatarId;
+      session.avatarUrl = avatarUrl;
+      safeSetJSON(CURRENT_SESSION_KEY, session);
+
+      try {
+        window.dispatchEvent(new CustomEvent('playbank:avatar-changed', {
+          detail: { avatarType, avatarId, avatarUrl, isGuest: false, userId: session.id }
+        }));
+      } catch (e) {}
+
+      return {
+        success: true,
+        isGuest: false,
+        avatar: { avatarType, avatarId, avatarUrl },
+        user: session
+      };
+    }
+
+    // 2. Otherwise update Guest profile
+    let guest = getGuestProfileRaw();
+    if (guest) {
+      guest.avatarType = avatarType;
+      guest.avatarId = avatarId;
+      guest.avatarUrl = avatarUrl;
+      saveGuestProfileRaw(guest);
+    } else {
+      guest = mockDb.createGuest('chinese', null, avatarId);
+      guest.avatarType = avatarType;
+      guest.avatarUrl = avatarUrl;
+      saveGuestProfileRaw(guest);
+    }
+
+    try {
+      window.dispatchEvent(new CustomEvent('playbank:avatar-changed', {
+        detail: { avatarType, avatarId, avatarUrl, isGuest: true, playerId: guest?.playerId }
+      }));
+    } catch (e) {}
+
+    return {
+      success: true,
+      isGuest: true,
+      avatar: { avatarType, avatarId, avatarUrl },
+      guest
+    };
   },
 
   // 7-Day Streak Management (Step 27)
@@ -1475,6 +1571,13 @@ export const mockDb = {
           safeSetJSON(CURRENT_SESSION_KEY, session);
           report.healed.push('Synchronized session total_bp with user database');
         }
+        if (!session.avatarType || !session.avatarId) {
+          session.avatarType = session.avatarType || 'preset';
+          session.avatarId = session.avatarId || DEFAULT_AVATAR_ID;
+          session.avatarUrl = session.avatarUrl ?? null;
+          safeSetJSON(CURRENT_SESSION_KEY, session);
+          report.healed.push('Synchronized session avatar attributes');
+        }
       }
 
       // 2. Validate guest profile and BP consistency
@@ -1483,6 +1586,12 @@ export const mockDb = {
         if (!guest.guestName) {
           guest.guestName = `Guest ${Math.floor(1000 + Math.random() * 9000)}`;
           report.healed.push('Assigned default name to nameless guest');
+        }
+        if (!guest.avatarType || !guest.avatarId) {
+          guest.avatarType = guest.avatarType || 'preset';
+          guest.avatarId = guest.avatarId || DEFAULT_AVATAR_ID;
+          guest.avatarUrl = guest.avatarUrl ?? null;
+          report.healed.push('Assigned default avatar to guest');
         }
         if (!Number.isFinite(guest.bankPoint) || guest.bankPoint < 0) {
           guest.bankPoint = 0;
