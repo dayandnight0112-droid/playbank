@@ -179,9 +179,6 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
       setAnswers(Array.isArray(data?.answers) ? data.answers : []);
       if (profile) {
         setCloudProfile(profile);
-        if (profile.avatar_id) {
-          setAvatarId(profile.avatar_id);
-        }
       }
     } catch (err) {
       console.error('[Profile] Failed to load stats from Supabase:', err);
@@ -254,6 +251,10 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
     if (cloudProfile?.player_code) return cloudProfile.player_code.toUpperCase();
     if (currentUser?.player_code) return currentUser.player_code.toUpperCase();
     if (guestProfile?.player_code) return guestProfile.player_code.toUpperCase();
+    const uid = (currentUser?.id && currentUser.id !== 'guest' ? currentUser.id : null) || guestProfile?.id || playerAuthService.getUserId();
+    if (uid && uid.length >= 8 && uid.includes('-')) {
+      return ('P' + uid.replace(/-/g, '').substring(0, 8)).toUpperCase();
+    }
     return '';
   }, [cloudProfile, currentUser, guestProfile]);
 

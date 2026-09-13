@@ -192,7 +192,7 @@ class PlayerAuthService {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, player_code, nickname, age_group, is_guest, avatar_id, avatar_url, avatar_type')
+        .select('id, player_code, nickname, age_group, source_channel, daily_goal_minutes, is_guest')
         .eq('id', uid)
         .maybeSingle();
       if (error) {
@@ -207,9 +207,9 @@ class PlayerAuthService {
   }
 
   /**
-   * Sync Player Profile metadata (nickname, age_group, avatar, channel, goal) to public.profiles
+   * Sync Player Profile metadata (nickname, age_group, channel, goal) to public.profiles
    */
-  async syncProfileMetadata({ nickname, age_group, avatar_id, avatar_type, avatar_url, source_channel, daily_goal_minutes } = {}) {
+  async syncProfileMetadata({ nickname, age_group, source_channel, daily_goal_minutes } = {}) {
     const uid = this.getUserId();
     if (!isSupabaseConfigured || !supabase || !uid) return null;
     try {
@@ -224,14 +224,11 @@ class PlayerAuthService {
       if (daily_goal_minutes !== undefined) {
         updates.daily_goal_minutes = Number(daily_goal_minutes) || 10;
       }
-      if (avatar_id) updates.avatar_id = avatar_id;
-      if (avatar_type) updates.avatar_type = avatar_type;
-      if (avatar_url !== undefined) updates.avatar_url = avatar_url;
       const { data, error } = await supabase
         .from('profiles')
         .update(updates)
         .eq('id', uid)
-        .select('id, player_code, nickname, age_group, source_channel, daily_goal_minutes, is_guest, avatar_id, avatar_url, avatar_type')
+        .select('id, player_code, nickname, age_group, source_channel, daily_goal_minutes, is_guest')
         .maybeSingle();
       if (error) {
         console.warn('[playerAuthService] syncProfileMetadata error:', error.message);
@@ -318,9 +315,6 @@ class PlayerAuthService {
         nickname: nickname || user.user_metadata?.nickname || 'Player',
         last_active_at: new Date().toISOString()
       };
-      if (metadata.avatar_id || user.user_metadata?.avatar_id) {
-        profileUpdates.avatar_id = metadata.avatar_id || user.user_metadata?.avatar_id;
-      }
 
       await supabase
         .from('profiles')
