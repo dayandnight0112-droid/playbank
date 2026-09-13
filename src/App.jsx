@@ -399,13 +399,21 @@ function App() {
               // 1. Establish guest session in Supabase now that player confirmed onboarding
               let guestPlayerCode = null;
               let syncedNickname = userProfileData?.nickname?.trim() || '冒险家';
+              const rawAge = userProfileData?.ageGroup;
+              const normalizedAgeGroup = (typeof rawAge === 'object' && rawAge !== null ? rawAge.id : rawAge) || '13-15';
+              const rawChannel = userProfileData?.sourceChannel;
+              const normalizedChannel = (typeof rawChannel === 'object' && rawChannel !== null ? rawChannel.id : rawChannel) || null;
+              const dailyGoalMinutes = Number(userProfileData?.dailyGoal?.minutes) || 10;
+
               try {
                 const authRes = await playerAuthService.ensurePlayerAuth();
                 if (authRes?.user?.id) {
                   console.log('[App] Guest session established on onboarding complete:', authRes.user.id);
                   const updatedProfile = await playerAuthService.syncProfileMetadata({
                     nickname: syncedNickname,
-                    age_group: userProfileData?.ageGroup || '13-15',
+                    age_group: normalizedAgeGroup,
+                    source_channel: normalizedChannel,
+                    daily_goal_minutes: dailyGoalMinutes
                   });
                   if (updatedProfile?.player_code) {
                     guestPlayerCode = updatedProfile.player_code;
@@ -532,6 +540,7 @@ function App() {
             onStartChallenge={handleStartChallenge}
             onGoMarket={() => setCurrentView('marketplace')}
             onGoBattle={() => setCurrentView('select_subject')}
+            onGoProfile={() => setCurrentView('profile')}
             onUpdateBP={(newBP) => setUserBP(newBP)}
           />
         );

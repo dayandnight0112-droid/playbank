@@ -207,15 +207,23 @@ class PlayerAuthService {
   }
 
   /**
-   * Sync Player Profile metadata (nickname, age_group, avatar) to public.profiles
+   * Sync Player Profile metadata (nickname, age_group, avatar, channel, goal) to public.profiles
    */
-  async syncProfileMetadata({ nickname, age_group, avatar_id, avatar_type, avatar_url } = {}) {
+  async syncProfileMetadata({ nickname, age_group, avatar_id, avatar_type, avatar_url, source_channel, daily_goal_minutes } = {}) {
     const uid = this.getUserId();
     if (!isSupabaseConfigured || !supabase || !uid) return null;
     try {
       const updates = { last_active_at: new Date().toISOString() };
       if (nickname) updates.nickname = nickname.trim();
-      if (age_group) updates.age_group = age_group;
+      if (age_group) {
+        updates.age_group = (typeof age_group === 'object' && age_group !== null ? age_group.id : age_group) || '13-15';
+      }
+      if (source_channel !== undefined) {
+        updates.source_channel = typeof source_channel === 'object' && source_channel !== null ? source_channel.id : source_channel;
+      }
+      if (daily_goal_minutes !== undefined) {
+        updates.daily_goal_minutes = Number(daily_goal_minutes) || 10;
+      }
       if (avatar_id) updates.avatar_id = avatar_id;
       if (avatar_type) updates.avatar_type = avatar_type;
       if (avatar_url !== undefined) updates.avatar_url = avatar_url;
@@ -223,7 +231,7 @@ class PlayerAuthService {
         .from('profiles')
         .update(updates)
         .eq('id', uid)
-        .select('id, player_code, nickname, age_group, is_guest, avatar_id, avatar_url, avatar_type')
+        .select('id, player_code, nickname, age_group, source_channel, daily_goal_minutes, is_guest, avatar_id, avatar_url, avatar_type')
         .maybeSingle();
       if (error) {
         console.warn('[playerAuthService] syncProfileMetadata error:', error.message);

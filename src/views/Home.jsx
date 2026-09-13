@@ -23,6 +23,7 @@ const Home = ({
   onGoMarket,
   onGoBattle,
   onOpenLogin,
+  onGoProfile,
   onUpdateBP
 }) => {
   // Player Display Info
@@ -120,7 +121,16 @@ const Home = ({
         }}
       >
         {/* Left: Avatar + Player / Guest Name + Lv. 3 */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div
+          onClick={onGoProfile}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            cursor: onGoProfile ? 'pointer' : 'default'
+          }}
+          title={onGoProfile ? "查看个人主页 / 更换头像" : undefined}
+        >
           <PlayerAvatar
             avatarId={currentUser?.avatarId || guestProfile?.avatarId}
             avatarUrl={currentUser?.avatarUrl || guestProfile?.avatarUrl}
