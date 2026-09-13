@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { LogOut, LayoutDashboard, Users, BookOpen, ShoppingBag, Settings, TrendingUp, UserPlus, FileText, Flame, Trash2, Edit2, Ban, Lock, Unlock } from 'lucide-react';
 import { mockDb } from '../lib/mockDb';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import PlayerAvatar from '../components/common/PlayerAvatar';
 
 export default function AdminDashboard({ onLogout }) {
   const [activeMenu, setActiveMenu] = useState('overview');
@@ -179,8 +180,20 @@ export default function AdminDashboard({ onLogout }) {
               {filteredUsers.map((u, i) => (
                 <tr key={u.id || i} style={{ borderBottom: '1px solid #E5E7EB', fontSize: '14px', background: u.is_banned ? '#FEF2F2' : 'transparent' }}>
                   <td style={{ padding: '12px', fontWeight: 600 }}>
-                    {u.ic_name || u.email}
-                    {u.is_banned && <span style={{ marginLeft: '8px', color: '#EF4444', fontSize: '12px', fontWeight: 'bold' }}>(BANNED)</span>}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <PlayerAvatar
+                        avatarId={u.avatarId}
+                        avatarUrl={u.avatarUrl}
+                        size={34}
+                        borderWidth={1.5}
+                        borderColor="#000000"
+                        shadow={false}
+                      />
+                      <div>
+                        <div>{u.ic_name || u.email}</div>
+                        {u.is_banned && <span style={{ color: '#EF4444', fontSize: '11px', fontWeight: 'bold' }}>(BANNED)</span>}
+                      </div>
+                    </div>
                   </td>
                   <td style={{ padding: '12px', color: '#059669', fontWeight: 700 }}>{u.total_bp || 0}</td>
                   <td style={{ padding: '12px' }}>{u.score_multiplier === 3 ? <span style={{ background: '#FEF3C7', color: '#D97706', padding: '4px 8px', borderRadius: '12px', fontSize: '12px', fontWeight: 700 }}>Booster</span> : <span style={{ background: '#E5E7EB', color: '#4B5563', padding: '4px 8px', borderRadius: '12px', fontSize: '12px', fontWeight: 700 }}>Basic</span>}</td>

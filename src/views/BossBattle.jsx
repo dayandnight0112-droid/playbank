@@ -8,6 +8,7 @@ import { BATTLE_PHASES, PLAYER_ANIMATIONS, BOSS_ANIMATIONS, BATTLE_RESULTS } fro
 import { getSpeedComboTier } from '../data/bossTypes.js';
 import { mockDb } from '../lib/mockDb.js';
 import { quizService } from '../lib/quizService.js';
+import PlayerAvatar from '../components/common/PlayerAvatar.jsx';
 
 const shuffleArray = (array) => [...array].sort(() => Math.random() - 0.5);
 
@@ -31,9 +32,12 @@ const BossBattle = ({
   form,
   chapter,
   currentUser,
+  guestProfile,
   onComplete,
   onBack
 }) => {
+  const playerAvatarId = currentUser?.avatarId || guestProfile?.avatarId || mockDb.getGuestProfile()?.avatarId || 'tiger';
+  const playerAvatarUrl = currentUser?.avatarUrl || guestProfile?.avatarUrl || null;
   const hasClaimedRef = useRef(false);
   const [bossSessionId, setBossSessionId] = useState(initialSessionId || null);
 
@@ -609,7 +613,7 @@ const BossBattle = ({
                 : 'translateX(0) scale(1)'
             }}
           >
-            {/* Player Transparent Character Container */}
+            {/* Player Character Container */}
             <div
               style={{
                 width: '90px',
@@ -619,7 +623,6 @@ const BossBattle = ({
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                fontSize: '52px',
                 position: 'relative',
                 filter: comboTier?.glow && comboTier.glow !== 'none'
                   ? `drop-shadow(0 10px 18px rgba(0, 0, 0, 0.8)) drop-shadow(0 0 16px ${comboTier.color})`
@@ -627,15 +630,26 @@ const BossBattle = ({
                 transition: 'filter 0.2s ease-out'
               }}
             >
-              {playerAnimation === PLAYER_ANIMATIONS.VICTORY ? '👑' : '🧙‍♂️'}
+              <PlayerAvatar
+                avatarId={playerAvatarId}
+                avatarUrl={playerAvatarUrl}
+                size={76}
+                borderWidth={3}
+                borderColor={comboTier?.color || '#FFBC00'}
+                shadow={false}
+                badge={playerAnimation === PLAYER_ANIMATIONS.VICTORY ? (
+                  <span style={{ fontSize: '24px', transform: 'translate(4px, -6px)', display: 'block' }}>👑</span>
+                ) : null}
+                badgePosition="top-right"
+              />
 
               {/* Combo Badge */}
               {combo >= 2 && (
                 <div
                   style={{
                     position: 'absolute',
-                    top: '-4px',
-                    right: '-4px',
+                    top: '-6px',
+                    left: '-6px',
                     background: comboTier?.color ? comboTier.color : '#EF4444',
                     color: '#FFF',
                     fontSize: '10px',
@@ -647,7 +661,8 @@ const BossBattle = ({
                     alignItems: 'center',
                     gap: '2px',
                     boxShadow: comboTier?.glow || '0 2px 8px rgba(0,0,0,0.6)',
-                    animation: 'pulse 1s infinite'
+                    animation: 'pulse 1s infinite',
+                    zIndex: 5
                   }}
                 >
                   <Flame size={10} fill="#FFF" /> x{combo}
@@ -921,30 +936,25 @@ const BossBattle = ({
               zIndex: 120
             }}
           >
-            {/* Header Avatar Badge */}
+            {/* Header Player Avatar Badge */}
             <div
               style={{
-                width: '76px',
-                height: '76px',
-                borderRadius: '50%',
-                background: battleResult === BATTLE_RESULTS.VICTORY
-                  ? 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)'
-                  : 'linear-gradient(135deg, #475569 0%, #1E293B 100%)',
-                border: battleResult === BATTLE_RESULTS.VICTORY
-                  ? '3px solid #FDE68A'
-                  : '3px solid rgba(255, 255, 255, 0.2)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '38px',
-                boxShadow: battleResult === BATTLE_RESULTS.VICTORY
-                  ? '0 0 32px rgba(245, 158, 11, 0.7)'
-                  : '0 0 20px rgba(71, 85, 105, 0.5)',
                 marginBottom: '14px',
                 animation: 'popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
               }}
             >
-              {battleResult === BATTLE_RESULTS.VICTORY ? '👑' : '💨'}
+              <PlayerAvatar
+                avatarId={playerAvatarId}
+                avatarUrl={playerAvatarUrl}
+                size={78}
+                borderWidth={3.5}
+                borderColor={battleResult === BATTLE_RESULTS.VICTORY ? '#FDE68A' : 'rgba(255, 255, 255, 0.25)'}
+                shadow={battleResult === BATTLE_RESULTS.VICTORY ? '0 0 32px rgba(245, 158, 11, 0.7)' : '0 0 20px rgba(71, 85, 105, 0.5)'}
+                badge={battleResult === BATTLE_RESULTS.VICTORY ? (
+                  <span style={{ fontSize: '26px', transform: 'translate(4px, -4px)', display: 'block' }}>👑</span>
+                ) : null}
+                badgePosition="top-right"
+              />
             </div>
 
             {/* Step 9 Title: BOSS DEFEATED vs BOSS ESCAPED */}

@@ -540,6 +540,7 @@ function App() {
             form={bossBattleParams?.form || quizParams?.form}
             chapter={bossBattleParams?.chapter || quizParams?.chapter}
             currentUser={currentUser}
+            guestProfile={guestProfile}
             onComplete={handleBossBattleComplete}
             onBack={() => {
               setBossBattleParams(null);

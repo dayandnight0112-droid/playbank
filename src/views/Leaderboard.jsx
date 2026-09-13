@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Trophy, Medal, Award, Flame, Users, Calendar, Crown } from 'lucide-react';
 import { mockDb } from '../lib/mockDb';
+import PlayerAvatar from '../components/common/PlayerAvatar';
 
 const Leaderboard = ({ currentUser, guestProfile }) => {
   const [activeTab, setActiveTab] = useState('overall'); // overall | weekly | referral
@@ -96,8 +97,15 @@ const Leaderboard = ({ currentUser, guestProfile }) => {
                   {rankStyle.icon}
                 </div>
                 
-                <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: isMe ? '#000' : '#F3F4F6', color: isMe ? '#FFF' : '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', fontWeight: 900, marginRight: '16px' }}>
-                  {user.name.charAt(0).toUpperCase()}
+                <div style={{ marginRight: '16px', display: 'flex', alignItems: 'center' }}>
+                  <PlayerAvatar
+                    avatarId={isMe ? (currentUser?.avatarId || user.avatarId) : user.avatarId}
+                    avatarUrl={isMe ? (currentUser?.avatarUrl || user.avatarUrl) : user.avatarUrl}
+                    size={48}
+                    borderWidth={isMe ? 2.5 : 2}
+                    borderColor={isMe ? 'var(--brand-primary)' : '#000000'}
+                    shadow={false}
+                  />
                 </div>
 
                 <div style={{ flex: 1 }}>
@@ -128,21 +136,15 @@ const Leaderboard = ({ currentUser, guestProfile }) => {
           alignItems: 'center',
           boxShadow: '0 4px 12px rgba(255, 188, 0, 0.15)'
         }}>
-          <div style={{
-            width: '42px',
-            height: '42px',
-            borderRadius: '50%',
-            background: 'var(--brand-primary, #FFBC00)',
-            border: '2px solid #000000',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '17px',
-            fontWeight: 900,
-            marginRight: '14px',
-            color: '#000000'
-          }}>
-            {(guestProfile.guestName || '冒险家').charAt(0).toUpperCase()}
+          <div style={{ marginRight: '14px', display: 'flex', alignItems: 'center' }}>
+            <PlayerAvatar
+              avatarId={guestProfile.avatarId}
+              avatarUrl={guestProfile.avatarUrl}
+              size={42}
+              borderWidth={2}
+              borderColor="#000000"
+              shadow={false}
+            />
           </div>
           <div style={{ flex: 1 }}>
             <p style={{ fontSize: '15px', fontWeight: 900, color: '#000000', margin: 0 }}>

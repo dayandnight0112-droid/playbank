@@ -12,6 +12,7 @@ import TrainingCampArt from '../components/home/TrainingCampArt';
 import { getHomeScene } from '../data/homeScenes';
 import { mockDb } from '../lib/mockDb';
 import { playModalSwooshSound } from '../lib/soundEffects';
+import PlayerAvatar from '../components/common/PlayerAvatar';
 
 const Home = ({
   currentUser,
@@ -120,27 +121,14 @@ const Home = ({
       >
         {/* Left: Avatar + Player / Guest Name + Lv. 3 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div
-            style={{
-              position: 'relative',
-              width: '46px',
-              height: '46px',
-              borderRadius: '50%',
-              background: '#1E293B',
-              border: '2.5px solid var(--brand-primary, #FFBC00)',
-              overflow: 'hidden',
-              boxShadow: '0 4px 10px rgba(0,0,0,0.4)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
-          >
-            <img
-              src={`${import.meta.env.BASE_URL}playbanklogo.png`}
-              alt="Avatar"
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-            />
-          </div>
+          <PlayerAvatar
+            avatarId={currentUser?.avatarId || guestProfile?.avatarId}
+            avatarUrl={currentUser?.avatarUrl || guestProfile?.avatarUrl}
+            size={46}
+            borderWidth={2.5}
+            borderColor="var(--brand-primary, #FFBC00)"
+            shadow="0 4px 10px rgba(0,0,0,0.4)"
+          />
 
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <span style={{ fontSize: '15px', fontWeight: 900, color: '#FFFFFF', letterSpacing: '-0.3px', lineHeight: 1.2 }}>
