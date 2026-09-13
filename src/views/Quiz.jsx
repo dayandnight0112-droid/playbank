@@ -384,74 +384,72 @@ const Quiz = ({
     setFeedback('timeout');
     setSkippedCount(prev => prev + 1);
     setCombo(0);
-    const question = questions[currentIndex];
-    if (question) {
-      let correctOptId = null;
-      let explanation = '';
 
-      if (question.impression_id) {
-        try {
-          const res = await quizService.submitAnswerRPC({
-            impressionId: question.impression_id,
-            selectedOptionId: '',
-            responseTimeMs: 10000
-          });
-          correctOptId = res.correct_option_id;
-          explanation = res.explanation || '';
-        } catch (e) {
-          console.warn('[Quiz] Timeout submit_answer failed:', e);
+    let correctOptId = null;
+    let explanation = '';
+
+    try {
+      const question = questions[currentIndex];
+      if (question) {
+        if (question.impression_id) {
+          try {
+            const res = await quizService.submitAnswerRPC({
+              impressionId: question.impression_id,
+              selectedOptionId: 'timeout',
+              responseTimeMs: 10000,
+              sessionId: currentSessionIdRef.current
+            });
+            correctOptId = res.correct_option_id;
+            explanation = res.explanation || '';
+          } catch (e) {
+            console.warn('[Quiz] Timeout submit_answer failed:', e);
+          }
+        } else {
+          correctOptId = question.correct_option_id || question.correctOptionId || 'opt_1';
+          explanation = question.explanation || '';
         }
-      } else {
-        correctOptId = question.correct_option_id || question.correctOptionId || 'opt_1';
-        explanation = question.explanation || '';
-      }
 
-      question.revealedCorrectOptionId = correctOptId;
-      question.revealedExplanation = explanation;
-      question.selectedOptionId = 'timeout';
-      question.selectedOptionText = '未作答 / Time Out';
-      const correctOpt = shuffledOptions.find(o => o.id === correctOptId);
-      if (correctOpt) {
-        question.revealedCorrectText = `${correctOpt.letter}. ${correctOpt.text}`;
-      }
+        question.revealedCorrectOptionId = correctOptId;
+        question.revealedExplanation = explanation;
+        question.selectedOptionId = 'timeout';
+        question.selectedOptionText = '未作答 / Time Out';
+        const correctOpt = shuffledOptions.find(o => o.id === correctOptId);
+        if (correctOpt) {
+          question.revealedCorrectText = `${correctOpt.letter}. ${correctOpt.text}`;
+        }
 
-      // Submit timeout answer to Supabase if impression_id exists
-      if (question.impression_id) {
-        quizService.submitAnswerRPC({
-          impressionId: question.impression_id,
+        // Step 18: Record answer and cumulative wrong history on timeout
+        quizService.recordAnswer({
+          playerId: currentUser?.id || 'guest',
+          sessionId: currentSessionIdRef.current,
+          chapterId: currentChapterIdRef.current || quizParams?.chapterId,
+          questionId: String(question.question_id || question.id || `q_${currentIndex + 1}`),
+          chapterVersion: quizParams?.versionNo || 1,
           selectedOptionId: 'timeout',
+          isCorrect: false,
           responseTimeMs: 10000,
-          sessionId: currentSessionIdRef.current
-        }).catch(err => console.warn('[Quiz] Timeout submitAnswerRPC error:', err));
+          cycleNumber: cycleInfo?.cycleNumber || 1,
+          impressionId: question.impression_id || null,
+          questionText: question.question || question.text || '',
+          options: question.options || [],
+          correctOptionId: correctOptId,
+          explanation: explanation,
+          cloudSynced: Boolean(question.impression_id)
+        });
+
+        mockDb.recordQuestionAnswer({
+          question,
+          isCorrect: false,
+          selectedOption: null,
+          source: 'normal_quiz_timeout'
+        });
       }
-
-      // Step 18: Record answer and cumulative wrong history on timeout
-      quizService.recordAnswer({
-        playerId: currentUser?.id || 'guest',
-        sessionId: currentSessionIdRef.current,
-        chapterId: currentChapterIdRef.current || quizParams?.chapterId,
-        questionId: String(question.question_id || question.id || `q_${currentIndex + 1}`),
-        chapterVersion: quizParams?.versionNo || 1,
-        selectedOptionId: 'timeout',
-        isCorrect: false,
-        responseTimeMs: 10000,
-        cycleNumber: cycleInfo?.cycleNumber || 1,
-        impressionId: question.impression_id || null,
-        questionText: question.question || question.text || '',
-        options: question.options || [],
-        correctOptionId: correctOptId,
-        explanation: explanation,
-        cloudSynced: Boolean(question.impression_id)
-      });
-
-      mockDb.recordQuestionAnswer({
-        question,
-        isCorrect: false,
-        selectedOption: null,
-        source: 'normal_quiz_timeout'
-      });
+    } catch (err) {
+      console.error('[Quiz] Unexpected error during handleTimeout:', err);
+    } finally {
+      // 100% guarantee scheduleNextQuestion is always called even if errors occurred
+      scheduleNextQuestion(explanation ? 3200 : 2500);
     }
-    scheduleNextQuestion(explanation ? 3200 : 2500);
   };
 
   // Step 2 & 16: Handle option selection with Secure RPC Grading & Shuffled Option IDs
