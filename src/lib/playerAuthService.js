@@ -184,20 +184,55 @@ class PlayerAuthService {
   }
 
   /**
+   * Fetch profile record from public.profiles
+   */
+  async getCloudProfile(userId) {
+    const uid = userId || this.getUserId();
+    if (!isSupabaseConfigured || !supabase || !uid) return null;
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, player_code, nickname, age_group, is_guest, avatar_id, avatar_url, avatar_type')
+        .eq('id', uid)
+        .maybeSingle();
+      if (error) {
+        console.warn('[playerAuthService] getCloudProfile error:', error.message);
+        return null;
+      }
+      return data;
+    } catch (err) {
+      console.warn('[playerAuthService] getCloudProfile exception:', err);
+      return null;
+    }
+  }
+
+  /**
    * Sync Player Profile metadata (nickname, age_group, avatar) to public.profiles
    */
   async syncProfileMetadata({ nickname, age_group, avatar_id, avatar_type, avatar_url } = {}) {
-    if (!isSupabaseConfigured || !supabase || !this._currentUser?.id) return;
+    const uid = this.getUserId();
+    if (!isSupabaseConfigured || !supabase || !uid) return null;
     try {
       const updates = { last_active_at: new Date().toISOString() };
-      if (nickname) updates.nickname = nickname;
+      if (nickname) updates.nickname = nickname.trim();
       if (age_group) updates.age_group = age_group;
       if (avatar_id) updates.avatar_id = avatar_id;
       if (avatar_type) updates.avatar_type = avatar_type;
       if (avatar_url !== undefined) updates.avatar_url = avatar_url;
-      await supabase.from('profiles').update(updates).eq('id', this._currentUser.id);
+      const { data, error } = await supabase
+        .from('profiles')
+        .update(updates)
+        .eq('id', uid)
+        .select('id, player_code, nickname, age_group, is_guest, avatar_id, avatar_url, avatar_type')
+        .maybeSingle();
+      if (error) {
+        console.warn('[playerAuthService] syncProfileMetadata error:', error.message);
+        return null;
+      }
+      return data;
     } catch (err) {
       console.warn('[playerAuthService] syncProfileMetadata error:', err.message);
+      return null;
     }
   }
 

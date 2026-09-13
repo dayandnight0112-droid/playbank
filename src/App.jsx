@@ -84,9 +84,23 @@ function App() {
 
   // Step 2.1: Initialize Supabase Player Auth on mount
   useEffect(() => {
-    playerAuthService.initAuth().then((res) => {
+    playerAuthService.initAuth().then(async (res) => {
       if (res?.user) {
         console.log(`[App] Player auth initialized: ${res.user.id} (anonymous: ${res.isAnonymous})`);
+        try {
+          const profile = await playerAuthService.getCloudProfile(res.user.id);
+          if (profile?.player_code) {
+            const updated = mockDb.updateGuestProfile({
+              player_code: profile.player_code,
+              guestName: profile.nickname || undefined
+            });
+            if (updated) {
+              setGuestProfile(updated);
+            }
+          }
+        } catch (e) {
+          console.warn('[App] Failed to sync cloud profile on mount:', e);
+        }
       }
     });
   }, []);
@@ -383,15 +397,22 @@ function App() {
               mockDb.setOnboardingComplete(true);
 
               // 1. Establish guest session in Supabase now that player confirmed onboarding
+              let guestPlayerCode = null;
+              let syncedNickname = userProfileData?.nickname?.trim() || '冒险家';
               try {
                 const authRes = await playerAuthService.ensurePlayerAuth();
                 if (authRes?.user?.id) {
                   console.log('[App] Guest session established on onboarding complete:', authRes.user.id);
-                  const guestName = userProfileData?.nickname?.trim() || '冒险家';
-                  await playerAuthService.syncProfileMetadata({
-                    nickname: guestName,
+                  const updatedProfile = await playerAuthService.syncProfileMetadata({
+                    nickname: syncedNickname,
                     age_group: userProfileData?.ageGroup || '13-15',
                   });
+                  if (updatedProfile?.player_code) {
+                    guestPlayerCode = updatedProfile.player_code;
+                  }
+                  if (updatedProfile?.nickname) {
+                    syncedNickname = updatedProfile.nickname;
+                  }
                 }
               } catch (err) {
                 console.error('[App] Failed to establish guest session:', err);
@@ -410,13 +431,13 @@ function App() {
               }
 
               // Create or update guest profile with onboarding choices
-              const guestName = userProfileData?.nickname?.trim() || '冒险家';
               let guest = mockDb.getGuestProfile();
               if (!guest) {
-                guest = mockDb.createGuest(tutorialPath, guestName);
+                guest = mockDb.createGuest(tutorialPath, syncedNickname);
               }
               const updatedGuest = mockDb.updateGuestProfile({
-                guestName,
+                guestName: syncedNickname,
+                player_code: guestPlayerCode || guest?.player_code,
                 selectedPath: tutorialPath,
                 ageGroup: userProfileData?.ageGroup,
                 sourceChannel: userProfileData?.sourceChannel,

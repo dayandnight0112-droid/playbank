@@ -19,7 +19,8 @@ import {
   CheckCircle2,
   RotateCcw,
   AlertCircle,
-  RefreshCw
+  RefreshCw,
+  Copy
 } from 'lucide-react';
 import { quizService } from '../lib/quizService';
 import { playerAuthService } from '../lib/playerAuthService';
@@ -158,6 +159,8 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
   const [answers, setAnswers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [cloudProfile, setCloudProfile] = useState(null);
+  const [copiedCode, setCopiedCode] = useState(false);
 
   // Step 4.1 & 4.3 & Rule 6: Cloud load with guaranteed auth.uid(), never 'guest'
   const loadProfileData = useCallback(async () => {
@@ -166,9 +169,20 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
     try {
       const authUserId = await playerAuthService.getAuthUserId();
       const targetPlayerId = (currentUser?.id && currentUser.id !== 'guest') ? currentUser.id : authUserId;
-      const data = await quizService.getPlayerFullStats(targetPlayerId);
+
+      const [data, profile] = await Promise.all([
+        quizService.getPlayerFullStats(targetPlayerId),
+        targetPlayerId ? playerAuthService.getCloudProfile(targetPlayerId) : null
+      ]);
+
       setSessions(Array.isArray(data?.sessions) ? data.sessions : []);
       setAnswers(Array.isArray(data?.answers) ? data.answers : []);
+      if (profile) {
+        setCloudProfile(profile);
+        if (profile.avatar_id) {
+          setAvatarId(profile.avatar_id);
+        }
+      }
     } catch (err) {
       console.error('[Profile] Failed to load stats from Supabase:', err);
       setError(err.message || '加载对局记录与统计失败，请检查网络后重试');
@@ -229,17 +243,19 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
 
   // Player Name & Code Display
   const displayName = useMemo(() => {
+    if (cloudProfile?.nickname) return cloudProfile.nickname.toUpperCase();
     if (currentUser?.nickname) return currentUser.nickname.toUpperCase();
     if (guestProfile?.guestName) return guestProfile.guestName.toUpperCase();
     if (currentUser?.email) return currentUser.email.split('@')[0].toUpperCase();
-    return 'ALEX TAN';
-  }, [currentUser, guestProfile]);
+    return 'PLAYBANK PLAYER';
+  }, [cloudProfile, currentUser, guestProfile]);
 
   const playerCode = useMemo(() => {
+    if (cloudProfile?.player_code) return cloudProfile.player_code.toUpperCase();
     if (currentUser?.player_code) return currentUser.player_code.toUpperCase();
     if (guestProfile?.player_code) return guestProfile.player_code.toUpperCase();
-    return 'PB-082741';
-  }, [currentUser, guestProfile]);
+    return '';
+  }, [cloudProfile, currentUser, guestProfile]);
 
   return (
     <div
@@ -375,7 +391,49 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
               }}
             >
               <span style={{ opacity: 0.85 }}>PLAYER ID</span>
-              <span style={{ color: '#000000', fontWeight: 900 }}>{playerCode}</span>
+              <span style={{ color: '#000000', fontWeight: 900 }}>{playerCode || (loading ? '...' : '--')}</span>
+              {playerCode && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (navigator?.clipboard?.writeText) {
+                      navigator.clipboard.writeText(playerCode);
+                    }
+                    setCopiedCode(true);
+                    setTimeout(() => setCopiedCode(false), 2000);
+                  }}
+                  title="Copy Player ID"
+                  aria-label="Copy Player ID"
+                  style={{
+                    background: 'rgba(0, 0, 0, 0.08)',
+                    border: 'none',
+                    borderRadius: '6px',
+                    padding: '2px 6px',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    color: '#000000',
+                    outline: 'none',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  {copiedCode ? (
+                    <>
+                      <CheckCircle2 size={12} color="#16a34a" />
+                      <span style={{ color: '#16a34a' }}>Copied</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy size={12} color="#000000" />
+                      <span>Copy</span>
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           </div>
         </div>

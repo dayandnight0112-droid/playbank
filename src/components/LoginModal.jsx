@@ -32,8 +32,12 @@ const LoginModal = ({
     }
 
     // Direct Registered Login in Supabase (Never creates an anonymous guest)
+    let cloudProfile = null;
     try {
-      await playerAuthService.signInWithPassword({ email, password });
+      const sbRes = await playerAuthService.signInWithPassword({ email, password });
+      if (sbRes?.user?.id) {
+        cloudProfile = await playerAuthService.getCloudProfile(sbRes.user.id);
+      }
     } catch (sbErr) {
       console.warn('[LoginModal] Supabase auth note:', sbErr.message);
     }
@@ -42,6 +46,12 @@ const LoginModal = ({
     if (result.error) {
       setError(result.error);
     } else {
+      if (cloudProfile?.player_code && result.user) {
+        result.user.player_code = cloudProfile.player_code;
+        if (cloudProfile.nickname) {
+          result.user.ic_name = cloudProfile.nickname;
+        }
+      }
       setError(null);
       if (hasGuestLoot) {
         // Player has guest loot to merge! Present choice
