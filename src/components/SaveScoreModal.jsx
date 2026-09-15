@@ -16,7 +16,7 @@ const isDuplicateEmailError = (errMsg) => {
   );
 };
 
-const SaveScoreModal = ({ onClose, onRegisterSuccess, currentBP, registerContext, onChooseLoginOldAccount }) => {
+const SaveScoreModal = ({ onClose, onRegisterSuccess, onSwitchAccountSuccess, currentBP, registerContext, onChooseLoginOldAccount }) => {
   const [email, setEmail] = useState('');
   const [countryCode, setCountryCode] = useState('+60');
   const [whatsapp, setWhatsapp] = useState('');
@@ -85,8 +85,15 @@ const SaveScoreModal = ({ onClose, onRegisterSuccess, currentBP, registerContext
         }
       }
 
+      // Step 6: Switch player client identity cleanly (purge guest data, restore target cloud session)
+      const cleanUser = await playerAuthService.switchAccountSessionCleanly(loggedUser);
+
       setShowDuplicateModal(false);
-      onRegisterSuccess(loggedUser);
+      if (onSwitchAccountSuccess) {
+        onSwitchAccountSuccess(cleanUser || loggedUser);
+      } else {
+        onRegisterSuccess(cleanUser || loggedUser);
+      }
     } catch (err) {
       if (switchRequestId) {
         await playerAuthService.failAccountSwitch(switchRequestId, 'failed');

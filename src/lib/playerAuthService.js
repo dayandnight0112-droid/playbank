@@ -445,6 +445,106 @@ class PlayerAuthService {
   }
 
   /**
+   * Step 6: Cleanly switch player client session to the target registered account
+   * - Wipes out all guest local storage and session markers
+   * - Queries target user's profile and cloud stats from Supabase
+   * - Sets target user session in mockDb and local storage
+   * - Dispatches avatar change event so UI instantly synchronizes
+   */
+  async switchAccountSessionCleanly(targetUser) {
+    if (!targetUser) return null;
+
+    // 1. Wipe guest keys completely
+    try {
+      localStorage.removeItem('playbank_guest_profile');
+      localStorage.removeItem('playbank_player_profile');
+      localStorage.removeItem('playbank_user_bp');
+      localStorage.removeItem('playbank_plays_today_guest');
+      localStorage.removeItem('playbank_last_play_date_guest');
+      sessionStorage.removeItem('guest_first_play_register');
+      sessionStorage.removeItem('guest_200_register');
+      sessionStorage.removeItem('playbank_pending_switch_request');
+    } catch (_) {}
+
+    // 2. Fetch fresh profile and stats from Supabase if online
+    let cloudProfile = null;
+    let cloudUserBP = 0;
+    const targetUserId = targetUser.id;
+
+    if (isSupabaseConfigured && supabase && targetUserId) {
+      try {
+        const { data: prof } = await supabase
+          .from('profiles')
+          .select('id, player_code, nickname, age_group, source_channel, daily_goal_minutes, is_guest, avatar_id, avatar_type, avatar_url')
+          .eq('id', targetUserId)
+          .maybeSingle();
+        if (prof) cloudProfile = prof;
+
+        // Fetch user stats (total BP) if available
+        const { data: stats } = await supabase
+          .from('player_stats')
+          .select('total_bp, weekly_bp, score_multiplier')
+          .eq('player_id', targetUserId)
+          .maybeSingle();
+        if (stats && typeof stats.total_bp === 'number') {
+          cloudUserBP = stats.total_bp;
+        }
+      } catch (err) {
+        console.warn('[playerAuthService] switchAccountSessionCleanly fetch error:', err);
+      }
+    }
+
+    // 3. Construct unified session object for the target user
+    const finalNickname = cloudProfile?.nickname || targetUser.nickname || targetUser.ic_name || targetUser.email?.split('@')[0] || 'Player';
+    const finalAvatarType = cloudProfile?.avatar_type || targetUser.avatarType || 'preset';
+    const finalAvatarId = cloudProfile?.avatar_id || targetUser.avatarId || 'default';
+    const finalAvatarUrl = cloudProfile?.avatar_url || targetUser.avatarUrl || null;
+    const finalBP = typeof cloudUserBP === 'number' && cloudUserBP > 0 ? cloudUserBP : (targetUser.total_bp || 0);
+
+    const sessionUser = {
+      ...targetUser,
+      id: targetUserId,
+      email: targetUser.email || (cloudProfile?.email || ''),
+      ic_name: finalNickname,
+      nickname: finalNickname,
+      player_code: cloudProfile?.player_code || targetUser.player_code,
+      avatarType: finalAvatarType,
+      avatarId: finalAvatarId,
+      avatarUrl: finalAvatarUrl,
+      total_bp: finalBP,
+      is_guest: false,
+      is_anonymous: false
+    };
+
+    // 4. Save to mockDb session and localStorage
+    try {
+      localStorage.setItem('playbank_session', JSON.stringify(sessionUser));
+      // Store user's specific play date/attempt key
+      const todayStr = new Date().toDateString();
+      const existingUserPlays = localStorage.getItem(`playbank_plays_today_${targetUserId}`);
+      if (!existingUserPlays) {
+        localStorage.setItem(`playbank_plays_today_${targetUserId}`, '0');
+        localStorage.setItem(`playbank_last_play_date_${targetUserId}`, todayStr);
+      }
+    } catch (_) {}
+
+    // 5. Trigger avatar & session update events
+    try {
+      window.dispatchEvent(new CustomEvent('playbank:avatar-changed', {
+        detail: {
+          avatarType: finalAvatarType,
+          avatarId: finalAvatarId,
+          avatarUrl: finalAvatarUrl,
+          isGuest: false,
+          userId: targetUserId
+        }
+      }));
+    } catch (_) {}
+
+    return sessionUser;
+  }
+
+  /**
    * Listen to auth state changes
    */
   onAuthStateChange(callback) {

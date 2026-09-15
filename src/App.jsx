@@ -850,6 +850,15 @@ function App() {
             localStorage.setItem('playbank_user_bp', '0'); // Clear guest BP
             setShowBoosterOffer({ isFirstTimeOffer: user.total_bp >= 200, fromRegistration: true });
           }}
+          onSwitchAccountSuccess={(user) => {
+            setCurrentUser(user);
+            setUserBP(user.total_bp || 0);
+            setGuestProfile(null);
+            setShowSaveModal(false);
+            const displayName = user.ic_name || user.nickname || user.email?.split('@')[0] || 'Player';
+            setWelcomeBackToast(`⚔️ 欢迎归来，${displayName}！已切换至正式账号，云端存档已就绪`);
+            setCurrentView('home');
+          }}
         />
       )}
 
