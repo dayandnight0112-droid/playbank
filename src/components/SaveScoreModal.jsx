@@ -1,9 +1,22 @@
 import { useState } from 'react';
-import { X, Zap } from 'lucide-react';
+import { X, Zap, AlertTriangle, LogIn, Mail, ArrowRight } from 'lucide-react';
 import { mockDb } from '../lib/mockDb';
 import { playerAuthService } from '../lib/playerAuthService';
 
-const SaveScoreModal = ({ onClose, onRegisterSuccess, currentBP, registerContext }) => {
+const isDuplicateEmailError = (errMsg) => {
+  if (!errMsg) return false;
+  const lower = String(errMsg).toLowerCase();
+  return (
+    lower.includes('already registered') ||
+    lower.includes('already exists') ||
+    lower.includes('email_exists') ||
+    lower.includes('already in use') ||
+    lower.includes('duplicate') ||
+    lower.includes('user already registered')
+  );
+};
+
+const SaveScoreModal = ({ onClose, onRegisterSuccess, currentBP, registerContext, onChooseLoginOldAccount }) => {
   const [email, setEmail] = useState('');
   const [countryCode, setCountryCode] = useState('+60');
   const [whatsapp, setWhatsapp] = useState('');
@@ -11,6 +24,10 @@ const SaveScoreModal = ({ onClose, onRegisterSuccess, currentBP, registerContext
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Step 2: Duplicate Email Modal State
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false);
+  const [duplicateEmail, setDuplicateEmail] = useState('');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -29,6 +46,7 @@ const SaveScoreModal = ({ onClose, onRegisterSuccess, currentBP, registerContext
     const fullWhatsapp = `${countryCode} ${whatsapp}`;
 
     // Step 4.4: Upgrade current anonymous player session to permanent registered user in Supabase
+    let hasDuplicateError = false;
     try {
       const upgradeRes = await playerAuthService.upgradeGuestToRegistered({
         email,
@@ -38,13 +56,26 @@ const SaveScoreModal = ({ onClose, onRegisterSuccess, currentBP, registerContext
       });
       if (upgradeRes.error) {
         console.warn('[SaveScoreModal] Supabase account upgrade info:', upgradeRes.error);
+        if (isDuplicateEmailError(upgradeRes.error)) {
+          hasDuplicateError = true;
+        }
       }
     } catch (err) {
       console.warn('[SaveScoreModal] Account upgrade fallback:', err);
+      if (isDuplicateEmailError(err.message)) {
+        hasDuplicateError = true;
+      }
     }
 
     const result = mockDb.registerUser(email, password, fullWhatsapp, currentBP);
     setIsSubmitting(false);
+
+    // Step 2: If email is already registered, trigger Duplicate Email Choice Modal
+    if (hasDuplicateError || (result.error && isDuplicateEmailError(result.error))) {
+      setDuplicateEmail(email);
+      setShowDuplicateModal(true);
+      return;
+    }
 
     if (result.error) {
       setError(result.error);
@@ -179,6 +210,192 @@ const SaveScoreModal = ({ onClose, onRegisterSuccess, currentBP, registerContext
 
       </div>
 
+      {/* Step 2: 重复 Email 选择弹窗 */}
+      {showDuplicateModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 1100,
+            background: 'rgba(0, 0, 0, 0.75)',
+            backdropFilter: 'blur(6px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px',
+            animation: 'fadeIn 0.2s ease'
+          }}
+        >
+          <div
+            style={{
+              background: '#FFFFFF',
+              width: '100%',
+              maxWidth: '380px',
+              borderRadius: '24px',
+              border: '3px solid #000000',
+              boxShadow: '0 10px 0 #000000',
+              padding: '24px 20px',
+              position: 'relative',
+              textAlign: 'center',
+              animation: 'popIn 0.25s cubic-bezier(0.16, 1, 0.3, 1)'
+            }}
+          >
+            {/* Warning Icon */}
+            <div
+              style={{
+                width: '54px',
+                height: '54px',
+                borderRadius: '50%',
+                backgroundColor: '#FEF08A',
+                border: '2.5px solid #000000',
+                boxShadow: '0 2px 0 #000000',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 16px'
+              }}
+            >
+              <AlertTriangle size={28} color="#D97706" strokeWidth={2.5} />
+            </div>
+
+            {/* Title */}
+            <h3 style={{ fontSize: '19px', fontWeight: 900, color: '#000000', margin: '0 0 6px 0' }}>
+              这个 Email 已经注册
+            </h3>
+            
+            {/* Subtitle */}
+            <p style={{ fontSize: '13px', color: '#4B5563', margin: '0 0 20px 0', lineHeight: 1.5 }}>
+              我们发现 <strong>{duplicateEmail}</strong> 已经绑定另一个 PlayBank 账号。
+            </p>
+
+            {/* Choices Container */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
+              {/* Option 1: 登录旧账号 */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (onChooseLoginOldAccount) {
+                    onChooseLoginOldAccount(duplicateEmail);
+                  } else {
+                    console.log('[Step 2] User selected: 登录旧账号');
+                  }
+                }}
+                style={{
+                  width: '100%',
+                  padding: '14px 16px',
+                  backgroundColor: '#FFFFFF',
+                  border: '2.5px solid #000000',
+                  borderRadius: '16px',
+                  boxShadow: '0 3px 0 #000000',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '12px',
+                  transition: 'transform 0.1s ease'
+                }}
+                onMouseDown={(e) => (e.currentTarget.style.transform = 'translateY(2px)')}
+                onMouseUp={(e) => (e.currentTarget.style.transform = 'translateY(0)')}
+              >
+                <div
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '10px',
+                    backgroundColor: '#E0F2FE',
+                    border: '1.5px solid #000000',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0
+                  }}
+                >
+                  <LogIn size={18} color="#0369A1" strokeWidth={2.5} />
+                </div>
+                <div>
+                  <div style={{ fontSize: '15px', fontWeight: 900, color: '#000000', lineHeight: 1.2 }}>
+                    登录旧账号
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#6B7280', marginTop: '4px', lineHeight: 1.3 }}>
+                    登录后将使用你原来的 PlayBank 账号。当前游客账号不会合并，并会被标记为“空玩家”。
+                  </div>
+                </div>
+              </button>
+
+              {/* Option 2: 更换 Email */}
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDuplicateModal(false);
+                  setEmail('');
+                  setError(null);
+                }}
+                style={{
+                  width: '100%',
+                  padding: '14px 16px',
+                  backgroundColor: '#FFCE00',
+                  border: '2.5px solid #000000',
+                  borderRadius: '16px',
+                  boxShadow: '0 3px 0 #000000',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '12px',
+                  transition: 'transform 0.1s ease'
+                }}
+                onMouseDown={(e) => (e.currentTarget.style.transform = 'translateY(2px)')}
+                onMouseUp={(e) => (e.currentTarget.style.transform = 'translateY(0)')}
+              >
+                <div
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '10px',
+                    backgroundColor: '#FFFFFF',
+                    border: '1.5px solid #000000',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0
+                  }}
+                >
+                  <Mail size={18} color="#000000" strokeWidth={2.5} />
+                </div>
+                <div>
+                  <div style={{ fontSize: '15px', fontWeight: 900, color: '#000000', lineHeight: 1.2 }}>
+                    更换 Email
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#4B5563', marginTop: '4px', lineHeight: 1.3 }}>
+                    保留当前 Guest、Player Code 和所有记录，使用其他 Email 完成注册。
+                  </div>
+                </div>
+              </button>
+            </div>
+
+            {/* Option 3: 暂时不要 */}
+            <button
+              type="button"
+              onClick={() => {
+                setShowDuplicateModal(false);
+                onClose();
+              }}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#6B7280',
+                fontWeight: 700,
+                fontSize: '14px',
+                cursor: 'pointer',
+                padding: '8px'
+              }}
+            >
+              暂时不要（继续以 Guest 游玩）
+            </button>
+          </div>
+        </div>
+      )}
+
       <style>{`
         @keyframes fadeIn {
           from { opacity: 0; }
@@ -187,6 +404,10 @@ const SaveScoreModal = ({ onClose, onRegisterSuccess, currentBP, registerContext
         @keyframes slideUpModal {
           from { transform: translateY(100%); }
           to { transform: translateY(0); }
+        }
+        @keyframes popIn {
+          from { transform: scale(0.9); opacity: 0; }
+          to { transform: scale(1); opacity: 1; }
         }
       `}</style>
     </div>
