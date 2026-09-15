@@ -25,10 +25,77 @@ const SaveScoreModal = ({ onClose, onRegisterSuccess, currentBP, registerContext
   const [error, setError] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Step 2 & Step 3: Duplicate Email Flow State
+  // Step 2, 3, 4, 5: Duplicate Email & Switch Account Flow State
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
-  const [duplicateModalStep, setDuplicateModalStep] = useState('options'); // 'options' | 'confirm_switch'
+  const [duplicateModalStep, setDuplicateModalStep] = useState('options'); // 'options' | 'confirm_switch' | 'login_existing'
   const [duplicateEmail, setDuplicateEmail] = useState('');
+  const [switchRequestId, setSwitchRequestId] = useState(null);
+  const [existingPassword, setExistingPassword] = useState('');
+  const [loginError, setLoginError] = useState(null);
+
+  const handleExecuteExistingLogin = async () => {
+    if (!existingPassword) {
+      setLoginError('请输入密码');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setLoginError(null);
+
+    try {
+      let loggedUser = null;
+      let loginSuccess = false;
+
+      // 1. Authenticate with Supabase
+      try {
+        const sbRes = await playerAuthService.signInWithPassword({
+          email: duplicateEmail,
+          password: existingPassword
+        });
+        if (sbRes?.user && !sbRes.user.is_anonymous) {
+          loggedUser = sbRes.user;
+          loginSuccess = true;
+        }
+      } catch (sbErr) {
+        console.warn('[Step 5] Supabase login error:', sbErr.message);
+      }
+
+      // 2. Also check MockDB for local dev / demo accounts
+      const mockRes = mockDb.loginUser(duplicateEmail, existingPassword);
+      if (mockRes?.user && !mockRes.error) {
+        loggedUser = loggedUser || mockRes.user;
+        loginSuccess = true;
+      }
+
+      // 3. Handle Failure: Keep Guest 100% active, update ticket to failed
+      if (!loginSuccess) {
+        if (switchRequestId) {
+          await playerAuthService.failAccountSwitch(switchRequestId, 'failed');
+        }
+        setLoginError('密码错误或账号不存在，请重试。如忘记密码可点击上方找回。');
+        setIsSubmitting(false);
+        return;
+      }
+
+      // 4. Handle Success: Call complete_account_switch RPC to mark old guest as abandoned_guest
+      if (switchRequestId) {
+        const rpcRes = await playerAuthService.completeAccountSwitch(switchRequestId);
+        if (!rpcRes.success) {
+          console.warn('[Step 5] completeAccountSwitch RPC notice:', rpcRes.error);
+        }
+      }
+
+      setShowDuplicateModal(false);
+      onRegisterSuccess(loggedUser);
+    } catch (err) {
+      if (switchRequestId) {
+        await playerAuthService.failAccountSwitch(switchRequestId, 'failed');
+      }
+      setLoginError(err.message || '登录遇到网络问题，请稍后重试');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -242,7 +309,178 @@ const SaveScoreModal = ({ onClose, onRegisterSuccess, currentBP, registerContext
               animation: 'popIn 0.25s cubic-bezier(0.16, 1, 0.3, 1)'
             }}
           >
-            {duplicateModalStep === 'confirm_switch' ? (
+            {duplicateModalStep === 'login_existing' ? (
+              /* Step 5: 登录旧账号验证页面 */
+              <div>
+                <div
+                  style={{
+                    width: '54px',
+                    height: '54px',
+                    borderRadius: '50%',
+                    backgroundColor: '#E0F2FE',
+                    border: '2.5px solid #000000',
+                    boxShadow: '0 2px 0 #000000',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    margin: '0 auto 16px'
+                  }}
+                >
+                  <LogIn size={26} color="#0284C7" strokeWidth={2.5} />
+                </div>
+
+                <h3 style={{ fontSize: '19px', fontWeight: 900, color: '#000000', margin: '0 0 6px 0' }}>
+                  登录 PlayBank 账号
+                </h3>
+                <p style={{ fontSize: '12px', color: '#6B7280', margin: '0 0 16px 0' }}>
+                  请输入原账号密码以完成安全验证
+                </p>
+
+                {loginError && (
+                  <div
+                    style={{
+                      backgroundColor: '#FEE2E2',
+                      border: '1.5px solid #EF4444',
+                      borderRadius: '12px',
+                      padding: '10px 12px',
+                      color: '#DC2626',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      marginBottom: '14px',
+                      textAlign: 'left',
+                      lineHeight: 1.4
+                    }}
+                  >
+                    ⚠️ {loginError}
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px', textAlign: 'left' }}>
+                  <div>
+                    <label style={{ fontSize: '12px', fontWeight: 800, color: '#374151', display: 'block', marginBottom: '4px' }}>
+                      目标账号邮箱
+                    </label>
+                    <input
+                      type="email"
+                      value={duplicateEmail}
+                      disabled
+                      style={{
+                        width: '100%',
+                        padding: '12px 14px',
+                        backgroundColor: '#F3F4F6',
+                        border: '2px solid #D1D5DB',
+                        borderRadius: '12px',
+                        fontSize: '14px',
+                        fontWeight: 700,
+                        color: '#4B5563',
+                        cursor: 'not-allowed',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                      <label style={{ fontSize: '12px', fontWeight: 800, color: '#374151' }}>
+                        输入账号密码
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => alert('请通过登录页或联系客服找回密码。在此之前当前游客进度依然完好保留。')}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          fontSize: '11px',
+                          fontWeight: 800,
+                          color: '#D97706',
+                          cursor: 'pointer',
+                          padding: 0
+                        }}
+                      >
+                        忘记密码？
+                      </button>
+                    </div>
+                    <input
+                      type="password"
+                      placeholder="请输入原账号密码"
+                      value={existingPassword}
+                      onChange={(e) => setExistingPassword(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '12px 14px',
+                        backgroundColor: '#FFFFFF',
+                        border: '2px solid #000000',
+                        borderRadius: '12px',
+                        fontSize: '14px',
+                        outline: 'none',
+                        boxSizing: 'border-box'
+                      }}
+                      autoFocus
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <button
+                    type="button"
+                    disabled={isSubmitting}
+                    onClick={handleExecuteExistingLogin}
+                    style={{
+                      width: '100%',
+                      padding: '14px 16px',
+                      backgroundColor: '#FFCE00',
+                      border: '2.5px solid #000000',
+                      borderRadius: '14px',
+                      boxShadow: '0 3px 0 #000000',
+                      cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                      fontSize: '15px',
+                      fontWeight: 900,
+                      color: '#000000',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      opacity: isSubmitting ? 0.7 : 1
+                    }}
+                    onMouseDown={(e) => (e.currentTarget.style.transform = 'translateY(2px)')}
+                    onMouseUp={(e) => (e.currentTarget.style.transform = 'translateY(0)')}
+                  >
+                    <span>{isSubmitting ? '正在验证...' : '验证密码并切换账号'}</span>
+                    <ArrowRight size={18} color="#000000" strokeWidth={2.6} />
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={isSubmitting}
+                    onClick={async () => {
+                      if (switchRequestId) {
+                        await playerAuthService.failAccountSwitch(switchRequestId, 'cancelled');
+                      }
+                      setDuplicateModalStep('confirm_switch');
+                      setLoginError(null);
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      backgroundColor: '#FFFFFF',
+                      border: '2px solid #000000',
+                      borderRadius: '14px',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      fontWeight: 800,
+                      color: '#4B5563',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <ArrowLeft size={16} />
+                    <span>返回上一步</span>
+                  </button>
+                </div>
+              </div>
+            ) : duplicateModalStep === 'confirm_switch' ? (
               /* Step 3: 登录旧账号前再次确认 */
               <div>
                 {/* Warning Icon */}
@@ -319,10 +557,12 @@ const SaveScoreModal = ({ onClose, onRegisterSuccess, currentBP, registerContext
                         const switchRes = await playerAuthService.createAccountSwitchRequest({
                           reason: 'duplicate_email_login'
                         });
+                        setSwitchRequestId(switchRes?.request?.id || null);
+                        setExistingPassword('');
+                        setLoginError(null);
+                        setDuplicateModalStep('login_existing');
                         if (onChooseLoginOldAccount) {
                           onChooseLoginOldAccount(duplicateEmail, switchRes?.request);
-                        } else {
-                          console.log('[Step 4] Switch request created:', switchRes?.request);
                         }
                       } catch (err) {
                         console.warn('[Step 4] createAccountSwitchRequest error:', err);

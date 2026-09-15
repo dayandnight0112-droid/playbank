@@ -389,6 +389,62 @@ class PlayerAuthService {
   }
 
   /**
+   * Step 5: Complete Account Switch via secure RPC
+   * Called immediately after target account logs in with password (is_anonymous = false).
+   */
+  async completeAccountSwitch(requestId) {
+    if (!requestId) {
+      return { success: false, error: 'Request ID is required' };
+    }
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase.rpc('complete_account_switch', {
+          p_request_id: requestId
+        });
+        if (error) {
+          console.warn('[playerAuthService] complete_account_switch RPC error:', error.message);
+          return { success: false, error: error.message };
+        }
+        try {
+          sessionStorage.removeItem('playbank_pending_switch_request');
+        } catch (_) {}
+        return { success: true, data };
+      } catch (err) {
+        console.warn('[playerAuthService] completeAccountSwitch exception:', err);
+        return { success: false, error: err.message };
+      }
+    }
+
+    // Local simulation fallback
+    try {
+      sessionStorage.removeItem('playbank_pending_switch_request');
+    } catch (_) {}
+    return { success: true, local: true };
+  }
+
+  /**
+   * Step 5: Mark switch request as failed or cancelled
+   * Guaranteed: Guest session & UUID remain untouched and active!
+   */
+  async failAccountSwitch(requestId, status = 'failed') {
+    if (!requestId) return;
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.rpc('fail_account_switch', {
+          p_request_id: requestId,
+          p_status: status
+        });
+      } catch (e) {
+        console.warn('[playerAuthService] failAccountSwitch notice:', e);
+      }
+    }
+    try {
+      sessionStorage.removeItem('playbank_pending_switch_request');
+    } catch (_) {}
+  }
+
+  /**
    * Listen to auth state changes
    */
   onAuthStateChange(callback) {
