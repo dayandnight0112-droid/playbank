@@ -331,6 +331,64 @@ class PlayerAuthService {
   }
 
   /**
+   * Step 4: Create an account switch request ticket
+   * Called when player confirms duplicate email login intent.
+   * Guest account_status remains 'active'.
+   */
+  async createAccountSwitchRequest({ reason = 'duplicate_email_login' } = {}) {
+    const guestUserId = await this.getAuthUserId();
+    if (!guestUserId) {
+      return { success: false, error: 'No active guest user session' };
+    }
+
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('account_switch_requests')
+          .insert({
+            guest_user_id: guestUserId,
+            status: 'pending',
+            reason,
+            expires_at: expiresAt
+          })
+          .select()
+          .single();
+
+        if (error) {
+          console.warn('[playerAuthService] createAccountSwitchRequest Supabase notice:', error.message);
+        } else if (data) {
+          try {
+            sessionStorage.setItem('playbank_pending_switch_request', JSON.stringify(data));
+          } catch (_) {}
+          return { success: true, request: data };
+        }
+      } catch (err) {
+        console.warn('[playerAuthService] createAccountSwitchRequest fallback:', err);
+      }
+    }
+
+    // Local / offline fallback ticket
+    const localTicket = {
+      id: 'asr_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+      guest_user_id: guestUserId,
+      target_user_id: null,
+      status: 'pending',
+      reason,
+      created_at: new Date().toISOString(),
+      completed_at: null,
+      expires_at: expiresAt
+    };
+
+    try {
+      sessionStorage.setItem('playbank_pending_switch_request', JSON.stringify(localTicket));
+    } catch (_) {}
+
+    return { success: true, request: localTicket };
+  }
+
+  /**
    * Listen to auth state changes
    */
   onAuthStateChange(callback) {

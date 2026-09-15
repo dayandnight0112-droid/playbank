@@ -312,11 +312,22 @@ const SaveScoreModal = ({ onClose, onRegisterSuccess, currentBP, registerContext
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   <button
                     type="button"
-                    onClick={() => {
-                      if (onChooseLoginOldAccount) {
-                        onChooseLoginOldAccount(duplicateEmail);
-                      } else {
-                        console.log('[Step 3] Confirmed and proceed to login old account:', duplicateEmail);
+                    disabled={isSubmitting}
+                    onClick={async () => {
+                      setIsSubmitting(true);
+                      try {
+                        const switchRes = await playerAuthService.createAccountSwitchRequest({
+                          reason: 'duplicate_email_login'
+                        });
+                        if (onChooseLoginOldAccount) {
+                          onChooseLoginOldAccount(duplicateEmail, switchRes?.request);
+                        } else {
+                          console.log('[Step 4] Switch request created:', switchRes?.request);
+                        }
+                      } catch (err) {
+                        console.warn('[Step 4] createAccountSwitchRequest error:', err);
+                      } finally {
+                        setIsSubmitting(false);
                       }
                     }}
                     style={{
