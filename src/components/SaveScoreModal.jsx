@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Zap, AlertTriangle, LogIn, Mail, ArrowRight } from 'lucide-react';
+import { X, Zap, AlertTriangle, LogIn, Mail, ArrowRight, AlertCircle, ArrowLeft } from 'lucide-react';
 import { mockDb } from '../lib/mockDb';
 import { playerAuthService } from '../lib/playerAuthService';
 
@@ -25,8 +25,9 @@ const SaveScoreModal = ({ onClose, onRegisterSuccess, currentBP, registerContext
   const [error, setError] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Step 2: Duplicate Email Modal State
+  // Step 2 & Step 3: Duplicate Email Flow State
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
+  const [duplicateModalStep, setDuplicateModalStep] = useState('options'); // 'options' | 'confirm_switch'
   const [duplicateEmail, setDuplicateEmail] = useState('');
 
   const handleSubmit = async (e) => {
@@ -73,6 +74,7 @@ const SaveScoreModal = ({ onClose, onRegisterSuccess, currentBP, registerContext
     // Step 2: If email is already registered, trigger Duplicate Email Choice Modal
     if (hasDuplicateError || (result.error && isDuplicateEmailError(result.error))) {
       setDuplicateEmail(email);
+      setDuplicateModalStep('options');
       setShowDuplicateModal(true);
       return;
     }
@@ -240,158 +242,281 @@ const SaveScoreModal = ({ onClose, onRegisterSuccess, currentBP, registerContext
               animation: 'popIn 0.25s cubic-bezier(0.16, 1, 0.3, 1)'
             }}
           >
-            {/* Warning Icon */}
-            <div
-              style={{
-                width: '54px',
-                height: '54px',
-                borderRadius: '50%',
-                backgroundColor: '#FEF08A',
-                border: '2.5px solid #000000',
-                boxShadow: '0 2px 0 #000000',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                margin: '0 auto 16px'
-              }}
-            >
-              <AlertTriangle size={28} color="#D97706" strokeWidth={2.5} />
-            </div>
-
-            {/* Title */}
-            <h3 style={{ fontSize: '19px', fontWeight: 900, color: '#000000', margin: '0 0 6px 0' }}>
-              这个 Email 已经注册
-            </h3>
-            
-            {/* Subtitle */}
-            <p style={{ fontSize: '13px', color: '#4B5563', margin: '0 0 20px 0', lineHeight: 1.5 }}>
-              我们发现 <strong>{duplicateEmail}</strong> 已经绑定另一个 PlayBank 账号。
-            </p>
-
-            {/* Choices Container */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
-              {/* Option 1: 登录旧账号 */}
-              <button
-                type="button"
-                onClick={() => {
-                  if (onChooseLoginOldAccount) {
-                    onChooseLoginOldAccount(duplicateEmail);
-                  } else {
-                    console.log('[Step 2] User selected: 登录旧账号');
-                  }
-                }}
-                style={{
-                  width: '100%',
-                  padding: '14px 16px',
-                  backgroundColor: '#FFFFFF',
-                  border: '2.5px solid #000000',
-                  borderRadius: '16px',
-                  boxShadow: '0 3px 0 #000000',
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: '12px',
-                  transition: 'transform 0.1s ease'
-                }}
-                onMouseDown={(e) => (e.currentTarget.style.transform = 'translateY(2px)')}
-                onMouseUp={(e) => (e.currentTarget.style.transform = 'translateY(0)')}
-              >
+            {duplicateModalStep === 'confirm_switch' ? (
+              /* Step 3: 登录旧账号前再次确认 */
+              <div>
+                {/* Warning Icon */}
                 <div
                   style={{
-                    width: '36px',
-                    height: '36px',
-                    borderRadius: '10px',
-                    backgroundColor: '#E0F2FE',
-                    border: '1.5px solid #000000',
+                    width: '54px',
+                    height: '54px',
+                    borderRadius: '50%',
+                    backgroundColor: '#FEF08A',
+                    border: '2.5px solid #000000',
+                    boxShadow: '0 2px 0 #000000',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    flexShrink: 0
+                    margin: '0 auto 16px'
                   }}
                 >
-                  <LogIn size={18} color="#0369A1" strokeWidth={2.5} />
+                  <AlertCircle size={28} color="#D97706" strokeWidth={2.5} />
                 </div>
-                <div>
-                  <div style={{ fontSize: '15px', fontWeight: 900, color: '#000000', lineHeight: 1.2 }}>
-                    登录旧账号
-                  </div>
-                  <div style={{ fontSize: '11px', color: '#6B7280', marginTop: '4px', lineHeight: 1.3 }}>
-                    登录后将使用你原来的 PlayBank 账号。当前游客账号不会合并
-                  </div>
-                </div>
-              </button>
 
-              {/* Option 2: 更换 Email */}
-              <button
-                type="button"
-                onClick={() => {
-                  setShowDuplicateModal(false);
-                  setEmail('');
-                  setError(null);
-                }}
-                style={{
-                  width: '100%',
-                  padding: '14px 16px',
-                  backgroundColor: '#FFCE00',
-                  border: '2.5px solid #000000',
-                  borderRadius: '16px',
-                  boxShadow: '0 3px 0 #000000',
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: '12px',
-                  transition: 'transform 0.1s ease'
-                }}
-                onMouseDown={(e) => (e.currentTarget.style.transform = 'translateY(2px)')}
-                onMouseUp={(e) => (e.currentTarget.style.transform = 'translateY(0)')}
-              >
+                {/* Title */}
+                <h3 style={{ fontSize: '19px', fontWeight: 900, color: '#000000', margin: '0 0 8px 0' }}>
+                  确定切换到旧账号？
+                </h3>
+
+                {/* Description Box */}
                 <div
                   style={{
-                    width: '36px',
-                    height: '36px',
-                    borderRadius: '10px',
-                    backgroundColor: '#FFFFFF',
-                    border: '1.5px solid #000000',
+                    backgroundColor: '#F9FAFB',
+                    border: '2px solid #000000',
+                    borderRadius: '16px',
+                    padding: '14px 16px',
+                    textAlign: 'left',
+                    margin: '16px 0'
+                  }}
+                >
+                  <div style={{ fontSize: '13px', fontWeight: 800, color: '#111827', marginBottom: '8px' }}>
+                    登录成功后：
+                  </div>
+                  <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '12px', color: '#374151', lineHeight: 1.6 }}>
+                    <li>系统会切换到原来的正式账号</li>
+                    <li>当前 Guest 的 Player Code 将停止使用</li>
+                    <li>当前 Guest 的 BP、答题记录和游戏进度<strong>不会合并</strong></li>
+                    <li>当前 Guest 会在 Admin 标记为“空玩家”</li>
+                    <li>Guest 账号<strong>不会被删除</strong></li>
+                  </ul>
+                </div>
+
+                {/* Info Callout */}
+                <div
+                  style={{
+                    backgroundColor: '#FFFBEB',
+                    border: '1.5px dashed #F59E0B',
+                    borderRadius: '12px',
+                    padding: '10px 12px',
+                    fontSize: '11px',
+                    color: '#92400E',
+                    lineHeight: 1.4,
+                    textAlign: 'left',
+                    marginBottom: '20px'
+                  }}
+                >
+                  💡 如果你希望保留当前 Guest 进度，应该返回并选择“更换 Email”，把当前 Guest 原位注册。
+                </div>
+
+                {/* Action Buttons */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (onChooseLoginOldAccount) {
+                        onChooseLoginOldAccount(duplicateEmail);
+                      } else {
+                        console.log('[Step 3] Confirmed and proceed to login old account:', duplicateEmail);
+                      }
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '14px 16px',
+                      backgroundColor: '#FFCE00',
+                      border: '2.5px solid #000000',
+                      borderRadius: '14px',
+                      boxShadow: '0 3px 0 #000000',
+                      cursor: 'pointer',
+                      fontSize: '15px',
+                      fontWeight: 900,
+                      color: '#000000',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px'
+                    }}
+                    onMouseDown={(e) => (e.currentTarget.style.transform = 'translateY(2px)')}
+                    onMouseUp={(e) => (e.currentTarget.style.transform = 'translateY(0)')}
+                  >
+                    <span>确认并登录</span>
+                    <ArrowRight size={18} color="#000000" strokeWidth={2.6} />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setDuplicateModalStep('options')}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      backgroundColor: '#FFFFFF',
+                      border: '2px solid #000000',
+                      borderRadius: '14px',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      fontWeight: 800,
+                      color: '#4B5563',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <ArrowLeft size={16} />
+                    <span>返回</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* Step 2: 选项选择页 */
+              <div>
+                {/* Warning Icon */}
+                <div
+                  style={{
+                    width: '54px',
+                    height: '54px',
+                    borderRadius: '50%',
+                    backgroundColor: '#FEF08A',
+                    border: '2.5px solid #000000',
+                    boxShadow: '0 2px 0 #000000',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    flexShrink: 0
+                    margin: '0 auto 16px'
                   }}
                 >
-                  <Mail size={18} color="#000000" strokeWidth={2.5} />
+                  <AlertTriangle size={28} color="#D97706" strokeWidth={2.5} />
                 </div>
-                <div>
-                  <div style={{ fontSize: '15px', fontWeight: 900, color: '#000000', lineHeight: 1.2 }}>
-                    更换 Email
-                  </div>
-                  <div style={{ fontSize: '11px', color: '#4B5563', marginTop: '4px', lineHeight: 1.3 }}>
-                    保留当前 Guest、Player Code 和所有记录，使用其他 Email 完成注册。
-                  </div>
-                </div>
-              </button>
-            </div>
 
-            {/* Option 3: 暂时不要 */}
-            <button
-              type="button"
-              onClick={() => {
-                setShowDuplicateModal(false);
-                onClose();
-              }}
-              style={{
-                background: 'none',
-                border: 'none',
-                color: '#6B7280',
-                fontWeight: 700,
-                fontSize: '14px',
-                cursor: 'pointer',
-                padding: '8px'
-              }}
-            >
-              暂时不要（继续以 Guest 游玩）
-            </button>
+                {/* Title */}
+                <h3 style={{ fontSize: '19px', fontWeight: 900, color: '#000000', margin: '0 0 6px 0' }}>
+                  这个 Email 已经注册
+                </h3>
+                
+                {/* Subtitle */}
+                <p style={{ fontSize: '13px', color: '#4B5563', margin: '0 0 20px 0', lineHeight: 1.5 }}>
+                  我们发现 <strong>{duplicateEmail}</strong> 已经绑定另一个 PlayBank 账号。
+                </p>
+
+                {/* Choices Container */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
+                  {/* Option 1: 登录旧账号 -> Step 3 确认 */}
+                  <button
+                    type="button"
+                    onClick={() => setDuplicateModalStep('confirm_switch')}
+                    style={{
+                      width: '100%',
+                      padding: '14px 16px',
+                      backgroundColor: '#FFFFFF',
+                      border: '2.5px solid #000000',
+                      borderRadius: '16px',
+                      boxShadow: '0 3px 0 #000000',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: '12px',
+                      transition: 'transform 0.1s ease'
+                    }}
+                    onMouseDown={(e) => (e.currentTarget.style.transform = 'translateY(2px)')}
+                    onMouseUp={(e) => (e.currentTarget.style.transform = 'translateY(0)')}
+                  >
+                    <div
+                      style={{
+                        width: '36px',
+                        height: '36px',
+                        borderRadius: '10px',
+                        backgroundColor: '#E0F2FE',
+                        border: '1.5px solid #000000',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0
+                      }}
+                    >
+                      <LogIn size={18} color="#0369A1" strokeWidth={2.5} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '15px', fontWeight: 900, color: '#000000', lineHeight: 1.2 }}>
+                        登录旧账号
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#6B7280', marginTop: '4px', lineHeight: 1.3 }}>
+                        登录后将使用你原来的 PlayBank 账号。当前游客账号不会合并
+                      </div>
+                    </div>
+                  </button>
+
+                  {/* Option 2: 更换 Email */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowDuplicateModal(false);
+                      setEmail('');
+                      setError(null);
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '14px 16px',
+                      backgroundColor: '#FFCE00',
+                      border: '2.5px solid #000000',
+                      borderRadius: '16px',
+                      boxShadow: '0 3px 0 #000000',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: '12px',
+                      transition: 'transform 0.1s ease'
+                    }}
+                    onMouseDown={(e) => (e.currentTarget.style.transform = 'translateY(2px)')}
+                    onMouseUp={(e) => (e.currentTarget.style.transform = 'translateY(0)')}
+                  >
+                    <div
+                      style={{
+                        width: '36px',
+                        height: '36px',
+                        borderRadius: '10px',
+                        backgroundColor: '#FFFFFF',
+                        border: '1.5px solid #000000',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0
+                      }}
+                    >
+                      <Mail size={18} color="#000000" strokeWidth={2.5} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '15px', fontWeight: 900, color: '#000000', lineHeight: 1.2 }}>
+                        更换 Email
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#4B5563', marginTop: '4px', lineHeight: 1.3 }}>
+                        保留当前 Guest、Player Code 和所有记录，使用其他 Email 完成注册。
+                      </div>
+                    </div>
+                  </button>
+                </div>
+
+                {/* Option 3: 暂时不要 */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowDuplicateModal(false);
+                    onClose();
+                  }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#6B7280',
+                    fontWeight: 700,
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                    padding: '8px'
+                  }}
+                >
+                  暂时不要（继续以 Guest 游玩）
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
