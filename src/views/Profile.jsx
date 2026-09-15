@@ -20,11 +20,18 @@ import {
   RotateCcw,
   AlertCircle,
   RefreshCw,
-  Copy
+  Copy,
+  Settings,
+  Volume2,
+  VolumeX,
+  Music,
+  UserPlus,
+  ShieldCheck
 } from 'lucide-react';
 import { quizService } from '../lib/quizService';
 import { playerAuthService } from '../lib/playerAuthService';
 import { mockDb } from '../lib/mockDb';
+import { playWaterDropSound, isSoundEnabled, setSoundEnabled } from '../lib/soundEffects';
 import PlayerAvatar from '../components/common/PlayerAvatar';
 import AvatarPickerModal from '../components/AvatarPickerModal';
 import { DEFAULT_AVATAR_ID } from '../data/playerAvatars';
@@ -131,11 +138,73 @@ const BadgeShield = ({ type, title, ribbonText, colorScheme, iconSvg }) => {
 /* Main Profile Component                                                     */
 /* -------------------------------------------------------------------------- */
 
-const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) => {
+const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout, onRegister }) => {
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showBadgesModal, setShowBadgesModal] = useState(false);
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [expandedSessionId, setExpandedSessionId] = useState(null);
+
+  // Audio & Settings State
+  const [bgmVolume, setBgmVolume] = useState(() => {
+    const saved = localStorage.getItem('playbank_bgm_volume');
+    return saved !== null ? Number(saved) : 70;
+  });
+  const [sfxVolume, setSfxVolume] = useState(() => {
+    const saved = localStorage.getItem('playbank_sfx_volume');
+    return saved !== null ? Number(saved) : 80;
+  });
+  const [isBgmDisabled, setIsBgmDisabled] = useState(() => {
+    return localStorage.getItem('playbank_bgm_muted') === 'true';
+  });
+  const [isSfxDisabled, setIsSfxDisabled] = useState(() => !isSoundEnabled());
+
+  const handleBgmChange = (val) => {
+    setBgmVolume(val);
+    localStorage.setItem('playbank_bgm_volume', String(val));
+    if (val === 0) {
+      setIsBgmDisabled(true);
+      localStorage.setItem('playbank_bgm_muted', 'true');
+    } else if (isBgmDisabled) {
+      setIsBgmDisabled(false);
+      localStorage.setItem('playbank_bgm_muted', 'false');
+    }
+  };
+
+  const handleSfxChange = (val) => {
+    setSfxVolume(val);
+    localStorage.setItem('playbank_sfx_volume', String(val));
+    if (val === 0) {
+      setIsSfxDisabled(true);
+      setSoundEnabled(false);
+    } else {
+      if (isSfxDisabled) {
+        setIsSfxDisabled(false);
+        setSoundEnabled(true);
+      }
+    }
+  };
+
+  const handleSfxCommit = () => {
+    if (!isSfxDisabled && sfxVolume > 0) {
+      playWaterDropSound();
+    }
+  };
+
+  const toggleBgm = () => {
+    const next = !isBgmDisabled;
+    setIsBgmDisabled(next);
+    localStorage.setItem('playbank_bgm_muted', next ? 'true' : 'false');
+  };
+
+  const toggleSfx = () => {
+    const next = !isSfxDisabled;
+    setIsSfxDisabled(next);
+    setSoundEnabled(!next);
+    if (!next) {
+      playWaterDropSound();
+    }
+  };
 
   const [avatarId, setAvatarId] = useState(() => currentUser?.avatarId || guestProfile?.avatarId || DEFAULT_AVATAR_ID);
 
@@ -269,6 +338,19 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
     return '';
   }, [cloudProfile, currentUser, guestProfile]);
 
+  const isGuest = useMemo(() => {
+    if (cloudProfile?.is_guest !== undefined) {
+      return cloudProfile.is_guest;
+    }
+    if (currentUser?.is_guest !== undefined) {
+      return currentUser.is_guest;
+    }
+    if (currentUser && currentUser.id !== 'guest' && currentUser.email) {
+      return false;
+    }
+    return true;
+  }, [cloudProfile, currentUser]);
+
   return (
     <div
       className="view-content"
@@ -327,8 +409,37 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
             <ArrowLeft size={24} color="#000000" strokeWidth={3} />
           </button>
 
-          {/* Top-right: Clean and clear (Mirai logo and Settings gear removed as requested) */}
-          <div style={{ width: '46px' }} />
+          {/* Top-right: Settings Button */}
+          <button
+            onClick={() => setShowSettingsModal(true)}
+            aria-label="Game Settings"
+            title="游戏设置 (Settings)"
+            style={{
+              width: '46px',
+              height: '46px',
+              borderRadius: '50%',
+              backgroundColor: '#FFFFFF',
+              border: '2.5px solid #000000',
+              boxShadow: '0 4px 0 #000000',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              outline: 'none',
+              padding: 0,
+              transition: 'transform 0.1s ease, box-shadow 0.1s ease'
+            }}
+            onMouseDown={(e) => {
+              e.currentTarget.style.transform = 'translateY(3px)';
+              e.currentTarget.style.boxShadow = '0 1px 0 #000000';
+            }}
+            onMouseUp={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = '0 4px 0 #000000';
+            }}
+          >
+            <Settings size={22} color="#000000" strokeWidth={2.6} />
+          </button>
         </div>
 
         {/* Profile Card Info: Avatar + Name + Player ID */}
@@ -1431,6 +1542,334 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout }) =>
             >
               Awesome!
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Settings Modal */}
+      {showSettingsModal && (
+        <div
+          onClick={() => setShowSettingsModal(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 2500,
+            backgroundColor: 'rgba(0, 0, 0, 0.65)',
+            backdropFilter: 'blur(5px)',
+            WebkitBackdropFilter: 'blur(5px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px',
+            animation: 'fadeIn 0.2s ease'
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              backgroundColor: '#FFFFFF',
+              width: '100%',
+              maxWidth: '400px',
+              borderRadius: '28px',
+              border: '3px solid #000000',
+              boxShadow: '0 12px 0 #000000',
+              padding: '24px 20px',
+              position: 'relative',
+              animation: 'popIn 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+              maxHeight: '90vh',
+              overflowY: 'auto'
+            }}
+          >
+            {/* Modal Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div
+                  style={{
+                    width: '42px',
+                    height: '42px',
+                    borderRadius: '50%',
+                    backgroundColor: '#FFCE00',
+                    border: '2.5px solid #000000',
+                    boxShadow: '0 2px 0 #000000',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  <Settings size={22} color="#000000" strokeWidth={2.6} />
+                </div>
+                <div>
+                  <h2 style={{ fontSize: '18px', fontWeight: 900, color: '#000000', margin: 0, lineHeight: 1.2 }}>
+                    游戏设置
+                  </h2>
+                  <p style={{ fontSize: '12px', fontWeight: 700, color: '#6B7280', margin: 0 }}>
+                    Settings & Account
+                  </p>
+                </div>
+              </div>
+
+              {/* Close Button */}
+              <button
+                onClick={() => setShowSettingsModal(false)}
+                aria-label="Close Settings"
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '50%',
+                  backgroundColor: '#F3F4F6',
+                  border: '2px solid #000000',
+                  boxShadow: '0 2px 0 #000000',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  padding: 0
+                }}
+              >
+                <X size={18} color="#000000" strokeWidth={3} />
+              </button>
+            </div>
+
+            {/* Audio Settings Card */}
+            <div
+              style={{
+                backgroundColor: '#F9FAFB',
+                border: '2px solid #000000',
+                borderRadius: '18px',
+                padding: '16px',
+                marginBottom: '18px'
+              }}
+            >
+              <div style={{ fontSize: '12px', fontWeight: 900, color: '#4B5563', letterSpacing: '0.5px', textTransform: 'uppercase', marginBottom: '14px' }}>
+                🔊 音频设置 (Audio)
+              </div>
+
+              {/* 1. Background Music (BGM) */}
+              <div style={{ marginBottom: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Music size={18} color="#D97706" strokeWidth={2.5} />
+                    <span style={{ fontSize: '14px', fontWeight: 800, color: '#111827' }}>
+                      背景音乐
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 800, color: isBgmDisabled ? '#9CA3AF' : '#111827', minWidth: '36px', textAlign: 'right' }}>
+                      {isBgmDisabled ? '静音' : `${bgmVolume}%`}
+                    </span>
+                    <button
+                      onClick={toggleBgm}
+                      title={isBgmDisabled ? '取消静音' : '静音'}
+                      style={{
+                        background: isBgmDisabled ? '#FEE2E2' : '#E5E7EB',
+                        border: '1.5px solid #000000',
+                        borderRadius: '8px',
+                        padding: '4px 8px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center'
+                      }}
+                    >
+                      {isBgmDisabled ? <VolumeX size={14} color="#DC2626" /> : <Volume2 size={14} color="#000000" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Slider */}
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={isBgmDisabled ? 0 : bgmVolume}
+                  onChange={(e) => handleBgmChange(Number(e.target.value))}
+                  style={{
+                    width: '100%',
+                    accentColor: '#FFB800',
+                    cursor: 'pointer',
+                    height: '6px'
+                  }}
+                />
+                <div style={{ fontSize: '11px', color: '#6B7280', marginTop: '4px', fontWeight: 500 }}>
+                  🎵 背景音乐功能即将实装，可预先调整音量
+                </div>
+              </div>
+
+              <div style={{ height: '1px', backgroundColor: '#E5E7EB', margin: '12px 0' }} />
+
+              {/* 2. Sound Effects (SFX) */}
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Volume2 size={18} color="#059669" strokeWidth={2.5} />
+                    <span style={{ fontSize: '14px', fontWeight: 800, color: '#111827' }}>
+                      音效大小
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 800, color: isSfxDisabled ? '#9CA3AF' : '#111827', minWidth: '36px', textAlign: 'right' }}>
+                      {isSfxDisabled ? '静音' : `${sfxVolume}%`}
+                    </span>
+                    <button
+                      onClick={toggleSfx}
+                      title={isSfxDisabled ? '取消静音' : '静音'}
+                      style={{
+                        background: isSfxDisabled ? '#FEE2E2' : '#E5E7EB',
+                        border: '1.5px solid #000000',
+                        borderRadius: '8px',
+                        padding: '4px 8px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center'
+                      }}
+                    >
+                      {isSfxDisabled ? <VolumeX size={14} color="#DC2626" /> : <Volume2 size={14} color="#000000" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Slider */}
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={isSfxDisabled ? 0 : sfxVolume}
+                  onChange={(e) => handleSfxChange(Number(e.target.value))}
+                  onPointerUp={handleSfxCommit}
+                  onMouseUp={handleSfxCommit}
+                  onTouchEnd={handleSfxCommit}
+                  style={{
+                    width: '100%',
+                    accentColor: '#10B981',
+                    cursor: 'pointer',
+                    height: '6px'
+                  }}
+                />
+                <div style={{ fontSize: '11px', color: '#6B7280', marginTop: '4px', fontWeight: 500 }}>
+                  🔔 控制按键、答题、结算与奖励音效
+                </div>
+              </div>
+            </div>
+
+            {/* Account & Registration Card */}
+            <div
+              style={{
+                backgroundColor: isGuest ? '#FFFBEB' : '#F0FDF4',
+                border: '2px solid #000000',
+                borderRadius: '18px',
+                padding: '16px',
+                marginBottom: '16px',
+                boxShadow: '0 2px 0 #000000'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                <div style={{ fontSize: '12px', fontWeight: 900, color: '#4B5563', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
+                  👤 账号信息 (Account)
+                </div>
+                <span
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: 900,
+                    padding: '2px 8px',
+                    borderRadius: '12px',
+                    border: '1.5px solid #000000',
+                    backgroundColor: isGuest ? '#FEF08A' : '#BBF7D0',
+                    color: '#000000'
+                  }}
+                >
+                  {isGuest ? '游客账号 (Guest)' : '正式账号 (Registered)'}
+                </span>
+              </div>
+
+              {isGuest ? (
+                <div>
+                  <p style={{ fontSize: '13px', color: '#374151', margin: '0 0 12px 0', lineHeight: 1.4 }}>
+                    你当前正在使用<strong>游客身份</strong>游玩。注册正式账号可防止存档丢失，跨设备同步对局与 BP 积分！
+                  </p>
+
+                  {/* Register Button */}
+                  <button
+                    onClick={() => {
+                      setShowSettingsModal(false);
+                      if (onRegister) {
+                        onRegister();
+                      }
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '14px 16px',
+                      backgroundColor: '#FFCE00',
+                      border: '2.5px solid #000000',
+                      borderRadius: '14px',
+                      boxShadow: '0 4px 0 #000000',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '10px',
+                      cursor: 'pointer',
+                      transition: 'transform 0.1s ease, box-shadow 0.1s ease'
+                    }}
+                    onMouseDown={(e) => {
+                      e.currentTarget.style.transform = 'translateY(2px)';
+                      e.currentTarget.style.boxShadow = '0 2px 0 #000000';
+                    }}
+                    onMouseUp={(e) => {
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = '0 4px 0 #000000';
+                    }}
+                  >
+                    <UserPlus size={20} color="#000000" strokeWidth={2.6} />
+                    <div style={{ textAlign: 'left' }}>
+                      <div style={{ fontSize: '15px', fontWeight: 900, color: '#000000', lineHeight: 1.2 }}>
+                        立即注册账号
+                      </div>
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#4B5563' }}>
+                        原位转正 · 保留全部积分与记录
+                      </div>
+                    </div>
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                    <ShieldCheck size={20} color="#16A34A" strokeWidth={2.5} />
+                    <span style={{ fontSize: '14px', fontWeight: 800, color: '#166534' }}>
+                      已认证正式账号
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#374151', lineHeight: 1.6 }}>
+                    <div><strong>绑定邮箱：</strong>{currentUser?.email || '已绑定'}</div>
+                    <div><strong>玩家代码：</strong>{playerCode || '—'}</div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Logout / Switch User */}
+            {onLogout && (
+              <button
+                onClick={() => {
+                  setShowSettingsModal(false);
+                  onLogout();
+                }}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  backgroundColor: '#FFFFFF',
+                  border: '2px solid #E5E7EB',
+                  borderRadius: '12px',
+                  color: '#6B7280',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px'
+                }}
+              >
+                {isGuest ? '重置游客存档' : '退出当前账号'}
+              </button>
+            )}
           </div>
         </div>
       )}
