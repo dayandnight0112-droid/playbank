@@ -317,7 +317,7 @@ const SaveScoreModal = ({ onClose, onRegisterSuccess, currentBP, registerContext
                     登录旧账号
                   </div>
                   <div style={{ fontSize: '11px', color: '#6B7280', marginTop: '4px', lineHeight: 1.3 }}>
-                    登录后将使用你原来的 PlayBank 账号。当前游客账号不会合并，并会被标记为“空玩家”。
+                    登录后将使用你原来的 PlayBank 账号。当前游客账号不会合并
                   </div>
                 </div>
               </button>
