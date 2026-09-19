@@ -914,7 +914,19 @@ export const quizService = {
 
       authoritativeResult = rpcRes;
 
-      console.log(`[GameSession] Completed\nsession_id: ${sessionId}\nstatus: completed\nscore: ${authoritativeResult.score}\ncorrect_count: ${authoritativeResult.correct_count}\nwrong_count: ${authoritativeResult.wrong_count}\nearned_bp: ${authoritativeResult.earned_bp || 0}`);
+      // Dispatch authoritative wallet updated event
+      if (typeof window !== 'undefined' && rpcRes.balance_bp !== undefined) {
+        window.dispatchEvent(new CustomEvent('playbank:wallet-updated', {
+          detail: {
+            balance_bp: rpcRes.balance_bp,
+            lifetime_earned_bp: rpcRes.lifetime_earned_bp,
+            earned_bp: rpcRes.earned_bp,
+            sessionId: sessionId
+          }
+        }));
+      }
+
+      console.log(`[GameSession] Completed\nsession_id: ${sessionId}\nstatus: completed\nscore: ${authoritativeResult.score}\ncorrect_count: ${authoritativeResult.correct_count}\nwrong_count: ${authoritativeResult.wrong_count}\nearned_bp: ${authoritativeResult.earned_bp || 0}\nbalance_bp: ${authoritativeResult.balance_bp || 0}`);
     }
 
     const endedAt = new Date().toISOString();
@@ -952,9 +964,33 @@ export const quizService = {
           ended_at: new Date().toISOString()
         })
         .eq('id', sessionId);
-    } catch (e) {
-      console.warn('[quizService] Failed to mark session as abandoned:', e);
+    } catch (err) {
+      console.warn('[GameSession] abandonGameSession error:', err);
     }
+  },
+
+  /**
+   * Step 9 & 10: Complete Boss Battle Game Session
+   */
+  async completeBossBattleSession({
+    bossSessionId,
+    chapterId,
+    encounter,
+    stats,
+    earnedBP,
+    isVictory
+  }) {
+    return this.completeGameSession({
+      sessionId: bossSessionId,
+      chapterId,
+      chapterTitle: `Boss Battle - ${encounter?.bossName || 'Boss'}`,
+      chapterVersion: encounter?.chapterVersion || 1,
+      totalQuestions: stats?.totalQuestions || 10,
+      correctCount: stats?.correctCount || 0,
+      wrongCount: stats?.wrongCount || 0,
+      score: stats?.score || earnedBP || 0,
+      earnedBP: earnedBP || 0
+    });
   },
 
   /**
@@ -976,7 +1012,8 @@ export const quizService = {
   },
 
   /**
-   * Step 4: Get Full Player Stats (Sessions & Answers) with Supabase Cloud Priority
+   * Step 4: Authoritative History Query
+   * Queries real game_sessions and player_answers exclusively for the authenticated user
    * Strictly adheres to Rule 5: NO guessing or auto-synthesizing sessions from answers!
    */
   async getPlayerFullStats(playerId = null) {
@@ -986,7 +1023,8 @@ export const quizService = {
 
     if (isSupabaseConfigured && supabase) {
       try {
-        const authUserId = playerId && playerId !== 'guest' ? playerId : await playerAuthService.getAuthUserId();
+        // Supabase cloud queries MUST strictly resolve identity from current session's auth.uid()
+        const authUserId = await playerAuthService.getAuthUserId();
         if (authUserId) {
           const [sessRes, ansRes] = await Promise.all([
             supabase

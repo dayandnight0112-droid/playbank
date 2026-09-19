@@ -226,22 +226,24 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout, onRe
   // Step 4.1: 4 Strict States for Profile & Game History
   const [sessions, setSessions] = useState([]);
   const [answers, setAnswers] = useState([]);
+  const [cloudWallet, setCloudWallet] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [cloudProfile, setCloudProfile] = useState(null);
   const [copiedCode, setCopiedCode] = useState(false);
 
-  // Step 4.1 & 4.3 & Rule 6: Cloud load with guaranteed auth.uid(), never 'guest'
+  // Step 4.1 & 4.3 & Rule 6: Cloud load with guaranteed auth.uid(), never legacy timestamp or 'guest'
   const loadProfileData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
+      // Rule: Identity for Supabase cloud queries MUST strictly come from current session's auth.uid()
       const authUserId = await playerAuthService.getAuthUserId();
-      const targetPlayerId = (currentUser?.id && currentUser.id !== 'guest') ? currentUser.id : authUserId;
 
-      const [data, profile] = await Promise.all([
-        quizService.getPlayerFullStats(targetPlayerId),
-        targetPlayerId ? playerAuthService.getCloudProfile(targetPlayerId) : null
+      const [data, profile, wallet] = await Promise.all([
+        quizService.getPlayerFullStats(authUserId),
+        authUserId ? playerAuthService.getCloudProfile(authUserId) : null,
+        authUserId ? playerAuthService.getPlayerWallet(authUserId) : null
       ]);
 
       setSessions(Array.isArray(data?.sessions) ? data.sessions : []);
@@ -249,13 +251,16 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout, onRe
       if (profile) {
         setCloudProfile(profile);
       }
+      if (wallet) {
+        setCloudWallet(wallet);
+      }
     } catch (err) {
       console.error('[Profile] Failed to load stats from Supabase:', err);
       setError(err.message || '加载对局记录与统计失败，请检查网络后重试');
     } finally {
       setLoading(false);
     }
-  }, [currentUser]);
+  }, []);
 
   useEffect(() => {
     loadProfileData();

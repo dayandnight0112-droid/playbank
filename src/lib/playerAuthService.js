@@ -207,6 +207,33 @@ class PlayerAuthService {
   }
 
   /**
+   * Fetch wallet record from public.player_wallets
+   * Strictly reads from server-authoritative balance_bp and lifetime_earned_bp
+   */
+  async getPlayerWallet(userId = null) {
+    const uid = userId || this.getUserId() || await this.getAuthUserId();
+    if (!isSupabaseConfigured || !supabase || !uid) {
+      return { balance_bp: 0, lifetime_earned_bp: 0 };
+    }
+    try {
+      const { data, error } = await supabase
+        .from('player_wallets')
+        .select('player_id, balance_bp, lifetime_earned_bp, updated_at')
+        .eq('player_id', uid)
+        .maybeSingle();
+
+      if (error) {
+        console.warn('[playerAuthService] getPlayerWallet error:', error.message);
+        return { balance_bp: 0, lifetime_earned_bp: 0 };
+      }
+      return data || { balance_bp: 0, lifetime_earned_bp: 0 };
+    } catch (err) {
+      console.warn('[playerAuthService] getPlayerWallet exception:', err);
+      return { balance_bp: 0, lifetime_earned_bp: 0 };
+    }
+  }
+
+  /**
    * Sync Player Profile metadata (nickname, age_group, channel, goal) to public.profiles
    */
   async syncProfileMetadata({ nickname, age_group, source_channel, daily_goal_minutes } = {}) {

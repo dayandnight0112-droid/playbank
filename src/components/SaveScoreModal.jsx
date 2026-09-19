@@ -122,6 +122,7 @@ const SaveScoreModal = ({ onClose, onRegisterSuccess, onSwitchAccountSuccess, cu
 
     // Step 4.4: Upgrade current anonymous player session to permanent registered user in Supabase
     let hasDuplicateError = false;
+    let upgradedUserId = null;
     try {
       const upgradeRes = await playerAuthService.upgradeGuestToRegistered({
         email,
@@ -134,6 +135,8 @@ const SaveScoreModal = ({ onClose, onRegisterSuccess, onSwitchAccountSuccess, cu
         if (isDuplicateEmailError(upgradeRes.error)) {
           hasDuplicateError = true;
         }
+      } else if (upgradeRes.user?.id) {
+        upgradedUserId = upgradeRes.user.id;
       }
     } catch (err) {
       console.warn('[SaveScoreModal] Account upgrade fallback:', err);
@@ -142,7 +145,11 @@ const SaveScoreModal = ({ onClose, onRegisterSuccess, onSwitchAccountSuccess, cu
       }
     }
 
-    const result = mockDb.registerUser(email, password, fullWhatsapp, currentBP);
+    if (!upgradedUserId) {
+      upgradedUserId = await playerAuthService.getAuthUserId();
+    }
+
+    const result = mockDb.registerUser(email, password, fullWhatsapp, currentBP, upgradedUserId);
     setIsSubmitting(false);
 
     // Step 2: If email is already registered, trigger Duplicate Email Choice Modal

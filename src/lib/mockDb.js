@@ -327,15 +327,21 @@ const generateReferralCode = (email) => {
 
 export const mockDb = {
   // Register a new user
-  registerUser: (email, password, whatsapp, guestBP) => {
+  registerUser: (email, password, whatsapp, guestBP, authUid = null) => {
     const users = getUsers();
     if (users.find(u => u.email === email)) {
       return { error: 'Email already exists' };
     }
 
     const guest = getGuestProfileRaw();
+    const effectiveUserId = authUid || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : null);
+    if (!effectiveUserId) {
+      console.warn('[mockDb] Warning: registering user without valid UUID authUid');
+    }
+
     const newUser = {
-      id: Date.now().toString(),
+      id: effectiveUserId,
+      legacy_id: Date.now().toString(),
       email,
       password,
       whatsapp,

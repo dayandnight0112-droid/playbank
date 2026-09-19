@@ -88,6 +88,20 @@ function App() {
       if (res?.user) {
         console.log(`[App] Player auth initialized: ${res.user.id} (anonymous: ${res.isAnonymous})`);
         try {
+          // Fetch authoritative wallet balance from cloud
+          const wallet = await playerAuthService.getPlayerWallet(res.user.id);
+          if (wallet && typeof wallet.balance_bp === 'number') {
+            console.log('[App] Authoritative wallet balance fetched on mount:', wallet.balance_bp);
+            setUserBP(wallet.balance_bp);
+            mockDb.updateGuestProfile({ bankPoint: wallet.balance_bp });
+            const session = mockDb.getCurrentSession();
+            if (session) {
+              session.total_bp = wallet.balance_bp;
+              mockDb.saveSession(session);
+              setCurrentUser({ ...session });
+            }
+          }
+
           const profile = await playerAuthService.getCloudProfile(res.user.id);
           
           // Step 10: If cloud profile is already abandoned_guest, purge dirty local credentials immediately
@@ -226,13 +240,29 @@ function App() {
       });
     };
 
+    const handleWalletUpdated = (e) => {
+      if (e.detail?.balance_bp !== undefined && e.detail?.balance_bp !== null) {
+        console.log('[App] Authoritative wallet update received:', e.detail.balance_bp);
+        setUserBP(e.detail.balance_bp);
+        mockDb.updateGuestProfile({ bankPoint: e.detail.balance_bp });
+        const session = mockDb.getCurrentSession();
+        if (session) {
+          session.total_bp = e.detail.balance_bp;
+          mockDb.saveSession(session);
+          setCurrentUser({ ...session });
+        }
+      }
+    };
+
     window.addEventListener('storage', handleStorageChange);
     window.addEventListener('playbank:avatar-changed', handleAvatarChanged);
     window.addEventListener('playbank:account-abandoned', handleAccountAbandoned);
+    window.addEventListener('playbank:wallet-updated', handleWalletUpdated);
     return () => {
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('playbank:avatar-changed', handleAvatarChanged);
       window.removeEventListener('playbank:account-abandoned', handleAccountAbandoned);
+      window.removeEventListener('playbank:wallet-updated', handleWalletUpdated);
       delete window.__resetOnboarding;
     };
   }, []);
@@ -304,19 +334,11 @@ function App() {
   };
 
   const handleTriggerBossEncounter = (triggerResult, quizStats) => {
-    // 1. Bank Normal Quiz BP immediately so learning rewards are never lost
+    // 1. Normal Quiz BP was already authoritatively settled by completeGameSession in Quiz.jsx.
+    // We only log the attempt in mockDb for local stats.
     const normalBP = quizStats?.sessionBP || 0;
-    if (normalBP > 0) {
-      const effectiveQuizBP = playsToday > 5 ? Math.max(2, Math.round(normalBP * 0.2)) : normalBP;
-      if (currentUser) {
-        const updated = mockDb.updateUserBP(currentUser.id, effectiveQuizBP);
-        if (updated) setUserBP(updated.total_bp);
-        mockDb.logQuizAttempt(currentUser.id, quizParams.subjectTitle || 'History', normalBP);
-      } else {
-        const nextGuestBP = userBP + effectiveQuizBP;
-        setUserBP(nextGuestBP);
-        mockDb.updateGuestProfile({ bankPoint: nextGuestBP });
-      }
+    if (currentUser && normalBP > 0) {
+      mockDb.logQuizAttempt(currentUser.id, quizParams.subjectTitle || 'History', normalBP);
     }
 
     // 2. Trigger Boss Encounter Alert and switch view
@@ -338,30 +360,22 @@ function App() {
   };
 
   const handleQuizComplete = (earnedBP) => {
-    // Step 32: Practice mode diminishing returns (Plays 1-5: 100% full rewards; Plays > 5: 20% practice reward)
-    const effectiveBP = playsToday > 5 ? Math.max(2, Math.round(earnedBP * 0.2)) : earnedBP;
+    // Note: earnedBP was already settled in cloud by completeGameSession RPC.
+    // Local state (userBP / mockDb) has already been updated by the playbank:wallet-updated event.
+    const currentBP = mockDb.getSafeUserBP();
 
     if (currentUser) {
-      const updatedUser = mockDb.updateUserBP(currentUser.id, effectiveBP);
-      if (updatedUser) {
-        setUserBP(updatedUser.total_bp);
-        
-        // Trigger Booster Offer for User hitting 200 BP
-        if (updatedUser.total_bp >= 200 && updatedUser.score_multiplier !== 3 && !localStorage.getItem(`playbank_booster_rejected_${updatedUser.id}`)) {
-          setShowBoosterOffer({ isFirstTimeOffer: true });
-        }
+      // Trigger Booster Offer for User hitting 200 BP
+      if (currentBP >= 200 && currentUser.score_multiplier !== 3 && !localStorage.getItem(`playbank_booster_rejected_${currentUser.id}`)) {
+        setShowBoosterOffer({ isFirstTimeOffer: true });
       }
       setCurrentView('home');
     } else {
-      const newGuestBP = userBP + effectiveBP;
-      setUserBP(newGuestBP);
-      mockDb.updateGuestProfile({ bankPoint: newGuestBP });
-
       // Guest First Play OR Hit 200 BP
       if (!sessionStorage.getItem('guest_first_play_register')) {
         sessionStorage.setItem('guest_first_play_register', 'true');
         setShowSaveModal('guest_first_play');
-      } else if (newGuestBP >= 200 && !sessionStorage.getItem('guest_200_register')) {
+      } else if (currentBP >= 200 && !sessionStorage.getItem('guest_200_register')) {
         sessionStorage.setItem('guest_200_register', 'true');
         setShowSaveModal('guest_200');
       } else {
@@ -371,23 +385,13 @@ function App() {
   };
 
   const handleBossBattleComplete = (stats) => {
-    const earnedBP = stats?.earnedBP || 0;
-    const effectiveBP = playsToday > 5 ? Math.max(2, Math.round(earnedBP * 0.2)) : earnedBP;
+    // 1. Boss BP was already settled in cloud by completeGameSession RPC in BossBattle.jsx.
+    // Local state has already been updated by the playbank:wallet-updated event.
+    const currentBP = mockDb.getSafeUserBP();
 
-    // 1. Award Boss BP
-    if (effectiveBP > 0) {
-      if (currentUser) {
-        const updatedUser = mockDb.updateUserBP(currentUser.id, effectiveBP);
-        if (updatedUser) {
-          setUserBP(updatedUser.total_bp);
-          if (updatedUser.total_bp >= 200 && updatedUser.score_multiplier !== 3 && !localStorage.getItem(`playbank_booster_rejected_${updatedUser.id}`)) {
-            setShowBoosterOffer({ isFirstTimeOffer: true });
-          }
-        }
-      } else {
-        const newGuestBP = userBP + effectiveBP;
-        setUserBP(newGuestBP);
-        mockDb.updateGuestProfile({ bankPoint: newGuestBP });
+    if (currentUser) {
+      if (currentBP >= 200 && currentUser.score_multiplier !== 3 && !localStorage.getItem(`playbank_booster_rejected_${currentUser.id}`)) {
+        setShowBoosterOffer({ isFirstTimeOffer: true });
       }
     }
 
@@ -405,7 +409,7 @@ function App() {
       accuracy: stats?.accuracy,
       maxCombo: stats?.maxCombo,
       bossResult: stats?.battleResult,
-      earnedBP: effectiveBP
+      earnedBP: stats?.earnedBP || 0
     });
 
     // 3. Clear transient encounter state
