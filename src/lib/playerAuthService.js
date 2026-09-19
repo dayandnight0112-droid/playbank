@@ -192,7 +192,7 @@ class PlayerAuthService {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, player_code, nickname, age_group, source_channel, daily_goal_minutes, is_guest')
+        .select('id, player_code, nickname, age_group, source_channel, daily_goal_minutes, is_guest, account_status')
         .eq('id', uid)
         .maybeSingle();
       if (error) {
@@ -228,16 +228,64 @@ class PlayerAuthService {
         .from('profiles')
         .update(updates)
         .eq('id', uid)
-        .select('id, player_code, nickname, age_group, source_channel, daily_goal_minutes, is_guest')
+        .select('id, player_code, nickname, age_group, source_channel, daily_goal_minutes, is_guest, account_status')
         .maybeSingle();
       if (error) {
         console.warn('[playerAuthService] syncProfileMetadata error:', error.message);
+        if (error.message?.includes('ACCOUNT_ABANDONED') || error.message?.includes('abandoned_guest')) {
+          await this.handleAccountAbandoned();
+        }
         return null;
       }
       return data;
     } catch (err) {
-      console.warn('[playerAuthService] syncProfileMetadata error:', err.message);
+      console.warn('[playerAuthService] syncProfileMetadata error:', err);
       return null;
+    }
+  }
+
+  /**
+   * Step 10: Handle Account Abandoned Interception
+   * When server blocks operations because this guest was marked as abandoned_guest:
+   * 1. Purge Supabase auth session
+   * 2. Clear local storage credentials and session keys
+   * 3. Dispatch 'playbank:account-abandoned' event
+   */
+  async handleAccountAbandoned() {
+    console.warn('[playerAuthService] Account has been abandoned on server. Purging local credentials...');
+    const abandonedId = this.getUserId();
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.auth.signOut();
+      } catch (e) {
+        console.warn('[playerAuthService] signOut error during purge:', e);
+      }
+    }
+
+    this._session = null;
+    this._currentUser = null;
+    this._isAnonymous = false;
+    this._initialized = false;
+    this._initPromise = null;
+    this._authLockPromise = null;
+
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        window.localStorage.removeItem('playbank_session');
+        window.localStorage.removeItem('playbank_user_profile');
+        window.localStorage.removeItem('playbank_user_bp');
+        if (abandonedId) {
+          window.localStorage.removeItem(`playbank_answers_${abandonedId}`);
+          window.localStorage.removeItem(`playbank_question_history_${abandonedId}`);
+          window.localStorage.removeItem(`playbank_plays_today_${abandonedId}`);
+          window.localStorage.removeItem(`playbank_last_play_date_${abandonedId}`);
+        }
+      } catch (_) {}
+
+      window.dispatchEvent(new CustomEvent('playbank:account-abandoned', {
+        detail: { abandonedId }
+      }));
     }
   }
 

@@ -89,6 +89,14 @@ function App() {
         console.log(`[App] Player auth initialized: ${res.user.id} (anonymous: ${res.isAnonymous})`);
         try {
           const profile = await playerAuthService.getCloudProfile(res.user.id);
+          
+          // Step 10: If cloud profile is already abandoned_guest, purge dirty local credentials immediately
+          if (profile?.account_status === 'abandoned_guest') {
+            console.warn('[App] Current player account is marked as abandoned_guest on server. Purging local credentials...');
+            await playerAuthService.handleAccountAbandoned();
+            return;
+          }
+
           const currentGuest = mockDb.getGuestProfile();
           const localName = currentGuest?.guestName?.trim();
           const isLocalCustomName = localName && !localName.startsWith('Guest_') && localName !== '冒险家';
@@ -205,11 +213,26 @@ function App() {
       }
     };
 
+    const handleAccountAbandoned = () => {
+      console.warn('[App] Caught playbank:account-abandoned event. Resetting player state...');
+      const session = mockDb.getCurrentSession();
+      setCurrentUser(session);
+      setGuestProfile(mockDb.getGuestProfile());
+      setUserBP(mockDb.getSafeUserBP());
+      openModal({
+        title: '游客账号已切换',
+        message: '该游客账号已切换至已有正式账号，系统已清理此游客本地缓存。请重新进入或登录正式账号。',
+        confirmText: '我知道了'
+      });
+    };
+
     window.addEventListener('storage', handleStorageChange);
     window.addEventListener('playbank:avatar-changed', handleAvatarChanged);
+    window.addEventListener('playbank:account-abandoned', handleAccountAbandoned);
     return () => {
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('playbank:avatar-changed', handleAvatarChanged);
+      window.removeEventListener('playbank:account-abandoned', handleAccountAbandoned);
       delete window.__resetOnboarding;
     };
   }, []);

@@ -579,6 +579,10 @@ export const quizService = {
 
       if (error) {
         console.error('[quizService] submit_answer RPC error:', error.message);
+        if (error.message?.includes('ACCOUNT_ABANDONED') || error.message?.includes('abandoned_guest')) {
+          await playerAuthService.handleAccountAbandoned();
+          throw new Error('当前游客账号已被弃用，无法继续提交答题。本地数据已清理，请重新进入。');
+        }
         throw new Error(error.message);
       }
 
@@ -827,6 +831,10 @@ export const quizService = {
 
     if (insertErr) {
       console.error('[GameSession] Create failed:', insertErr);
+      if (insertErr.message?.includes('ACCOUNT_ABANDONED') || insertErr.message?.includes('abandoned_guest')) {
+        await playerAuthService.handleAccountAbandoned();
+        throw new Error('当前游客账号已被弃用。系统已重置本地登录态，请重新进入关卡。');
+      }
       throw new Error(`对局建立失败: ${insertErr.message}`);
     }
 
@@ -893,6 +901,10 @@ export const quizService = {
 
       if (rpcErr) {
         console.error('[GameSession] complete_game_session RPC error:', rpcErr);
+        if (rpcErr.message?.includes('ACCOUNT_ABANDONED') || rpcErr.message?.includes('abandoned_guest')) {
+          await playerAuthService.handleAccountAbandoned();
+          throw new Error('当前游客账号已被弃用，无法结算对局。本地数据已重置。');
+        }
         throw new Error(`结算保存失败: ${rpcErr.message || 'Supabase结算被拒绝'}`);
       }
 
