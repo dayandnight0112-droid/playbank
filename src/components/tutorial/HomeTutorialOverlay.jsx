@@ -203,13 +203,14 @@ const HomeTutorialOverlay = ({
     const spaceAbove = targetRect.top;
     const spaceBelow = viewportHeight - targetRect.bottom;
 
-    // Prefer placing bubble where there is at least 180px available
-    if (spaceAbove >= 180 && spaceAbove > spaceBelow) {
+    // Prefer placing bubble where there is at least 200px available
+    // Leave 60px ample spacing for 48px bouncing arrow
+    if (spaceAbove >= 200 && spaceAbove > spaceBelow) {
       bubblePlacement = 'above';
-      bubbleTop = Math.max(16, targetRect.top - 170);
+      bubbleTop = Math.max(16, targetRect.top - 165 - 62);
     } else {
       bubblePlacement = 'below';
-      bubbleTop = Math.min(viewportHeight - 190, targetRect.bottom + 14);
+      bubbleTop = Math.min(viewportHeight - 200, targetRect.bottom + 62);
     }
 
     // Align horizontally with target center, bounded by screen edges
@@ -235,19 +236,18 @@ const HomeTutorialOverlay = ({
     }
   };
 
-  // Polygon Cutout Clip-Path
-  // The cutout area lets clicks pass through directly to the underlying element!
+  // Hole Cutout Flag
+  // The cutout area has ZERO overlay on top, letting clicks pass through 100% directly to the underlying element!
   const hasCutout = targetRect && typeof targetRect === 'object' && !isInShopMode && !isTargetInModal;
-  const clipPathStyle = hasCutout
-    ? `polygon(
-        0% 0%, 0% 100%, 100% 100%, 100% 0%, 0% 0%,
-        ${targetRect.left}px ${targetRect.top}px,
-        ${targetRect.left}px ${targetRect.bottom}px,
-        ${targetRect.right}px ${targetRect.bottom}px,
-        ${targetRect.right}px ${targetRect.top}px,
-        ${targetRect.left}px ${targetRect.top}px
-      )`
-    : 'none';
+
+  const handleMaskClick = (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+  };
+
+  const handleMaskTouch = (e) => {
+    e.stopPropagation();
+  };
 
   return (
     <div
@@ -260,28 +260,90 @@ const HomeTutorialOverlay = ({
         overflow: 'hidden'
       }}
     >
-      {/* 1. PHYSICAL CLICK BARRIER & DARK SHADOW MASK */}
-      {/* Clicks on background are strictly intercepted! */}
-      <div
-        className="tutorial-shadow-mask"
-        onClick={(e) => {
-          e.stopPropagation();
-          e.preventDefault();
-        }}
-        onTouchStart={(e) => {
-          e.stopPropagation();
-        }}
-        style={{
-          position: 'fixed',
-          inset: 0,
-          background: isInShopMode ? 'rgba(5, 8, 16, 0.45)' : 'rgba(5, 8, 16, 0.74)',
-          clipPath: clipPathStyle,
-          WebkitClipPath: clipPathStyle,
-          pointerEvents: (isTargetInModal || isInShopMode) ? 'none' : 'auto',
-          zIndex: 9991,
-          transition: 'clip-path 0.25s cubic-bezier(0.16, 1, 0.3, 1), background 0.3s ease'
-        }}
-      />
+      {/* 1. PHYSICAL 4-BLOCK BARRIER (100% LIGHT TRANSPARENCY & ZERO CLICK INTERCEPTION ON TARGET) */}
+      {/* Clicks outside the target are strictly intercepted, while target hole is 100% native click-through! */}
+      {hasCutout ? (
+        <>
+          {/* Top Block */}
+          <div
+            className="tutorial-mask-top"
+            onClick={handleMaskClick}
+            onTouchStart={handleMaskTouch}
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              height: `${Math.max(0, targetRect.top)}px`,
+              background: 'rgba(5, 8, 16, 0.74)',
+              pointerEvents: 'auto',
+              zIndex: 9991
+            }}
+          />
+          {/* Bottom Block */}
+          <div
+            className="tutorial-mask-bottom"
+            onClick={handleMaskClick}
+            onTouchStart={handleMaskTouch}
+            style={{
+              position: 'fixed',
+              top: `${targetRect.bottom}px`,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(5, 8, 16, 0.74)',
+              pointerEvents: 'auto',
+              zIndex: 9991
+            }}
+          />
+          {/* Left Block */}
+          <div
+            className="tutorial-mask-left"
+            onClick={handleMaskClick}
+            onTouchStart={handleMaskTouch}
+            style={{
+              position: 'fixed',
+              top: `${targetRect.top}px`,
+              left: 0,
+              width: `${Math.max(0, targetRect.left)}px`,
+              height: `${targetRect.height}px`,
+              background: 'rgba(5, 8, 16, 0.74)',
+              pointerEvents: 'auto',
+              zIndex: 9991
+            }}
+          />
+          {/* Right Block */}
+          <div
+            className="tutorial-mask-right"
+            onClick={handleMaskClick}
+            onTouchStart={handleMaskTouch}
+            style={{
+              position: 'fixed',
+              top: `${targetRect.top}px`,
+              left: `${targetRect.right}px`,
+              right: 0,
+              height: `${targetRect.height}px`,
+              background: 'rgba(5, 8, 16, 0.74)',
+              pointerEvents: 'auto',
+              zIndex: 9991
+            }}
+          />
+        </>
+      ) : (
+        /* Fullscreen shadow for special modal / shop fullview */
+        <div
+          className="tutorial-shadow-mask"
+          onClick={handleMaskClick}
+          onTouchStart={handleMaskTouch}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: isInShopMode ? 'rgba(5, 8, 16, 0.45)' : 'rgba(5, 8, 16, 0.74)',
+            pointerEvents: (isTargetInModal || isInShopMode) ? 'none' : 'auto',
+            zIndex: 9991
+          }}
+        />
+      )}
 
       {/* 2. TARGET HIGHLIGHT SPOTLIGHT BOX & PULSE GLOW */}
       {hasCutout && (
@@ -430,16 +492,18 @@ const HomeTutorialOverlay = ({
             <div
               style={{
                 position: 'absolute',
-                top: '-18px',
-                left: Math.max(24, Math.min(bubbleWidth - 36, (targetRect?.centerX || 0) - bubbleLeft - 10)),
+                top: '-54px',
+                left: Math.max(10, Math.min(bubbleWidth - 58, (targetRect?.centerX || 0) - bubbleLeft - 24)),
                 color: '#FFBC00',
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
-                animation: 'bounceArrowUp 1s ease-in-out infinite'
+                filter: 'drop-shadow(0 2px 10px rgba(255, 188, 0, 0.95)) drop-shadow(0 0 3px #000000)',
+                animation: 'bounceArrowUp 1s ease-in-out infinite',
+                pointerEvents: 'none'
               }}
             >
-              <ArrowUp size={24} strokeWidth={3.5} />
+              <ArrowUp size={48} strokeWidth={3.5} />
             </div>
           )}
 
@@ -500,16 +564,18 @@ const HomeTutorialOverlay = ({
             <div
               style={{
                 position: 'absolute',
-                bottom: '-20px',
-                left: Math.max(24, Math.min(bubbleWidth - 36, (targetRect?.centerX || 0) - bubbleLeft - 10)),
+                bottom: '-54px',
+                left: Math.max(10, Math.min(bubbleWidth - 58, (targetRect?.centerX || 0) - bubbleLeft - 24)),
                 color: '#FFBC00',
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
-                animation: 'bounceArrowDown 1s ease-in-out infinite'
+                filter: 'drop-shadow(0 2px 10px rgba(255, 188, 0, 0.95)) drop-shadow(0 0 3px #000000)',
+                animation: 'bounceArrowDown 1s ease-in-out infinite',
+                pointerEvents: 'none'
               }}
             >
-              <ArrowDown size={24} strokeWidth={3.5} />
+              <ArrowDown size={48} strokeWidth={3.5} />
             </div>
           )}
         </div>
@@ -527,11 +593,11 @@ const HomeTutorialOverlay = ({
         }
         @keyframes bounceArrowDown {
           0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(6px); }
+          50% { transform: translateY(8px); }
         }
         @keyframes bounceArrowUp {
           0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-6px); }
+          50% { transform: translateY(-8px); }
         }
         @keyframes popIn {
           0% { transform: scale(0.85); opacity: 0; }
