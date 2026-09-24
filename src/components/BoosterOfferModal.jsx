@@ -9,7 +9,7 @@ const BoosterOfferModal = ({ onClose, onUnlock, isFirstTimeOffer = false }) => {
     // Simulate payment process delay
     setTimeout(() => {
       setIsProcessing(false);
-      onUnlock(isFirstTimeOffer);
+      onUnlock();
     }, 1500);
   };
 
@@ -53,7 +53,7 @@ const BoosterOfferModal = ({ onClose, onUnlock, isFirstTimeOffer = false }) => {
         </h2>
         
         <p style={{ fontSize: '15px', fontWeight: 600, color: '#555', marginBottom: '24px', padding: '0 10px' }}>
-          Get 3X more BP for every correct answer you submit. Level up instantly!
+          Get 3X more BP for every correct answer you submit (30 BP per question). Level up faster!
         </p>
 
         <div style={{ 
@@ -61,7 +61,7 @@ const BoosterOfferModal = ({ onClose, onUnlock, isFirstTimeOffer = false }) => {
           padding: '16px', marginBottom: '24px' 
         }}>
           <div style={{ fontSize: '13px', fontWeight: 800, color: '#8A6D00', textTransform: 'uppercase', letterSpacing: '1px' }}>
-            One-time Unlock
+            Permanent Account Booster
           </div>
           <div style={{ fontSize: '32px', fontWeight: 900, color: '#000', marginTop: '4px' }}>
             RM20
@@ -73,10 +73,10 @@ const BoosterOfferModal = ({ onClose, onUnlock, isFirstTimeOffer = false }) => {
               animation: 'pulse 2s infinite'
             }}>
               <div style={{ fontSize: '12px', fontWeight: 900, color: '#D9363E', textTransform: 'uppercase', marginBottom: '4px' }}>
-                🔥 Limited Offer
+                🔥 Special Feature
               </div>
               <div style={{ fontSize: '13px', fontWeight: 700, color: '#CF1322', lineHeight: 1.3 }}>
-                Unlock NOW and we will multiply your <span style={{ textDecoration: 'underline' }}>CURRENTly accumulated BP</span> by 3X instantly!
+                Permanent 3X multiplier applied automatically on every future quiz session!
               </div>
             </div>
           )}

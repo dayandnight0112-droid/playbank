@@ -12,6 +12,18 @@
 
 import { supabase, isSupabaseConfigured } from './supabaseClient.js';
 
+/**
+ * Map exact integer age (5-25) to standard Admin Age Group filter ('7-9' | '10-12' | '13-15' | '16-17')
+ */
+export function mapExactAgeToAgeGroup(exactAge) {
+  const age = Number(exactAge);
+  if (!age || isNaN(age)) return '13-15';
+  if (age <= 9) return '7-9';
+  if (age <= 12) return '10-12';
+  if (age <= 15) return '13-15';
+  return '16-17';
+}
+
 class PlayerAuthService {
   constructor() {
     this._initialized = false;
@@ -56,24 +68,31 @@ class PlayerAuthService {
       }
 
       if (session && session.user) {
+        // Step 1: Verify with Supabase Auth that this user actually still exists in auth.users
+        const { data: userData, error: userError } = await supabase.auth.getUser();
+        if (userError || !userData?.user) {
+          console.warn('[playerAuthService] Cached session user does not exist in auth.users (likely purged). Establishing fresh guest...', userError?.message);
+          await supabase.auth.signOut().catch(() => {});
+          this._session = null;
+          this._currentUser = null;
+          this._isAnonymous = false;
+          return this.ensurePlayerAuth();
+        }
+
         this._session = session;
-        this._currentUser = session.user;
-        this._isAnonymous = Boolean(session.user.is_anonymous);
+        this._currentUser = userData.user;
+        this._isAnonymous = Boolean(userData.user.is_anonymous);
         this._initialized = true;
-        console.log(`[playerAuthService] Restored existing session: ${session.user.id} (is_anonymous: ${this._isAnonymous})`);
+        console.log(`[playerAuthService] Restored verified session: ${userData.user.id} (is_anonymous: ${this._isAnonymous})`);
         return {
-          user: session.user,
+          user: userData.user,
           session,
           isAnonymous: this._isAnonymous
         };
       }
 
-      // No session found: Do NOT call signInAnonymously(). Remain unauthenticated.
-      this._session = null;
-      this._currentUser = null;
-      this._isAnonymous = false;
-      this._initialized = true;
-      return { user: null, session: null, isAnonymous: false };
+      // No session found: automatically create anonymous guest session
+      return this.ensurePlayerAuth();
     } catch (err) {
       console.error('[playerAuthService] Unexpected error during session restoration:', err);
       this._session = null;
@@ -86,13 +105,23 @@ class PlayerAuthService {
   }
 
   /**
-   * Ensure Player Auth (Controlled Guest Creation).
-   * Called ONLY when player confirms entering PlayBank (completing onboarding) or starting a game.
-   * Features:
-   * 1. Concurrency lock (In-flight promise mutex)
-   * 2. Double-check getSession() inside lock
-   * 3. Calls signInAnonymously() only if STILL no session
-   * 4. Releases lock in finally block to allow retries on failure
+   * Force refresh guest credentials if stale or deleted on server
+   */
+  async forceRefreshGuestAuth() {
+    console.warn('[playerAuthService] Force refreshing guest auth credentials...');
+    if (isSupabaseConfigured && supabase) {
+      await supabase.auth.signOut().catch(() => {});
+    }
+    this._session = null;
+    this._currentUser = null;
+    this._isAnonymous = false;
+    this._initialized = false;
+    return this.ensurePlayerAuth();
+  }
+
+  /**
+   * Ensure Player Auth (Controlled Guest Creation with Server Liveness Check).
+   * Called ONLY when player confirms entering PlayBank or starting a game.
    */
   async ensurePlayerAuth() {
     // 1. Fast check if already authenticated in memory
@@ -115,22 +144,27 @@ class PlayerAuthService {
           return { user: null, session: null, isAnonymous: true, offline: true };
         }
 
-        // Double check: inside lock, call getSession() to confirm if another tab or event just established a session
+        // Double check: inside lock, call getSession() and verify with getUser()
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         if (session && session.user) {
-          this._session = session;
-          this._currentUser = session.user;
-          this._isAnonymous = Boolean(session.user.is_anonymous);
-          this._initialized = true;
-          console.log(`[playerAuthService] ensurePlayerAuth: Reused existing session: ${session.user.id}`);
-          return {
-            user: session.user,
-            session,
-            isAnonymous: this._isAnonymous
-          };
+          const { data: userData, error: userError } = await supabase.auth.getUser();
+          if (!userError && userData?.user) {
+            this._session = session;
+            this._currentUser = userData.user;
+            this._isAnonymous = Boolean(userData.user.is_anonymous);
+            this._initialized = true;
+            console.log(`[playerAuthService] ensurePlayerAuth: Reused verified session: ${userData.user.id}`);
+            return {
+              user: userData.user,
+              session,
+              isAnonymous: this._isAnonymous
+            };
+          }
+          console.warn('[playerAuthService] ensurePlayerAuth: Stale session detected, purging...', userError?.message);
+          await supabase.auth.signOut().catch(() => {});
         }
 
-        // STILL no session: create Anonymous Guest
+        // Create Anonymous Guest
         console.log('[playerAuthService] ensurePlayerAuth: Creating new anonymous guest session...');
         const { data, error: anonError } = await supabase.auth.signInAnonymously();
 
@@ -192,7 +226,7 @@ class PlayerAuthService {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, player_code, nickname, age_group, source_channel, daily_goal_minutes, is_guest, account_status')
+        .select('id, player_code, nickname, exact_age, age_group, source_channel, daily_goal_minutes, is_guest, account_status')
         .eq('id', uid)
         .maybeSingle();
       if (error) {
@@ -234,15 +268,24 @@ class PlayerAuthService {
   }
 
   /**
-   * Sync Player Profile metadata (nickname, age_group, channel, goal) to public.profiles
+   * Sync Player Profile metadata (nickname, age_group, exact_age, channel, goal) to public.profiles
    */
-  async syncProfileMetadata({ nickname, age_group, source_channel, daily_goal_minutes } = {}) {
+  async syncProfileMetadata({ nickname, age_group, exact_age, source_channel, daily_goal_minutes } = {}) {
     const uid = this.getUserId();
     if (!isSupabaseConfigured || !supabase || !uid) return null;
     try {
       const updates = { last_active_at: new Date().toISOString() };
       if (nickname) updates.nickname = nickname.trim();
-      if (age_group) {
+      if (exact_age !== undefined && exact_age !== null) {
+        const parsed = parseInt(exact_age, 10);
+        if (!isNaN(parsed) && parsed >= 5 && parsed <= 25) {
+          updates.exact_age = parsed;
+          if (!age_group) {
+            updates.age_group = mapExactAgeToAgeGroup(parsed);
+          }
+        }
+      }
+      if (age_group && !updates.age_group) {
         updates.age_group = (typeof age_group === 'object' && age_group !== null ? age_group.id : age_group) || '13-15';
       }
       if (source_channel !== undefined) {
@@ -255,7 +298,7 @@ class PlayerAuthService {
         .from('profiles')
         .update(updates)
         .eq('id', uid)
-        .select('id, player_code, nickname, age_group, source_channel, daily_goal_minutes, is_guest, account_status')
+        .select('id, player_code, nickname, exact_age, age_group, source_channel, daily_goal_minutes, is_guest, account_status')
         .maybeSingle();
       if (error) {
         console.warn('[playerAuthService] syncProfileMetadata error:', error.message);
@@ -365,13 +408,20 @@ class PlayerAuthService {
         throw new Error('No active player session found to upgrade');
       }
 
+      const exactAge = metadata.exact_age ? parseInt(metadata.exact_age, 10) : null;
+      const targetAgeGroup = metadata.age_group || (exactAge ? mapExactAgeToAgeGroup(exactAge) : null);
+      const targetNickname = nickname || user.user_metadata?.nickname || 'Player';
+
       // Update user credentials in auth.users
+      let authUser = null;
       const { data, error } = await supabase.auth.updateUser({
         email,
         password,
         data: {
           ...metadata,
-          nickname: nickname || user.user_metadata?.nickname || 'Player',
+          nickname: targetNickname,
+          exact_age: exactAge,
+          age_group: targetAgeGroup,
           avatar_id: metadata.avatar_id || user.user_metadata?.avatar_id || 'tiger',
           avatar_type: metadata.avatar_type || user.user_metadata?.avatar_type || 'preset',
           avatar_url: metadata.avatar_url !== undefined ? metadata.avatar_url : (user.user_metadata?.avatar_url || null),
@@ -380,26 +430,68 @@ class PlayerAuthService {
       });
 
       if (error) {
-        console.error('[playerAuthService] upgradeGuestToRegistered error:', error.message);
-        return { success: false, error: error.message };
+        console.warn('[playerAuthService] upgradeGuestToRegistered auth notice:', error.message);
+        const lower = String(error.message || '').toLowerCase();
+        const isDuplicate = (
+          lower.includes('already registered') ||
+          lower.includes('already exists') ||
+          lower.includes('email_exists') ||
+          lower.includes('already in use') ||
+          lower.includes('duplicate') ||
+          lower.includes('user already registered')
+        );
+        if (isDuplicate) {
+          return { success: false, error: error.message };
+        }
+        // For non-duplicate errors (e.g. SMTP email rate limits), continue to update public.profiles
+      } else {
+        authUser = data?.user;
       }
 
-      // Sync public.profiles to is_guest = false
+      // Sync public.profiles to is_guest = false with exact_age & age_group
       const profileUpdates = {
         is_guest: false,
-        nickname: nickname || user.user_metadata?.nickname || 'Player',
+        nickname: targetNickname,
         last_active_at: new Date().toISOString()
       };
+      if (exactAge !== null) {
+        profileUpdates.exact_age = exactAge;
+      }
+      if (targetAgeGroup) {
+        profileUpdates.age_group = targetAgeGroup;
+      }
 
-      await supabase
+      const { data: updatedProfile, error: profileErr } = await supabase
         .from('profiles')
         .update(profileUpdates)
-        .eq('id', user.id);
+        .eq('id', user.id)
+        .select('id, player_code, nickname, exact_age, age_group, is_guest, account_status')
+        .maybeSingle();
 
-      this._currentUser = data.user;
-      this._isAnonymous = false;
+      if (profileErr) {
+        console.error('[playerAuthService] upgradeGuestToRegistered profile update error:', profileErr.message);
+        return { success: false, error: profileErr.message };
+      }
 
-      return { success: true, user: data.user };
+      if (authUser) {
+        this._currentUser = authUser;
+        this._isAnonymous = false;
+      } else if (this._currentUser) {
+        this._currentUser = {
+          ...this._currentUser,
+          email: email,
+          user_metadata: {
+            ...this._currentUser.user_metadata,
+            nickname: targetNickname,
+            exact_age: exactAge,
+            age_group: targetAgeGroup,
+            is_guest: false
+          }
+        };
+        this._isAnonymous = false;
+      }
+
+      return { success: true, user: this._currentUser, profile: updatedProfile };
     } catch (err) {
       return { success: false, error: err.message };
     }
@@ -550,7 +642,7 @@ class PlayerAuthService {
       try {
         const { data: prof } = await supabase
           .from('profiles')
-          .select('id, player_code, nickname, age_group, source_channel, daily_goal_minutes, is_guest, avatar_id, avatar_type, avatar_url')
+          .select('id, player_code, nickname, exact_age, age_group, source_channel, daily_goal_minutes, is_guest, avatar_id, avatar_type, avatar_url')
           .eq('id', targetUserId)
           .maybeSingle();
         if (prof) cloudProfile = prof;
@@ -575,6 +667,8 @@ class PlayerAuthService {
     const finalAvatarId = cloudProfile?.avatar_id || targetUser.avatarId || 'default';
     const finalAvatarUrl = cloudProfile?.avatar_url || targetUser.avatarUrl || null;
     const finalBP = typeof cloudUserBP === 'number' && cloudUserBP > 0 ? cloudUserBP : (targetUser.total_bp || 0);
+    const finalExactAge = cloudProfile?.exact_age || targetUser.exact_age || targetUser.age || null;
+    const finalAgeGroup = cloudProfile?.age_group || targetUser.age_group || (finalExactAge ? mapExactAgeToAgeGroup(finalExactAge) : null);
 
     const sessionUser = {
       ...targetUser,
@@ -583,6 +677,9 @@ class PlayerAuthService {
       ic_name: finalNickname,
       nickname: finalNickname,
       player_code: cloudProfile?.player_code || targetUser.player_code,
+      exact_age: finalExactAge,
+      age: finalExactAge,
+      age_group: finalAgeGroup,
       avatarType: finalAvatarType,
       avatarId: finalAvatarId,
       avatarUrl: finalAvatarUrl,
@@ -617,6 +714,305 @@ class PlayerAuthService {
     } catch (_) {}
 
     return sessionUser;
+  }
+
+  /**
+   * Safe purge of local BP caches
+   * Strictly keeps nickname, avatar, selectedPath, tutorialComplete, and Supabase auth tokens intact!
+   */
+  purgeLocalBP() {
+    try {
+      localStorage.removeItem('playbank_user_bp');
+      const guestRaw = localStorage.getItem('playbank_guest_profile');
+      if (guestRaw) {
+        const parsed = JSON.parse(guestRaw);
+        if (parsed && typeof parsed === 'object') {
+          delete parsed.bankPoint;
+          delete parsed.effectiveBP;
+          delete parsed.bp;
+          localStorage.setItem('playbank_guest_profile', JSON.stringify(parsed));
+        }
+      }
+      const sessionRaw = localStorage.getItem('playbank_session');
+      if (sessionRaw) {
+        const parsed = JSON.parse(sessionRaw);
+        if (parsed && typeof parsed === 'object') {
+          delete parsed.total_bp;
+          delete parsed.bankPoint;
+          localStorage.setItem('playbank_session', JSON.stringify(parsed));
+        }
+      }
+    } catch (e) {
+      console.warn('[playerAuthService] purgeLocalBP notice:', e);
+    }
+  }
+
+  /**
+   * Authoritative Wallet API (Production Supabase)
+   */
+  async getMyWallet() {
+    if (!isSupabaseConfigured || !supabase) {
+      return { balance_bp: 0, lifetime_earned_bp: 0, lifetime_spent_bp: 0, has_booster: false, booster_multiplier: 1 };
+    }
+    try {
+      const { data, error } = await supabase.rpc('get_my_wallet');
+      if (error) {
+        console.warn('[playerAuthService] get_my_wallet error:', error.message);
+        return { balance_bp: 0, lifetime_earned_bp: 0, lifetime_spent_bp: 0, has_booster: false, booster_multiplier: 1, error: error.message };
+      }
+      const wallet = Array.isArray(data) ? (data[0] || {}) : (data || {});
+      const result = {
+        balance_bp: wallet.balance_bp ?? 0,
+        lifetime_earned_bp: wallet.lifetime_earned_bp ?? 0,
+        lifetime_spent_bp: wallet.lifetime_spent_bp ?? 0,
+        has_booster: Boolean(wallet.has_booster),
+        booster_multiplier: wallet.booster_multiplier ?? 1,
+        booster_unlocked_at: wallet.booster_unlocked_at || null
+      };
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('playbank:wallet-updated', { detail: result }));
+      }
+      return result;
+    } catch (err) {
+      console.error('[playerAuthService] getMyWallet exception:', err);
+      return { balance_bp: 0, lifetime_earned_bp: 0, lifetime_spent_bp: 0, has_booster: false, booster_multiplier: 1, error: err.message };
+    }
+  }
+
+  async unlockBpBooster() {
+    if (!isSupabaseConfigured || !supabase) {
+      return { error: 'Supabase is not configured' };
+    }
+    try {
+      const { data, error } = await supabase.rpc('unlock_bp_booster');
+      if (error) {
+        console.error('[playerAuthService] unlock_bp_booster error:', error);
+        return { error: error.message };
+      }
+      const res = Array.isArray(data) ? (data[0] || {}) : (data || {});
+      if (typeof window !== 'undefined' && res.balance_bp !== undefined) {
+        window.dispatchEvent(new CustomEvent('playbank:wallet-updated', {
+          detail: {
+            balance_bp: res.balance_bp,
+            has_booster: Boolean(res.has_booster),
+            booster_multiplier: res.booster_multiplier || 3
+          }
+        }));
+      }
+      return { success: true, ...res };
+    } catch (err) {
+      console.error('[playerAuthService] unlockBpBooster exception:', err);
+      return { error: err.message };
+    }
+  }
+
+  async claimDailyMission(missionKey) {
+    if (!isSupabaseConfigured || !supabase) {
+      return { error: 'Supabase is not configured' };
+    }
+    try {
+      const { data, error } = await supabase.rpc('claim_daily_mission', {
+        p_mission_key: missionKey
+      });
+      if (error) {
+        console.warn('[playerAuthService] claim_daily_mission error:', error.message);
+        return { error: error.message };
+      }
+      const res = Array.isArray(data) ? (data[0] || {}) : (data || {});
+      if (typeof window !== 'undefined' && res.balance_bp !== undefined) {
+        window.dispatchEvent(new CustomEvent('playbank:wallet-updated', {
+          detail: {
+            balance_bp: res.balance_bp,
+            earned_bp: res.earned_bp,
+            mission_key: res.mission_key
+          }
+        }));
+      }
+      return { success: true, ...res };
+    } catch (err) {
+      console.error('[playerAuthService] claimDailyMission exception:', err);
+      return { error: err.message };
+    }
+  }
+
+  async claimDailyStreak() {
+    if (!isSupabaseConfigured || !supabase) {
+      return { error: 'Supabase is not configured' };
+    }
+    try {
+      const { data, error } = await supabase.rpc('claim_daily_streak');
+      if (error) {
+        console.warn('[playerAuthService] claim_daily_streak error:', error.message);
+        return { error: error.message };
+      }
+      const res = Array.isArray(data) ? (data[0] || {}) : (data || {});
+      if (typeof window !== 'undefined' && res.balance_bp !== undefined) {
+        window.dispatchEvent(new CustomEvent('playbank:wallet-updated', {
+          detail: {
+            balance_bp: res.balance_bp,
+            earned_bp: res.earned_bp,
+            streak_day: res.streak_day
+          }
+        }));
+      }
+      return { success: true, ...res };
+    } catch (err) {
+      console.error('[playerAuthService] claimDailyStreak exception:', err);
+      return { error: err.message };
+    }
+  }
+
+  async claimTutorialReward(totalBP = 190) {
+    if (!isSupabaseConfigured || !supabase) {
+      return { error: 'Supabase is not configured' };
+    }
+    try {
+      await this.getAuthUserId();
+      const { data, error } = await supabase.rpc('claim_tutorial_reward', {
+        p_total_bp: totalBP
+      });
+      if (error) {
+        console.warn('[playerAuthService] claim_tutorial_reward error:', error.message);
+        return { error: error.message };
+      }
+      const res = Array.isArray(data) ? (data[0] || {}) : (data || {});
+      if (typeof window !== 'undefined' && res.balance_bp !== undefined) {
+        window.dispatchEvent(new CustomEvent('playbank:wallet-updated', {
+          detail: {
+            balance_bp: res.balance_bp,
+            earned_bp: res.earned_bp,
+            source: 'tutorial_reward'
+          }
+        }));
+      }
+      return { success: true, ...res };
+    } catch (err) {
+      console.error('[playerAuthService] claimTutorialReward exception:', err);
+      return { error: err.message };
+    }
+  }
+
+  async getGardenState() {
+    if (!isSupabaseConfigured || !supabase) {
+      return null;
+    }
+    try {
+      const { data, error } = await supabase.rpc('get_garden_state');
+      if (error) {
+        console.warn('[playerAuthService] get_garden_state error:', error.message);
+        return null;
+      }
+      return data;
+    } catch (err) {
+      console.error('[playerAuthService] getGardenState exception:', err);
+      return null;
+    }
+  }
+
+  async waterGardenTree() {
+    if (!isSupabaseConfigured || !supabase) {
+      return { error: 'Supabase is not configured' };
+    }
+    try {
+      const { data, error } = await supabase.rpc('water_garden_tree');
+      if (error) {
+        console.warn('[playerAuthService] water_garden_tree error:', error.message);
+        return { error: error.message };
+      }
+      return { success: true, data };
+    } catch (err) {
+      console.error('[playerAuthService] waterGardenTree exception:', err);
+      return { error: err.message };
+    }
+  }
+
+  async claimGardenTreeReward(treeId) {
+    if (!isSupabaseConfigured || !supabase) {
+      return { error: 'Supabase is not configured' };
+    }
+    try {
+      const { data, error } = await supabase.rpc('claim_garden_tree_reward', {
+        p_tree_id: treeId
+      });
+      if (error) {
+        console.warn('[playerAuthService] claim_garden_tree_reward error:', error.message);
+        return { error: error.message };
+      }
+      const res = Array.isArray(data) ? (data[0] || {}) : (data || {});
+      if (typeof window !== 'undefined' && res.balance_bp !== undefined) {
+        window.dispatchEvent(new CustomEvent('playbank:wallet-updated', {
+          detail: {
+            balance_bp: res.balance_bp,
+            earned_bp: res.earned_bp,
+            tree_id: res.tree_id
+          }
+        }));
+      }
+      return { success: true, ...res };
+    } catch (err) {
+      console.error('[playerAuthService] claimGardenTreeReward exception:', err);
+      return { error: err.message };
+    }
+  }
+
+  async openLuckyChest() {
+    if (!isSupabaseConfigured || !supabase) {
+      return { error: 'Supabase is not configured' };
+    }
+    try {
+      const { data, error } = await supabase.rpc('open_lucky_chest');
+      if (error) {
+        console.warn('[playerAuthService] open_lucky_chest error:', error.message);
+        return { error: error.message };
+      }
+      const res = Array.isArray(data) ? (data[0] || {}) : (data || {});
+      if (res.error) {
+        return { error: res.message || res.error, ...res };
+      }
+      if (typeof window !== 'undefined' && res.balance_bp !== undefined) {
+        window.dispatchEvent(new CustomEvent('playbank:wallet-updated', {
+          detail: {
+            balance_bp: res.balance_bp,
+            earned_bp: res.earned_bp,
+            source: 'lucky_chest'
+          }
+        }));
+      }
+      return { success: true, ...res };
+    } catch (err) {
+      console.error('[playerAuthService] openLuckyChest exception:', err);
+      return { error: err.message };
+    }
+  }
+
+  async purchaseMarketplaceItem(productId, shippingDetails = {}) {
+    if (!isSupabaseConfigured || !supabase) {
+      return { error: 'Supabase is not configured' };
+    }
+    try {
+      const { data, error } = await supabase.rpc('purchase_marketplace_item', {
+        p_product_id: productId,
+        p_shipping_details: shippingDetails
+      });
+      if (error) {
+        console.warn('[playerAuthService] purchase_marketplace_item error:', error.message);
+        return { error: error.message };
+      }
+      const res = Array.isArray(data) ? (data[0] || {}) : (data || {});
+      if (typeof window !== 'undefined' && res.balance_bp !== undefined) {
+        window.dispatchEvent(new CustomEvent('playbank:wallet-updated', {
+          detail: {
+            balance_bp: res.balance_bp,
+            spent_bp: res.price_bp,
+            order_id: res.order_id
+          }
+        }));
+      }
+      return { success: true, ...res };
+    } catch (err) {
+      console.error('[playerAuthService] purchaseMarketplaceItem exception:', err);
+      return { error: err.message };
+    }
   }
 
   /**

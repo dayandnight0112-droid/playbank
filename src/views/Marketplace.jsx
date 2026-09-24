@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Star, Book, Lightbulb, Rocket, Droplet, ArrowLeft, History, ShoppingBag, MapPin, CreditCard, ChevronRight, Check } from 'lucide-react';
 import { mockDb } from '../lib/mockDb';
+import { playerAuthService } from '../lib/playerAuthService';
 import CustomModal from '../components/CustomModal';
 
 const countryCodes = [
@@ -116,7 +117,7 @@ const Marketplace = ({ userBP, currentUser, onRegister, onUserUpdate }) => {
     setErrorMsg('');
   };
 
-  const handlePlaceOrder = (e) => {
+  const handlePlaceOrder = async (e) => {
     e.preventDefault();
     if (!shippingName.trim()) {
       setErrorMsg('Please enter your full name');
@@ -145,6 +146,23 @@ const Marketplace = ({ userBP, currentUser, onRegister, onUserUpdate }) => {
       address: fullAddr,
       email: currentUser ? currentUser.email : 'guest@playbank.com'
     };
+
+    if (activeTab === 'bp') {
+      const rpcRes = await playerAuthService.purchaseMarketplaceItem(selectedProduct.id, shippingDetails);
+      if (rpcRes.error) {
+        setErrorMsg(rpcRes.error);
+        return;
+      }
+      setSuccessOrder({
+        id: rpcRes.order_id || ('ORD-' + Date.now().toString().slice(-8).toUpperCase()),
+        productName: rpcRes.product_name || selectedProduct.name,
+        price: selectedProduct.bp_price,
+        type: 'bp',
+        shippingDetails
+      });
+      setView('success');
+      return;
+    }
 
     const result = mockDb.createOrder(
       currentUser ? currentUser.id : null,

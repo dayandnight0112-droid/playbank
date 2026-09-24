@@ -180,6 +180,7 @@ const AdventureScene = ({
         }}
       >
         <PrimaryButton
+          data-tutorial-target="home-continue-button"
           onClick={onContinue}
           size="large"
           variant="primary"

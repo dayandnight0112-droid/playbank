@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Sparkles, Clock, Check, Lock } from 'lucide-react';
 import PrimaryButton from '../common/PrimaryButton';
 import { mockDb } from '../../lib/mockDb';
+import { playerAuthService } from '../../lib/playerAuthService';
 import { playLootSparkleSound, playPunchyPopSound } from '../../lib/soundEffects';
 
 /**
@@ -40,26 +41,40 @@ const LuckyChestModal = ({
 
   const isReady = chestState.isReady;
 
-  const handleOpenChest = () => {
+  const handleOpenChest = async () => {
     if (!isReady || animationStage !== 'idle') return;
 
     // Trigger shaking animation
     setAnimationStage('shaking');
 
-    setTimeout(() => {
-      const res = mockDb.openLuckyChest();
-      if (res.success) {
-        playLootSparkleSound();
-        setRewardResult(res);
-        setAnimationStage('revealed');
-        setChestState(res.nextState);
-        if (onUpdateBP) {
-          onUpdateBP(res.newTotalBP);
-        }
-      } else {
+    try {
+      // Step 1: Call authoritative server RPC
+      const rpcRes = await playerAuthService.openLuckyChest();
+      if (rpcRes.error) {
+        console.warn('[LuckyChest] RPC error:', rpcRes.error);
         setAnimationStage('idle');
+        return;
       }
-    }, 1200);
+
+      // Step 2: Sync with local client store
+      const localRes = mockDb.openLuckyChest();
+      playLootSparkleSound();
+      setRewardResult({
+        tier: rpcRes.tier || localRes.tier,
+        rewardBP: rpcRes.reward_bp ?? localRes.rewardBP,
+        rewardWater: rpcRes.reward_water ?? localRes.rewardWater,
+        specialItem: localRes.specialItem
+      });
+      setAnimationStage('revealed');
+      setChestState(mockDb.getLuckyChestState());
+
+      if (onUpdateBP && typeof rpcRes.balance_bp === 'number') {
+        onUpdateBP(rpcRes.balance_bp);
+      }
+    } catch (err) {
+      console.error('[LuckyChest] Open failed:', err);
+      setAnimationStage('idle');
+    }
   };
 
   const handleClose = () => {

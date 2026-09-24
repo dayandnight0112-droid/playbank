@@ -3,6 +3,7 @@ import { X, Check, Flame, Gift, Sparkles } from 'lucide-react';
 import PrimaryButton from '../common/PrimaryButton';
 import { mockDb } from '../../lib/mockDb';
 import { playCelebrationSound } from '../../lib/soundEffects';
+import { playerAuthService } from '../../lib/playerAuthService';
 
 /**
  * StreakRewardModal
@@ -19,11 +20,12 @@ const StreakRewardModal = ({
 }) => {
   const [streakData, setStreakData] = useState(() => mockDb.getStreakState());
   const [celebration, setCelebration] = useState(null);
+  const [errorMessage, setErrorMessage] = useState(null);
 
   if (!isOpen) return null;
 
   const currentStreak = streakData.currentStreak || 3;
-  const hasClaimedToday = !!streakData.hasClaimedToday;
+  const hasClaimedToday = streakData.claimedToday || false;
   const activeDayInCycle = ((currentStreak - 1) % 7) + 1;
   const targetClaimDay = hasClaimedToday ? activeDayInCycle : ((currentStreak) % 7) || 1;
 
@@ -37,19 +39,27 @@ const StreakRewardModal = ({
     { day: 7, bp: 100, icon: '👑', title: 'Day 7 · GRAND CHEST', isMega: true }
   ];
 
-  const handleClaimToday = () => {
+  const handleClaimToday = async () => {
     if (hasClaimedToday) return;
 
+    // Call server-authoritative claim_daily_streak RPC
+    const rpcRes = await playerAuthService.claimDailyStreak();
+    if (rpcRes.error) {
+      setErrorMessage(rpcRes.error);
+      setTimeout(() => setErrorMessage(null), 3000);
+      return;
+    }
+
     const res = mockDb.claimDailyStreak();
-    if (res.success) {
+    if (res.success || rpcRes.streak_day) {
       playCelebrationSound();
-      setStreakData(res.state);
-      if (onUpdateBP) {
-        onUpdateBP(res.newTotalBP);
+      setStreakData(res.state || { ...streakData, claimedToday: true, currentStreak: rpcRes.streak_day });
+      if (onUpdateBP && typeof rpcRes.balance_bp === 'number') {
+        onUpdateBP(rpcRes.balance_bp);
       }
       setCelebration({
-        rewardBP: res.rewardBP,
-        isSuper: res.isSuperChest
+        rewardBP: rpcRes.earned_bp || res.rewardBP,
+        isSuper: rpcRes.streak_day === 7 || res.isSuperChest
       });
       setTimeout(() => setCelebration(null), 3000);
     }

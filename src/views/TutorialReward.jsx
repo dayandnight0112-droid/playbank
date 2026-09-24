@@ -3,32 +3,57 @@ import { Sparkles, Trophy, Star, Flame, Award, Map, ArrowRight, ShieldCheck, Che
 import PrimaryButton from '../components/common/PrimaryButton';
 import SaveProgressPromptModal from '../components/SaveProgressPromptModal';
 import { mockDb } from '../lib/mockDb';
+import { playerAuthService } from '../lib/playerAuthService';
 
-const TutorialReward = ({ guest, stats = {}, onEnterLobby, onLoginAndSave }) => {
+const TutorialReward = ({ guest, stats = {}, onEnterLobby, onLoginAndSave, onUpdateBP }) => {
   // 'summary' | 'chest_opened'
   const [stage, setStage] = useState('summary');
   const [chestOpening, setChestOpening] = useState(false);
   const [showSavePrompt, setShowSavePrompt] = useState(false);
 
-  const earnedBP = stats.earnedBP || 120;
+  const earnedBP = stats.earnedBP || 140;
   const maxCombo = stats.maxCombo || 6;
   const chestBonusBP = 50;
   const totalBP = earnedBP + chestBonusBP;
 
-  const handleOpenChest = () => {
+  const handleProceedToLobby = () => {
+    const currentGuest = mockDb.getGuestProfile();
+    const guestId = currentGuest?.playerId || currentGuest?.id || 'guest';
+    mockDb.grantHomeTutorialEligibility(guestId);
+    if (onEnterLobby) onEnterLobby();
+  };
+
+  const handleOpenChest = async () => {
     setChestOpening(true);
+    let creditedBP = totalBP;
+    try {
+      const res = await playerAuthService.claimTutorialReward(totalBP);
+      if (typeof res?.balance_bp === 'number') {
+        creditedBP = res.balance_bp;
+      }
+    } catch (err) {
+      console.warn('[TutorialReward] claimTutorialReward error:', err);
+    }
+
+    if (onUpdateBP) {
+      onUpdateBP(creditedBP);
+    }
+
     setTimeout(() => {
       setChestOpening(false);
       setStage('chest_opened');
 
-      // Persist bonus 50 BP and Starter Badge to guest profile
+      // Persist Starter Badge & authoritative bankPoint to guest profile
       const currentGuest = mockDb.getGuestProfile();
       if (currentGuest) {
         mockDb.updateGuestProfile({
-          bankPoint: (currentGuest.bankPoint || earnedBP) + chestBonusBP,
+          bankPoint: creditedBP,
           achievements: Array.from(new Set([...(currentGuest.achievements || []), 'starter_badge'])),
-          tutorialComplete: true
+          tutorialComplete: true,
+          eligibleForHomeTutorial: true
         });
+        const guestId = currentGuest.playerId || currentGuest.id || 'guest';
+        mockDb.grantHomeTutorialEligibility(guestId);
       }
     }, 700);
   };
@@ -385,7 +410,7 @@ const TutorialReward = ({ guest, stats = {}, onEnterLobby, onLoginAndSave }) => 
             </PrimaryButton>
 
             <button
-              onClick={() => onEnterLobby && onEnterLobby()}
+              onClick={handleProceedToLobby}
               style={{
                 background: 'transparent',
                 border: 'none',
@@ -412,7 +437,7 @@ const TutorialReward = ({ guest, stats = {}, onEnterLobby, onLoginAndSave }) => 
         }}
         onContinueGuest={() => {
           setShowSavePrompt(false);
-          if (onEnterLobby) onEnterLobby();
+          handleProceedToLobby();
         }}
       />
 

@@ -10,7 +10,8 @@ const PrimaryButton = ({
   size = 'large', // 'normal' | 'large'
   style = {},
   className = '',
-  enableSound = true
+  enableSound = true,
+  ...restProps
 }) => {
   const isLarge = size === 'large';
 
@@ -53,6 +54,7 @@ const PrimaryButton = ({
       onClick={handleClick}
       disabled={disabled}
       className={`game-primary-btn ${className}`}
+      {...restProps}
       style={{
         position: 'relative',
         width: '100%',

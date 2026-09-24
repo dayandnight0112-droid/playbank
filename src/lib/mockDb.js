@@ -12,6 +12,49 @@ const BACKUP_SNAPSHOT_KEY = 'playbank_data_backup_snapshot';
 const ONBOARDING_COMPLETE_KEY = 'playbank_onboarding_complete';
 const PLAYER_PROFILE_KEY = 'playbank_player_profile';
 
+export const HOME_TUTORIAL_VERSION = 1;
+export const HOME_TUTORIAL_KEY_PREFIX = 'playbank_home_tutorial_';
+
+export const createInitialHomeTutorialState = (eligible = true) => ({
+  version: HOME_TUTORIAL_VERSION,
+  status: 'in_progress', // 'in_progress' | 'completed'
+  currentStep: 1, // 1: daily, 2: streak, 3: shop, 4: start_game
+  subStep: 'highlight', // 'highlight' | 'modal_opened' | 'in_shop'
+  completedAt: null,
+  eligible: !!eligible
+});
+
+const getHomeTutorialKey = (playerId) => {
+  if (!playerId) return null;
+  return `${HOME_TUTORIAL_KEY_PREFIX}${playerId}`;
+};
+
+const getHomeTutorialStateRaw = (playerId) => {
+  const key = getHomeTutorialKey(playerId);
+  if (!key) return null;
+  const state = safeGetJSON(key, null);
+  if (!state) return null;
+  return {
+    version: state.version || HOME_TUTORIAL_VERSION,
+    status: state.status || 'in_progress',
+    currentStep: typeof state.currentStep === 'number' ? state.currentStep : 1,
+    subStep: state.subStep || 'highlight',
+    completedAt: state.completedAt || null,
+    eligible: state.eligible !== undefined ? !!state.eligible : true
+  };
+};
+
+const saveHomeTutorialStateRaw = (playerId, state) => {
+  const key = getHomeTutorialKey(playerId);
+  if (!key) return false;
+  if (!state) {
+    localStorage.removeItem(key);
+    return true;
+  }
+  return safeSetJSON(key, state);
+};
+
+
 export const safeGetJSON = (key, fallback = null) => {
   try {
     const raw = localStorage.getItem(key);
@@ -327,7 +370,7 @@ const generateReferralCode = (email) => {
 
 export const mockDb = {
   // Register a new user
-  registerUser: (email, password, whatsapp, guestBP, authUid = null) => {
+  registerUser: (email, password, whatsapp, guestBP, authUid = null, exactAge = null, ageGroup = null, customNickname = null) => {
     const users = getUsers();
     if (users.find(u => u.email === email)) {
       return { error: 'Email already exists' };
@@ -339,6 +382,9 @@ export const mockDb = {
       console.warn('[mockDb] Warning: registering user without valid UUID authUid');
     }
 
+    const parsedAge = exactAge ? Number(exactAge) : null;
+    const finalNickname = customNickname || guest?.guestName || email.split('@')[0] || 'Player';
+
     const newUser = {
       id: effectiveUserId,
       legacy_id: Date.now().toString(),
@@ -347,9 +393,12 @@ export const mockDb = {
       whatsapp,
       referral_code: generateReferralCode(email),
       referred_by: null,
-      ic_name: null,
+      ic_name: finalNickname,
+      nickname: finalNickname,
       ic_no: null,
-      age: null,
+      age: parsedAge,
+      exact_age: parsedAge,
+      age_group: ageGroup || (parsedAge ? (parsedAge <= 9 ? '7-9' : parsedAge <= 12 ? '10-12' : parsedAge <= 15 ? '13-15' : '16-17') : (guest?.ageGroup || '13-15')),
       school: null,
       avatarType: guest?.avatarType || 'preset',
       avatarId: guest?.avatarId || DEFAULT_AVATAR_ID,
@@ -366,6 +415,13 @@ export const mockDb = {
     
     // Auto login
     localStorage.setItem(CURRENT_SESSION_KEY, JSON.stringify(newUser));
+
+    // Phase 1: Seamless migration of home tutorial state from guest to registered user
+    const guestId = guest?.playerId || guest?.id;
+    if (guestId && effectiveUserId) {
+      mockDb.migrateHomeTutorialState(guestId, effectiveUserId);
+    }
+
     return { user: newUser };
   },
 
@@ -453,6 +509,12 @@ export const mockDb = {
     const updatedUser = users[userIndex];
     localStorage.setItem(CURRENT_SESSION_KEY, JSON.stringify(updatedUser));
 
+    // Phase 1: Seamless migration of home tutorial state from guest to existing registered user
+    const guestId = guestData.playerId || guestData.id || getGuestProfileRaw()?.playerId || getGuestProfileRaw()?.id;
+    if (guestId && userId) {
+      mockDb.migrateHomeTutorialState(guestId, userId);
+    }
+
     // Clear guest profile & reset guest BP in storage
     mockDb.clearGuestProfile();
     localStorage.setItem('playbank_user_bp', '0');
@@ -475,6 +537,13 @@ export const mockDb = {
   // Logout current user
   logoutUser: () => {
     localStorage.removeItem(CURRENT_SESSION_KEY);
+  },
+
+  // Save current user session
+  saveSession: (session) => {
+    if (session) {
+      safeSetJSON(CURRENT_SESSION_KEY, session);
+    }
   },
 
   // Get currently logged in user session
@@ -608,16 +677,13 @@ export const mockDb = {
     return getUsers().find(u => u.id === userId);
   },
 
-  // Unlock 3X BP Booster
-  unlockBooster: (userId, applyRetroactive = false) => {
+  // Unlock 3X BP Booster (Server-authoritative rate only, zero retroactive BP multiplication)
+  unlockBooster: (userId) => {
     const users = getUsers();
     const userIndex = users.findIndex(u => u.id === userId);
     if (userIndex === -1) return null;
 
     users[userIndex].score_multiplier = 3;
-    if (applyRetroactive) {
-      users[userIndex].total_bp *= 3;
-    }
     saveUsers(users);
 
     const session = mockDb.getCurrentSession();
@@ -1081,49 +1147,25 @@ export const mockDb = {
     return state;
   },
 
-  // Step 36: Dual-track safe BP getter & integrity verifier
+  // Authoritative Safe BP getter (Client read-only fallback, never mutates localStorage BP)
   getSafeUserBP: () => {
     const session = mockDb.getCurrentSession();
     if (session && session.id) {
       const bp = Number(session.total_bp);
       return Number.isFinite(bp) ? Math.max(0, Math.round(bp)) : 0;
     }
-    const guest = mockDb.getGuestProfile();
-    const storageRaw = localStorage.getItem('playbank_user_bp');
-    const storageBP = storageRaw !== null ? parseInt(storageRaw, 10) : 0;
-    const guestBP = guest && typeof guest.bankPoint === 'number' ? guest.bankPoint : 0;
-
-    const safeStorageBP = isNaN(storageBP) ? 0 : Math.max(0, storageBP);
-    const safeGuestBP = isNaN(guestBP) ? 0 : Math.max(0, guestBP);
-
-    // Reconcile and pick highest valid point
-    const finalBP = Math.max(safeStorageBP, safeGuestBP);
-
-    if (guest && guest.bankPoint !== finalBP) {
-      mockDb.updateGuestProfile({ bankPoint: finalBP });
+    const guest = getGuestProfileRaw();
+    if (guest && typeof guest.bankPoint === 'number') {
+      return Math.max(0, Math.round(guest.bankPoint));
     }
-    if (safeStorageBP !== finalBP || storageRaw === null) {
-      localStorage.setItem('playbank_user_bp', finalBP.toString());
-    }
-    return finalBP;
+    const rawBp = parseInt(localStorage.getItem('playbank_user_bp'), 10);
+    return Number.isFinite(rawBp) ? Math.max(0, rawBp) : 0;
   },
 
-  // Step 9 & Step 36: 增加用户 BP（双轨原子级保护，严格防重与防篡改）
+  // Authoritative server RPC protection: Client direct awardBP is disabled
   awardBP: (amount = 0) => {
-    const validAmount = Math.round(Number(amount) || 0);
-    if (validAmount <= 0) return mockDb.getSafeUserBP();
-
-    const session = mockDb.getCurrentSession();
-    if (session && session.id) {
-      const updated = mockDb.updateUserBP(session.id, validAmount);
-      return updated?.total_bp || 0;
-    } else {
-      const current = mockDb.getSafeUserBP();
-      const next = current + validAmount;
-      localStorage.setItem('playbank_user_bp', next.toString());
-      mockDb.updateGuestProfile({ bankPoint: next });
-      return next;
-    }
+    console.warn('[mockDb] Client-side awardBP is deprecated. All BP changes must go through Supabase RPCs.');
+    return mockDb.getSafeUserBP();
   },
 
   // Step 9: 100% 树木成熟结算与领取一次性 BP 奖励（严格防重）
@@ -1798,5 +1840,77 @@ export const mockDb = {
     } catch (e) {
       return false;
     }
+  },
+
+  // ========================================================
+  // Phase 1: Home Tutorial State Machine & Persistence
+  // ========================================================
+  getHomeTutorialState: (playerId) => {
+    return getHomeTutorialStateRaw(playerId);
+  },
+
+  saveHomeTutorialState: (playerId, updates = {}) => {
+    if (!playerId) return null;
+    const current = getHomeTutorialStateRaw(playerId) || createInitialHomeTutorialState(true);
+    const updated = {
+      ...current,
+      ...updates
+    };
+    saveHomeTutorialStateRaw(playerId, updated);
+    return updated;
+  },
+
+  grantHomeTutorialEligibility: (playerId) => {
+    if (!playerId) return null;
+    const current = getHomeTutorialStateRaw(playerId);
+    if (current && current.status === 'completed') {
+      return current; // 已完成则不重置
+    }
+    const state = current
+      ? { ...current, eligible: true }
+      : createInitialHomeTutorialState(true);
+    saveHomeTutorialStateRaw(playerId, state);
+    return state;
+  },
+
+  markHomeTutorialComplete: (playerId) => {
+    if (!playerId) return null;
+    const current = getHomeTutorialStateRaw(playerId) || createInitialHomeTutorialState(true);
+    const completedState = {
+      ...current,
+      status: 'completed',
+      currentStep: 4,
+      subStep: 'completed',
+      completedAt: new Date().toISOString()
+    };
+    saveHomeTutorialStateRaw(playerId, completedState);
+    return completedState;
+  },
+
+  isHomeTutorialEligible: (playerId) => {
+    if (!playerId) return false;
+    const state = getHomeTutorialStateRaw(playerId);
+    return !!(state && state.eligible && state.status !== 'completed');
+  },
+
+  migrateHomeTutorialState: (fromPlayerId, toPlayerId) => {
+    if (!fromPlayerId || !toPlayerId || fromPlayerId === toPlayerId) return false;
+    const fromState = getHomeTutorialStateRaw(fromPlayerId);
+    if (!fromState) return false;
+
+    const toState = getHomeTutorialStateRaw(toPlayerId);
+    // 若正式账号已标记完成，保留其完成状态
+    if (toState && toState.status === 'completed') {
+      return false;
+    }
+
+    // 否则平移迁移进度
+    saveHomeTutorialStateRaw(toPlayerId, { ...fromState });
+    return true;
+  },
+
+  resetHomeTutorial: (playerId) => {
+    if (!playerId) return false;
+    return saveHomeTutorialStateRaw(playerId, null);
   }
 };

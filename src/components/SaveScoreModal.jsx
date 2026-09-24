@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { X, Zap, AlertTriangle, LogIn, Mail, ArrowRight, AlertCircle, ArrowLeft } from 'lucide-react';
 import { mockDb } from '../lib/mockDb';
-import { playerAuthService } from '../lib/playerAuthService';
+import { playerAuthService, mapExactAgeToAgeGroup } from '../lib/playerAuthService';
 
 const isDuplicateEmailError = (errMsg) => {
   if (!errMsg) return false;
@@ -20,6 +20,7 @@ const SaveScoreModal = ({ onClose, onRegisterSuccess, onSwitchAccountSuccess, cu
   const [email, setEmail] = useState('');
   const [countryCode, setCountryCode] = useState('+60');
   const [whatsapp, setWhatsapp] = useState('');
+  const [age, setAge] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState(null);
@@ -106,8 +107,13 @@ const SaveScoreModal = ({ onClose, onRegisterSuccess, onSwitchAccountSuccess, cu
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!email || !whatsapp || !password || !confirmPassword) {
-      setError("Please fill in all required fields.");
+    if (!email || !whatsapp || !password || !confirmPassword || !age) {
+      setError("请填写所有必填字段（包括玩家年龄）。");
+      return;
+    }
+    const parsedAge = parseInt(age, 10);
+    if (isNaN(parsedAge) || parsedAge < 5 || parsedAge > 25) {
+      setError("玩家年龄必须在 5 至 25 岁之间。");
       return;
     }
     if (password !== confirmPassword) {
@@ -120,20 +126,36 @@ const SaveScoreModal = ({ onClose, onRegisterSuccess, onSwitchAccountSuccess, cu
 
     const fullWhatsapp = `${countryCode} ${whatsapp}`;
 
+    // Target nickname: Preserve custom guest name if exists, otherwise fallback to email prefix
+    const currentGuest = mockDb.getGuestProfile();
+    const guestName = currentGuest?.guestName?.trim();
+    const isCustomGuestName = guestName && !guestName.startsWith('Guest_') && guestName !== '冒险家';
+    const targetNickname = isCustomGuestName ? guestName : (email.split('@')[0] || 'Player');
+
+    const calculatedAgeGroup = mapExactAgeToAgeGroup(parsedAge);
+
     // Step 4.4: Upgrade current anonymous player session to permanent registered user in Supabase
     let hasDuplicateError = false;
     let upgradedUserId = null;
+    let upgradeFailedError = null;
+
     try {
       const upgradeRes = await playerAuthService.upgradeGuestToRegistered({
         email,
         password,
-        nickname: email.split('@')[0],
-        metadata: { whatsapp: fullWhatsapp }
+        nickname: targetNickname,
+        metadata: {
+          whatsapp: fullWhatsapp,
+          exact_age: parsedAge,
+          age_group: calculatedAgeGroup
+        }
       });
       if (upgradeRes.error) {
         console.warn('[SaveScoreModal] Supabase account upgrade info:', upgradeRes.error);
         if (isDuplicateEmailError(upgradeRes.error)) {
           hasDuplicateError = true;
+        } else {
+          upgradeFailedError = upgradeRes.error;
         }
       } else if (upgradeRes.user?.id) {
         upgradedUserId = upgradeRes.user.id;
@@ -142,14 +164,31 @@ const SaveScoreModal = ({ onClose, onRegisterSuccess, onSwitchAccountSuccess, cu
       console.warn('[SaveScoreModal] Account upgrade fallback:', err);
       if (isDuplicateEmailError(err.message)) {
         hasDuplicateError = true;
+      } else {
+        upgradeFailedError = err.message;
       }
+    }
+
+    if (upgradeFailedError && !hasDuplicateError) {
+      setIsSubmitting(false);
+      setError(upgradeFailedError);
+      return;
     }
 
     if (!upgradedUserId) {
       upgradedUserId = await playerAuthService.getAuthUserId();
     }
 
-    const result = mockDb.registerUser(email, password, fullWhatsapp, currentBP, upgradedUserId);
+    const result = mockDb.registerUser(
+      email,
+      password,
+      fullWhatsapp,
+      currentBP,
+      upgradedUserId,
+      parsedAge,
+      calculatedAgeGroup,
+      targetNickname
+    );
     setIsSubmitting(false);
 
     // Step 2: If email is already registered, trigger Duplicate Email Choice Modal
@@ -261,6 +300,31 @@ const SaveScoreModal = ({ onClose, onRegisterSuccess, onSwitchAccountSuccess, cu
               onChange={(e) => setWhatsapp(e.target.value)}
             />
           </div>
+
+          {/* Player Age Dropdown (PlayBank Rule: Required, 5-25 years old) */}
+          <select
+            value={age}
+            onChange={(e) => setAge(e.target.value)}
+            className="input-field"
+            style={{
+              width: '100%',
+              padding: '0 12px',
+              fontSize: '14px',
+              cursor: 'pointer',
+              color: age ? 'inherit' : 'var(--text-secondary, #6B7280)',
+              fontWeight: age ? 600 : 400
+            }}
+          >
+            <option value="" disabled>
+              请选择玩家年龄 / Select Player Age (5-25 岁) *
+            </option>
+            {Array.from({ length: 21 }, (_, i) => i + 5).map((a) => (
+              <option key={a} value={a}>
+                {a} 岁
+              </option>
+            ))}
+          </select>
+
           <input 
             type="password" 
             placeholder="Password" 

@@ -25,12 +25,20 @@ import { evaluateBossTrigger } from './lib/bossTrigger';
 import OnboardingFlow from './views/onboarding/OnboardingFlow';
 import { quizService } from './lib/quizService';
 import { playerAuthService } from './lib/playerAuthService';
+import HomeTutorialOverlay from './components/tutorial/HomeTutorialOverlay';
 
 function App() {
   const [guestProfile, setGuestProfile] = useState(() => mockDb.getGuestProfile());
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showExitRetention, setShowExitRetention] = useState(false);
   const [tutorialStats, setTutorialStats] = useState({ earnedBP: 120, maxCombo: 6 });
+  const [lobbyActiveModal, setLobbyActiveModal] = useState(null);
+
+  // Phase 2: Top-level Home Tutorial State
+  const currentActivePlayerId = guestProfile?.playerId || guestProfile?.id || 'guest';
+  const [homeTutorialState, setHomeTutorialState] = useState(() => {
+    return mockDb.getHomeTutorialState(currentActivePlayerId);
+  });
   const [quizParams, setQuizParams] = useState({
     gradeId: 'form-4',
     gradeName: 'Form 4',
@@ -97,13 +105,45 @@ function App() {
             const session = mockDb.getCurrentSession();
             if (session) {
               session.total_bp = wallet.balance_bp;
-              mockDb.saveSession(session);
+              if (typeof mockDb.saveSession === 'function') {
+                mockDb.saveSession(session);
+              }
               setCurrentUser({ ...session });
             }
           }
 
           const profile = await playerAuthService.getCloudProfile(res.user.id);
           
+          // Sync cloud exact_age & profile metadata to current session if user is registered
+          if (profile) {
+            const currentSess = mockDb.getCurrentSession();
+            if (currentSess) {
+              let changed = false;
+              if (profile.exact_age && currentSess.exact_age !== profile.exact_age) {
+                currentSess.exact_age = profile.exact_age;
+                currentSess.age = profile.exact_age;
+                changed = true;
+              }
+              if (profile.age_group && currentSess.age_group !== profile.age_group) {
+                currentSess.age_group = profile.age_group;
+                changed = true;
+              }
+              if (profile.nickname && !profile.nickname.startsWith('Guest_') && currentSess.ic_name !== profile.nickname) {
+                currentSess.ic_name = profile.nickname;
+                currentSess.nickname = profile.nickname;
+                changed = true;
+              }
+              if (changed) {
+                if (typeof mockDb.saveSession === 'function') {
+                  mockDb.saveSession(currentSess);
+                } else {
+                  localStorage.setItem('playbank_session', JSON.stringify(currentSess));
+                }
+                setCurrentUser({ ...currentSess });
+              }
+            }
+          }
+
           // Step 10: If cloud profile is already abandoned_guest, purge dirty local credentials immediately
           if (profile?.account_status === 'abandoned_guest') {
             console.warn('[App] Current player account is marked as abandoned_guest on server. Purging local credentials...');
@@ -127,6 +167,9 @@ function App() {
             // NEVER overwrite local custom name with generic 'Guest_xxxx'
             if (profile.nickname && !profile.nickname.startsWith('Guest_')) {
               guestUpdates.guestName = profile.nickname;
+            }
+            if (profile.exact_age) {
+              guestUpdates.exactAge = profile.exact_age;
             }
             const updated = mockDb.updateGuestProfile(guestUpdates);
             if (updated) {
@@ -159,7 +202,8 @@ function App() {
 
   const [currentUser, setCurrentUser] = useState(() => mockDb.getCurrentSession());
   
-  const [userBP, setUserBP] = useState(() => mockDb.getSafeUserBP());
+  // Authoritative server wallet state (starts at 0, loaded from Supabase)
+  const [userBP, setUserBP] = useState(0);
   
   const [playsToday, setPlaysToday] = useState(() => {
     const session = mockDb.getCurrentSession();
@@ -170,18 +214,54 @@ function App() {
     return parseInt(localStorage.getItem(`playbank_plays_today_${session ? session.id : 'guest'}`)) || 0;
   });
 
+  // Purge legacy local BP on mount & load authoritative wallet balance
+  useEffect(() => {
+    playerAuthService.purgeLocalBP();
+    playerAuthService.getMyWallet().then((wallet) => {
+      if (wallet && typeof wallet.balance_bp === 'number') {
+        setUserBP(wallet.balance_bp);
+      }
+    });
+  }, []);
+
+  // Listen to authoritative wallet update events across all game/mission/streak/garden/shop actions
+  useEffect(() => {
+    const handleWalletUpdated = (e) => {
+      if (e.detail && typeof e.detail.balance_bp === 'number') {
+        setUserBP(e.detail.balance_bp);
+      }
+    };
+    window.addEventListener('playbank:wallet-updated', handleWalletUpdated);
+    return () => window.removeEventListener('playbank:wallet-updated', handleWalletUpdated);
+  }, []);
+
   useEffect(() => {
     if (currentUser) {
-      setUserBP(currentUser.total_bp);
+      playerAuthService.getMyWallet().then((wallet) => {
+        if (wallet && typeof wallet.balance_bp === 'number') {
+          setUserBP(wallet.balance_bp);
+        }
+      });
     }
   }, [currentUser]);
 
+  // Phase 2: Sync tutorial state on player or view changes
   useEffect(() => {
-    if (!currentUser) {
-      localStorage.setItem('playbank_user_bp', (userBP || 0).toString());
-      mockDb.updateGuestProfile({ bankPoint: userBP || 0 });
-    }
-  }, [userBP, currentUser]);
+    const id = currentUser?.id || guestProfile?.playerId || guestProfile?.id || 'guest';
+    setHomeTutorialState(mockDb.getHomeTutorialState(id));
+  }, [currentUser, guestProfile, currentView]);
+
+  const handleTutorialStepAdvance = (nextStep, subStep = 'highlight') => {
+    const id = currentUser?.id || guestProfile?.playerId || guestProfile?.id || 'guest';
+    const updated = mockDb.saveHomeTutorialState(id, { currentStep: nextStep, subStep });
+    setHomeTutorialState(updated);
+  };
+
+  const handleTutorialComplete = () => {
+    const id = currentUser?.id || guestProfile?.playerId || guestProfile?.id || 'guest';
+    const completed = mockDb.markHomeTutorialComplete(id);
+    setHomeTutorialState(completed);
+  };
 
   useEffect(() => {
     const lastPlayDate = localStorage.getItem(`playbank_last_play_date_${currentUser ? currentUser.id : 'guest'}`);
@@ -197,14 +277,11 @@ function App() {
     localStorage.setItem(`playbank_last_play_date_${currentUser ? currentUser.id : 'guest'}`, getTodayDateString());
   }, [playsToday, currentUser]);
 
-  // Step 36: Dual-Track Balance Integrity & Self-Healing Guard
   useEffect(() => {
     mockDb.validateAndHealState();
 
     const handleStorageChange = (e) => {
-      if (['playbank_user_bp', 'playbank_session', 'playbank_guest_profile', 'playbank_users'].includes(e.key)) {
-        const safeBP = mockDb.getSafeUserBP();
-        setUserBP(safeBP);
+      if (['playbank_session', 'playbank_guest_profile', 'playbank_users'].includes(e.key)) {
         const session = mockDb.getCurrentSession();
         setCurrentUser(session);
         if (!session) {
@@ -241,16 +318,22 @@ function App() {
     };
 
     const handleWalletUpdated = (e) => {
-      if (e.detail?.balance_bp !== undefined && e.detail?.balance_bp !== null) {
-        console.log('[App] Authoritative wallet update received:', e.detail.balance_bp);
-        setUserBP(e.detail.balance_bp);
-        mockDb.updateGuestProfile({ bankPoint: e.detail.balance_bp });
-        const session = mockDb.getCurrentSession();
-        if (session) {
-          session.total_bp = e.detail.balance_bp;
-          mockDb.saveSession(session);
-          setCurrentUser({ ...session });
+      try {
+        if (e.detail?.balance_bp !== undefined && e.detail?.balance_bp !== null) {
+          console.log('[App] Authoritative wallet update received:', e.detail.balance_bp);
+          setUserBP(e.detail.balance_bp);
+          mockDb.updateGuestProfile({ bankPoint: e.detail.balance_bp });
+          const session = mockDb.getCurrentSession();
+          if (session) {
+            session.total_bp = e.detail.balance_bp;
+            if (typeof mockDb.saveSession === 'function') {
+              mockDb.saveSession(session);
+            }
+            setCurrentUser({ ...session });
+          }
         }
+      } catch (err) {
+        console.error('[App] handleWalletUpdated error:', err);
       }
     };
 
@@ -268,6 +351,12 @@ function App() {
   }, []);
 
   const handleStartChallenge = () => {
+    // Phase 5: If player is currently on Step 4 of Home Tutorial, mark it complete!
+    const id = currentUser?.id || guestProfile?.playerId || guestProfile?.id || 'guest';
+    const tutorial = mockDb.getHomeTutorialState(id);
+    if (tutorial && tutorial.eligible && tutorial.status !== 'completed' && tutorial.currentStep === 4) {
+      handleTutorialComplete();
+    }
     // Step 32: Unlimited Practice Policy - Never block or expel players!
     // Players can play infinitely. Plays 1-5 give 100% BP; plays > 5 give 20% practice BP.
     setCurrentView('select_subject');
@@ -568,6 +657,7 @@ function App() {
             stats={tutorialStats}
             onEnterLobby={() => setCurrentView('home')}
             onLoginAndSave={() => setShowLoginModal(true)}
+            onUpdateBP={(newBP) => setUserBP(newBP)}
           />
         );
       case 'home':
@@ -579,9 +669,11 @@ function App() {
             playsToday={playsToday}
             onStartChallenge={handleStartChallenge}
             onGoMarket={() => setCurrentView('marketplace')}
-            onGoBattle={() => setCurrentView('select_subject')}
+            onGoBattle={handleStartChallenge}
             onGoProfile={() => setCurrentView('profile')}
             onUpdateBP={(newBP) => setUserBP(newBP)}
+            onActiveModalChange={setLobbyActiveModal}
+            externalActiveModal={lobbyActiveModal}
           />
         );
       case 'select_subject':
@@ -669,6 +761,8 @@ function App() {
             onGoMarket={() => setCurrentView('marketplace')}
             onOpenLogin={() => setShowLoginModal(true)}
             onUpdateBP={(newBP) => setUserBP(newBP)}
+            onActiveModalChange={setLobbyActiveModal}
+            externalActiveModal={lobbyActiveModal}
           />
         );
     }
@@ -831,6 +925,24 @@ function App() {
         <BottomNav currentView={currentView} setCurrentView={setCurrentView} />
       )}
 
+      {/* Phase 2: Independent Home Tutorial Overlay (Coordinated across Home & Marketplace) */}
+      {homeTutorialState && homeTutorialState.eligible && homeTutorialState.status !== 'completed' && ['home', 'marketplace'].includes(currentView) && (
+        <HomeTutorialOverlay
+          tutorialState={homeTutorialState}
+          currentView={currentView}
+          userBP={userBP}
+          isModalOpen={!!lobbyActiveModal}
+          activeModalType={lobbyActiveModal}
+          onStepAdvance={handleTutorialStepAdvance}
+          onCloseModal={() => setLobbyActiveModal(null)}
+          onNavigateToHome={() => setCurrentView('home')}
+          onStartGame={() => {
+            handleTutorialComplete();
+            handleStartChallenge();
+          }}
+        />
+      )}
+
       {/* Returning Player Login Modal */}
       <LoginModal
         isOpen={showLoginModal}
@@ -873,9 +985,10 @@ function App() {
           currentBP={userBP}
           onRegisterSuccess={(user) => {
             setCurrentUser(user);
+            setGuestProfile(null);
             setShowSaveModal(false);
             localStorage.setItem('playbank_user_bp', '0'); // Clear guest BP
-            setShowBoosterOffer({ isFirstTimeOffer: user.total_bp >= 200, fromRegistration: true });
+            setShowBoosterOffer({ isFirstTimeOffer: (user.total_bp || userBP) >= 200, fromRegistration: true });
           }}
           onSwitchAccountSuccess={(user) => {
             setCurrentUser(user);
@@ -908,9 +1021,9 @@ function App() {
             if (showBoosterOffer.isFirstTimeOffer) {
               openModal({
                 title: 'Are you sure?',
-                message: 'Are you sure you want to miss out on tripling your currently accumulated BP? If you skip now, this retroactive bonus will be gone forever!',
+                message: 'Are you sure you want to miss out on the 3X BP Booster? All your future quiz answers will earn 30 BP instead of 10 BP!',
                 showCancel: true,
-                confirmText: 'Yes, Skip Bonus',
+                confirmText: 'Skip Booster',
                 onConfirm: () => {
                   if (currentUser) {
                     localStorage.setItem(`playbank_booster_rejected_${currentUser.id}`, 'true');
@@ -921,7 +1034,7 @@ function App() {
                   if (showBoosterOffer.fromRegistration) {
                     openModal({
                       title: 'Registration Successful',
-                      message: 'Your guest BP has been merged into your new account!',
+                      message: 'Your account is ready! Enjoy PlayBank!',
                       confirmText: 'Awesome'
                     });
                   }
@@ -931,17 +1044,17 @@ function App() {
               setShowBoosterOffer(false);
             }
           }}
-          onUnlock={(applyRetroactive) => {
+          onUnlock={async () => {
             if (currentUser) {
-              localStorage.setItem(`playbank_booster_rejected_${currentUser.id}`, 'true'); // Prevents future auto-popups
-              const updatedUser = mockDb.unlockBooster(currentUser.id, applyRetroactive);
-              if (updatedUser) {
-                setCurrentUser(updatedUser);
-                setUserBP(updatedUser.total_bp);
+              localStorage.setItem(`playbank_booster_rejected_${currentUser.id}`, 'true');
+              await playerAuthService.unlockBpBooster();
+              const wallet = await playerAuthService.getMyWallet();
+              if (wallet && typeof wallet.balance_bp === 'number') {
+                setUserBP(wallet.balance_bp);
               }
+              setCurrentUser(prev => prev ? ({ ...prev, score_multiplier: 3, has_booster: true }) : prev);
             }
             setShowBoosterOffer(false);
-            setPendingRetroactive(applyRetroactive);
             setShowCompleteProfile(true);
           }}
         />

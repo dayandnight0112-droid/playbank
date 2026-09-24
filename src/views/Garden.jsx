@@ -3,6 +3,7 @@ import { Droplet, Star, Sparkles, ChevronRight, CheckCircle2, Sprout, Award, Che
 import Confetti from 'react-confetti';
 import { useWindowSize } from 'react-use';
 import { mockDb } from '../lib/mockDb';
+import { playerAuthService } from '../lib/playerAuthService';
 import TreeRenderer, { getStageByGrowth } from '../components/TreeRenderer';
 import TreeCollectionView from '../components/TreeCollectionView';
 import GardenHelpModal from '../components/GardenHelpModal';
@@ -31,6 +32,21 @@ const Garden = ({ userBP = 0, onUpdateBP, onGoQuiz }) => {
   useEffect(() => {
     setLocalBP(userBP);
   }, [userBP]);
+
+  // Sync authoritative garden state from Supabase on mount
+  useEffect(() => {
+    playerAuthService.getGardenState().then(cloudGarden => {
+      if (cloudGarden && typeof cloudGarden.growth === 'number') {
+        setGardenState(prev => ({
+          ...prev,
+          growth: cloudGarden.growth,
+          water: cloudGarden.water_drops ?? prev.water,
+          completedTrees: cloudGarden.claimed_trees ?? prev.completedTrees,
+          currentTreeId: cloudGarden.current_tree_id ?? prev.currentTreeId
+        }));
+      }
+    });
+  }, []);
 
   const currentTree = treesConfig.find(t => t.id === gardenState.currentTreeId) || treesConfig[0];
   const nextTree = mockDb.getNextTreeConfig(currentTree.id);
@@ -117,6 +133,11 @@ const Garden = ({ userBP = 0, onUpdateBP, onGoQuiz }) => {
       let updatedGrowth = gardenState.growth;
       let isAlreadyFinished = false;
 
+      // Sync authoritative water action to Supabase
+      playerAuthService.waterGardenTree().catch((err) => {
+        console.warn('[Garden] waterGardenTree error:', err);
+      });
+
       if (!result.error) {
         setGardenState({ ...result.gardenState });
         updatedGrowth = result.gardenState.growth;
@@ -143,23 +164,27 @@ const Garden = ({ userBP = 0, onUpdateBP, onGoQuiz }) => {
   };
 
   // Step 9 & 10: 领取成熟树木的 BP 奖励并触发下一棵树解锁
-  const handleCollectTreeReward = () => {
-    const res = mockDb.claimTreeReward(currentTree.id);
-    if (res.success) {
-      playCelebrationSound();
-      setGardenState({ ...res.gardenState });
-      setLocalBP(res.newTotalBP);
-      if (onUpdateBP) onUpdateBP(res.newTotalBP);
-      setToastMessage(`🎉 Congratulations! +${res.rewardBP} BP collected!`);
-      setTimeout(() => setToastMessage(null), 3500);
-      setShowCompleteModal(false);
-      // Step 10: 领取奖励后，展示解锁下一棵树弹窗！
-      setShowUnlockModal(true);
-    } else {
-      setToastMessage(res.error);
+  const handleCollectTreeReward = async () => {
+    // 1. Authoritative server claim
+    const rpcRes = await playerAuthService.claimGardenTreeReward(currentTree.id);
+    if (rpcRes.error) {
+      setToastMessage(rpcRes.error);
       setTimeout(() => setToastMessage(null), 3000);
       setShowCompleteModal(false);
+      return;
     }
+
+    const res = mockDb.claimTreeReward(currentTree.id);
+    playCelebrationSound();
+    setGardenState({ ...res.gardenState });
+    if (onUpdateBP && typeof rpcRes.balance_bp === 'number') {
+      onUpdateBP(rpcRes.balance_bp);
+    }
+    setToastMessage(`🎉 Congratulations! +${rpcRes.earned_bp || res.rewardBP} BP collected!`);
+    setTimeout(() => setToastMessage(null), 3500);
+    setShowCompleteModal(false);
+    // Step 10: 领取奖励后，展示解锁下一棵树弹窗！
+    setShowUnlockModal(true);
   };
 
   // Step 10 & 12: 切换/种植指定树种（保留现有水滴、BP余额与历史图鉴，成长值重置为 0% 种子）

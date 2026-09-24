@@ -3,6 +3,7 @@ import { X, Check, Gift, Sparkles, Clock } from 'lucide-react';
 import PrimaryButton from '../common/PrimaryButton';
 import { mockDb, getTimeUntilMalaysiaMidnight } from '../../lib/mockDb';
 import { playLootSparkleSound } from '../../lib/soundEffects';
+import { playerAuthService } from '../../lib/playerAuthService';
 
 /**
  * DailyMissionModal
@@ -80,9 +81,17 @@ const DailyMissionModal = ({
     if (data?.claimed) completedCount++;
   });
 
-  const handleClaim = (missionKey, rewardBP, rewardWater) => {
+  const handleClaim = async (missionKey, rewardBP, rewardWater) => {
     const data = missionsState?.missions?.[missionKey];
     if (!data || data.claimed || data.progress < data.target) return;
+
+    // Call server-authoritative claim_daily_mission RPC
+    const res = await playerAuthService.claimDailyMission(missionKey);
+    if (res.error) {
+      setClaimedNotice(res.error);
+      setTimeout(() => setClaimedNotice(null), 3000);
+      return;
+    }
 
     // Mark as claimed in mockDb
     mockDb.claimMissionReward(missionKey);
@@ -93,13 +102,12 @@ const DailyMissionModal = ({
     playLootSparkleSound();
 
     // Award BP
-    const newTotalBP = mockDb.awardBP(rewardBP);
-    if (onUpdateBP) {
-      onUpdateBP(newTotalBP);
+    if (onUpdateBP && typeof res.balance_bp === 'number') {
+      onUpdateBP(res.balance_bp);
     }
 
     // Trigger celebration toast
-    setClaimedNotice(`+${rewardBP} BP & +${rewardWater} 💧 claimed!`);
+    setClaimedNotice(`+${res.earned_bp ?? rewardBP} BP & +${rewardWater} 💧 claimed!`);
     setTimeout(() => {
       setClaimedNotice(null);
     }, 2500);

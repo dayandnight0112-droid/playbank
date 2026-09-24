@@ -812,7 +812,7 @@ export const quizService = {
 
     const effectiveStartedAt = new Date().toISOString();
 
-    const { data: created, error: insertErr } = await supabase
+    let { data: created, error: insertErr } = await supabase
       .from('game_sessions')
       .insert({
         player_id: userId,
@@ -830,12 +830,45 @@ export const quizService = {
       .single();
 
     if (insertErr) {
-      console.error('[GameSession] Create failed:', insertErr);
-      if (insertErr.message?.includes('ACCOUNT_ABANDONED') || insertErr.message?.includes('abandoned_guest')) {
-        await playerAuthService.handleAccountAbandoned();
-        throw new Error('当前游客账号已被弃用。系统已重置本地登录态，请重新进入关卡。');
+      console.warn('[GameSession] Initial create failed:', insertErr.message);
+      if (
+        insertErr.message?.includes('permission denied') ||
+        insertErr.message?.includes('ACCOUNT_ABANDONED') ||
+        insertErr.message?.includes('abandoned_guest') ||
+        insertErr.message?.includes('foreign key')
+      ) {
+        console.warn('[GameSession] Stale or invalid session encountered. Force refreshing guest credentials and retrying...');
+        const freshAuth = await playerAuthService.forceRefreshGuestAuth();
+        if (freshAuth?.user?.id) {
+          const retryRes = await supabase
+            .from('game_sessions')
+            .insert({
+              player_id: freshAuth.user.id,
+              chapter_id: chapterId,
+              chapter_version: chapterVersion,
+              started_at: effectiveStartedAt,
+              total_questions: totalQuestions,
+              correct_count: 0,
+              wrong_count: 0,
+              score: 0,
+              earned_bp: 0,
+              status: 'in_progress'
+            })
+            .select('id, player_id, chapter_id, status, started_at')
+            .single();
+
+          if (!retryRes.error && retryRes.data?.id) {
+            created = retryRes.data;
+            insertErr = null;
+          } else {
+            console.error('[GameSession] Retry create failed:', retryRes.error);
+          }
+        }
       }
-      throw new Error(`对局建立失败: ${insertErr.message}`);
+
+      if (insertErr) {
+        throw new Error(`对局建立失败: ${insertErr.message}`);
+      }
     }
 
     if (!created?.id) {

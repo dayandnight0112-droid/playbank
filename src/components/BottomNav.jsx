@@ -50,6 +50,7 @@ const BottomNav = ({ currentView, setCurrentView }) => {
         return (
           <button
             key={item.id}
+            data-tutorial-target={item.id === 'marketplace' ? 'nav-marketplace' : undefined}
             type="button"
             onClick={() => {
               playTapSound();

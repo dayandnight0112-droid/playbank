@@ -27,7 +27,9 @@ const Home = ({
   onGoBattle,
   onOpenLogin,
   onGoProfile,
-  onUpdateBP
+  onUpdateBP,
+  onActiveModalChange,
+  externalActiveModal
 }) => {
   // Player Display Info
   const playerName = currentUser
@@ -43,18 +45,26 @@ const Home = ({
   const homeSceneId = guestProfile?.homeSceneId || 'trainingCamp';
   const activeScene = getHomeScene(homeSceneId);
 
-  const [activeModal, setActiveModal] = useState(null); // 'daily' | 'streak' | 'chest' | 'event' | 'achievements'
+  const [activeModal, setActiveModal] = useState(externalActiveModal || null); // 'daily' | 'streak' | 'chest' | 'event' | 'achievements'
   const [chestState, setChestState] = useState(() => mockDb.getLuckyChestState());
 
   const handleOpenModal = (modalName) => {
     playModalSwooshSound(false);
     setActiveModal(modalName);
+    if (onActiveModalChange) onActiveModalChange(modalName);
   };
 
   const handleCloseModal = () => {
     playModalSwooshSound(true);
     setActiveModal(null);
+    if (onActiveModalChange) onActiveModalChange(null);
   };
+
+  useEffect(() => {
+    if (externalActiveModal !== undefined && externalActiveModal !== activeModal) {
+      setActiveModal(externalActiveModal);
+    }
+  }, [externalActiveModal]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -235,6 +245,7 @@ const Home = ({
         >
           {/* 1. 每日任务 (带红点提醒) */}
           <LobbySideAction
+            data-tutorial-target="lobby-daily"
             icon="📜"
             label="Daily"
             badgeType="dot"
@@ -245,6 +256,7 @@ const Home = ({
 
           {/* 2. 连胜签到 (显示 Day 3) */}
           <LobbySideAction
+            data-tutorial-target="lobby-streak"
             icon="🔥"
             label="Streak"
             badgeType="pill"

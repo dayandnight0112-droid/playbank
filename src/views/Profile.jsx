@@ -562,6 +562,32 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout, onRe
                   )}
                 </button>
               )}
+
+              {/* Player Age Tag */}
+              {(() => {
+                const rawAge = currentUser?.exact_age || currentUser?.age || (typeof guestProfile?.ageGroup === 'object' ? guestProfile?.ageGroup?.label || guestProfile?.ageGroup?.id : guestProfile?.ageGroup);
+                if (!rawAge) return null;
+                const displayAgeStr = (typeof rawAge === 'number' || !isNaN(Number(rawAge))) ? `${rawAge} 岁` : (String(rawAge).includes('岁') ? String(rawAge) : `${rawAge} 岁`);
+                return (
+                  <span
+                    style={{
+                      background: 'rgba(0, 0, 0, 0.08)',
+                      borderRadius: '6px',
+                      padding: '2px 8px',
+                      fontSize: '11px',
+                      fontWeight: 800,
+                      color: '#000000',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '3px',
+                      marginLeft: '2px'
+                    }}
+                    title="Player Age"
+                  >
+                    🎂 {displayAgeStr}
+                  </span>
+                );
+              })()}
             </div>
           </div>
         </div>

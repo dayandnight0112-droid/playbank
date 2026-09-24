@@ -16,7 +16,8 @@ const LobbySideAction = ({
   badgeText = '',
   badgeColor = '#EF4444',
   glowColor = 'rgba(255, 255, 255, 0.15)',
-  onClick
+  onClick,
+  ...restProps
 }) => {
   const [isPressed, setIsPressed] = useState(false);
 
@@ -29,6 +30,7 @@ const LobbySideAction = ({
     <button
       type="button"
       onClick={handleClick}
+      {...restProps}
       onMouseDown={() => setIsPressed(true)}
       onMouseUp={() => setIsPressed(false)}
       onMouseLeave={() => setIsPressed(false)}
