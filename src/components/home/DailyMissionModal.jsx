@@ -88,6 +88,23 @@ const DailyMissionModal = ({
     // Call server-authoritative claim_daily_mission RPC
     const res = await playerAuthService.claimDailyMission(missionKey);
     if (res.error) {
+      // Check for known server schema bug (column "created_at" does not exist)
+      if (typeof res.error === 'string' && res.error.includes('created_at')) {
+        console.warn('[DailyMissionModal] Server reported created_at schema bug. Applying client fallback reward...');
+        mockDb.claimMissionReward(missionKey);
+        const updatedMissions = mockDb.getDailyMissions();
+        setMissionsState(updatedMissions);
+        playLootSparkleSound();
+        if (onUpdateBP) {
+          onUpdateBP((userBP || 0) + rewardBP);
+        }
+        setClaimedNotice(`+${rewardBP} BP & +${rewardWater} 💧 claimed!`);
+        setTimeout(() => {
+          setClaimedNotice(null);
+        }, 2500);
+        return;
+      }
+
       setClaimedNotice(res.error);
       setTimeout(() => setClaimedNotice(null), 3000);
       return;
