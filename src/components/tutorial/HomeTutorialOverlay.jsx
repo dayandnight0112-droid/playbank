@@ -97,7 +97,9 @@ const HomeTutorialOverlay = ({
 
       // Track streak modal action button if active
       if (currentStep === 2 && isModalOpen && activeModalType === 'streak') {
-        const claimBtn = document.querySelector('[data-tutorial-target="streak-claim-button"]');
+        const claimBtn = document.querySelector('button[data-tutorial-target="streak-claim-button"]') ||
+                         document.querySelector('[data-tutorial-target="streak-claim-button"] button') ||
+                         document.querySelector('[data-tutorial-target="streak-claim-button"]');
         if (claimBtn) {
           const btnRect = claimBtn.getBoundingClientRect();
           if (btnRect.width > 0 && btnRect.height > 0) {
@@ -365,8 +367,8 @@ const HomeTutorialOverlay = ({
           />
         </>
       ) : (
-        /* Fullscreen shadow ONLY when NOT in shop */
-        !isInShopMode && (
+        /* Fullscreen shadow ONLY when NOT in shop and NOT in modal (modals have their own backdrop) */
+        !isInShopMode && !isTargetInModal && (
           <div
             className="tutorial-shadow-mask"
             onClick={handleMaskClick}
@@ -375,7 +377,7 @@ const HomeTutorialOverlay = ({
               position: 'fixed',
               inset: 0,
               background: 'rgba(5, 8, 16, 0.74)',
-              pointerEvents: isTargetInModal ? 'none' : 'auto',
+              pointerEvents: 'auto',
               zIndex: 9991
             }}
           />
@@ -397,6 +399,26 @@ const HomeTutorialOverlay = ({
             boxShadow: '0 0 0 4px rgba(255, 188, 0, 0.25), 0 0 24px rgba(255, 188, 0, 0.65)',
             pointerEvents: 'none',
             zIndex: 9992,
+            animation: 'spotlightPulse 1.8s ease-in-out infinite'
+          }}
+        />
+      )}
+
+      {/* 2.2 STEP 2: STREAK MODAL CLAIM BUTTON SPOTLIGHT HIGHLIGHT BOX */}
+      {isStreakModalOpened && streakClaimRect && (
+        <div
+          className="tutorial-spotlight-box"
+          style={{
+            position: 'fixed',
+            top: `${streakClaimRect.top}px`,
+            left: `${streakClaimRect.left}px`,
+            width: `${streakClaimRect.width}px`,
+            height: `${streakClaimRect.height}px`,
+            borderRadius: '16px',
+            border: '3px solid #FFBC00',
+            boxShadow: '0 0 0 4px rgba(255, 188, 0, 0.45), 0 0 28px rgba(255, 188, 0, 0.9)',
+            pointerEvents: 'none',
+            zIndex: 10006,
             animation: 'spotlightPulse 1.8s ease-in-out infinite'
           }}
         />
@@ -555,7 +577,7 @@ const HomeTutorialOverlay = ({
             position: 'fixed',
             top: `${streakClaimRect.top - 46}px`,
             left: `${streakClaimRect.right - 46}px`,
-            zIndex: 10006,
+            zIndex: 10007,
             color: '#FFBC00',
             display: 'flex',
             flexDirection: 'column',

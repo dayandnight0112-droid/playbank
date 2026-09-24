@@ -365,6 +365,7 @@ const StreakRewardModal = ({
         >
           {hasClaimedToday ? (
             <PrimaryButton
+              data-tutorial-target="streak-claim-button"
               onClick={() => {
                 window.dispatchEvent(new CustomEvent('playbank:streak-claimed', { detail: { alreadyClaimed: true } }));
                 if (onClose) onClose();
@@ -376,6 +377,7 @@ const StreakRewardModal = ({
             </PrimaryButton>
           ) : (
             <PrimaryButton
+              data-tutorial-target="streak-claim-button"
               onClick={handleClaimToday}
               size="medium"
               variant="primary"
