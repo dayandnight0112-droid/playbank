@@ -61,6 +61,8 @@ const StreakRewardModal = ({
         rewardBP: rpcRes.earned_bp || res.rewardBP,
         isSuper: rpcRes.streak_day === 7 || res.isSuperChest
       });
+      // Dispatch streak claimed event for tutorial progression
+      window.dispatchEvent(new CustomEvent('playbank:streak-claimed', { detail: { earnedBP: rpcRes.earned_bp || res.rewardBP } }));
       setTimeout(() => setCelebration(null), 3000);
     }
   };
@@ -357,9 +359,19 @@ const StreakRewardModal = ({
         </div>
 
         {/* Action Button */}
-        <div style={{ padding: '0 20px 20px' }}>
+        <div
+          data-tutorial-target="streak-claim-button"
+          style={{ padding: '0 20px 20px', position: 'relative' }}
+        >
           {hasClaimedToday ? (
-            <PrimaryButton onClick={onClose} size="medium" variant="secondary">
+            <PrimaryButton
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent('playbank:streak-claimed', { detail: { alreadyClaimed: true } }));
+                if (onClose) onClose();
+              }}
+              size="medium"
+              variant="secondary"
+            >
               ✓ 今日已签到 · 明日再来
             </PrimaryButton>
           ) : (

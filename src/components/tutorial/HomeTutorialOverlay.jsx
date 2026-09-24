@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import PlayBankMascot from '../common/PlayBankMascot';
-import { ArrowDown, ArrowUp, ArrowRight, Sparkles, AlertCircle } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowRight, ArrowDownLeft, Sparkles, AlertCircle } from 'lucide-react';
 import PrimaryButton from '../common/PrimaryButton';
 import { playPunchyPopSound, playModalSwooshSound } from '../../lib/soundEffects';
 
@@ -9,7 +9,7 @@ import { playPunchyPopSound, playModalSwooshSound } from '../../lib/soundEffects
  * Phase 2: Independent UI Component & Dynamic Focusing System for PlayBank Lobby Guide.
  * 
  * Key Features:
- * 1. Full-screen Spotlight Mask: Cutout highlight via CSS polygon clip-path, strictly blocking background clicks.
+ * 1. Full-screen Spotlight Mask: Cutout highlight via 4-block physical barrier, strictly blocking background clicks.
  * 2. Mobile Dynamic Adsorption: Dynamic bounding client rect calculations with ResizeObserver & scroll tracking.
  * 3. Intelligent Mascot Bubble: Evaluates viewport space above/below to never occlude target buttons.
  * 4. Safety Fallback: 2.5s timeout automatically unlocks screen if target is missing, preventing soft-locks.
@@ -39,6 +39,7 @@ const HomeTutorialOverlay = ({
   const stepConfig = HOME_TUTORIAL_STEPS[currentStep] || HOME_TUTORIAL_STEPS[1];
 
   const [targetRect, setTargetRect] = useState(null);
+  const [streakClaimRect, setStreakClaimRect] = useState(null);
   const [isTimedOut, setIsTimedOut] = useState(false);
   const [animating, setAnimating] = useState(false);
   const timeoutRef = useRef(null);
@@ -93,6 +94,24 @@ const HomeTutorialOverlay = ({
           timeoutRef.current = null;
         }
       }
+
+      // Track streak modal action button if active
+      if (currentStep === 2 && isModalOpen && activeModalType === 'streak') {
+        const claimBtn = document.querySelector('[data-tutorial-target="streak-claim-button"]');
+        if (claimBtn) {
+          const btnRect = claimBtn.getBoundingClientRect();
+          if (btnRect.width > 0 && btnRect.height > 0) {
+            setStreakClaimRect({
+              top: btnRect.top,
+              right: btnRect.right,
+              bottom: btnRect.bottom,
+              left: btnRect.left,
+              width: btnRect.width,
+              height: btnRect.height
+            });
+          }
+        }
+      }
     };
 
     // Immediate calculation
@@ -134,6 +153,22 @@ const HomeTutorialOverlay = ({
       if (resizeObserver) resizeObserver.disconnect();
     };
   }, [isEligible, currentStep, currentView, isModalOpen, activeModalType, measureTarget, stepConfig]);
+
+  // Listen for streak claimed event to automatically advance to Step 3
+  useEffect(() => {
+    if (!isEligible || currentStep !== 2) return;
+
+    const handleStreakClaimed = () => {
+      // Allow 1.2s for celebration feedback
+      setTimeout(() => {
+        if (onCloseModal) onCloseModal();
+        if (onStepAdvance) onStepAdvance(3, 'highlight');
+      }, 1200);
+    };
+
+    window.addEventListener('playbank:streak-claimed', handleStreakClaimed);
+    return () => window.removeEventListener('playbank:streak-claimed', handleStreakClaimed);
+  }, [isEligible, currentStep, onCloseModal, onStepAdvance]);
 
   // If not eligible or marked completed, do not render overlay
   if (!isEligible) return null;
@@ -188,10 +223,10 @@ const HomeTutorialOverlay = ({
   // Calculate Speech Bubble Placement
   const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 375;
   const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 667;
-
   const isInShopMode = currentStep === 3 && currentView === 'marketplace';
-  const isTargetInModal = (currentStep === 1 && isModalOpen && activeModalType === 'daily') ||
-                          (currentStep === 2 && isModalOpen && activeModalType === 'streak');
+  const isDailyModalOpened = currentStep === 1 && isModalOpen && activeModalType === 'daily';
+  const isStreakModalOpened = currentStep === 2 && isModalOpen && activeModalType === 'streak';
+  const isTargetInModal = isDailyModalOpened || isStreakModalOpened;
 
   // Intelligent bubble position calculation
   let bubblePlacement = 'below'; // 'above' | 'below'
@@ -330,19 +365,21 @@ const HomeTutorialOverlay = ({
           />
         </>
       ) : (
-        /* Fullscreen shadow for special modal / shop fullview */
-        <div
-          className="tutorial-shadow-mask"
-          onClick={handleMaskClick}
-          onTouchStart={handleMaskTouch}
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: isInShopMode ? 'rgba(5, 8, 16, 0.45)' : 'rgba(5, 8, 16, 0.74)',
-            pointerEvents: (isTargetInModal || isInShopMode) ? 'none' : 'auto',
-            zIndex: 9991
-          }}
-        />
+        /* Fullscreen shadow ONLY when NOT in shop */
+        !isInShopMode && (
+          <div
+            className="tutorial-shadow-mask"
+            onClick={handleMaskClick}
+            onTouchStart={handleMaskTouch}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(5, 8, 16, 0.74)',
+              pointerEvents: isTargetInModal ? 'none' : 'auto',
+              zIndex: 9991
+            }}
+          />
+        )
       )}
 
       {/* 2. TARGET HIGHLIGHT SPOTLIGHT BOX & PULSE GLOW */}
@@ -365,54 +402,52 @@ const HomeTutorialOverlay = ({
         />
       )}
 
-      {/* 3. STEP 3: SPECIAL IN-SHOP (MARKETPLACE) FLOATING BANNER */}
+      {/* 3. STEP 3: SPECIAL IN-SHOP (MARKETPLACE) BOTTOM BANNER (BLOCKS 5 FOOTER BUTTONS) */}
       {isInShopMode && (
         <div
+          className="shop-tutorial-footer-banner"
           style={{
             position: 'fixed',
-            bottom: 'calc(80px + env(safe-area-inset-bottom, 0px))',
+            bottom: 0,
             left: '50%',
             transform: 'translateX(-50%)',
-            width: 'calc(100% - 32px)',
-            maxWidth: '380px',
-            zIndex: 9998,
-            background: 'linear-gradient(135deg, #1E293B 0%, #0F172A 100%)',
-            border: '2px solid #FFBC00',
-            borderRadius: '24px',
-            padding: '16px 18px',
-            boxShadow: '0 12px 32px rgba(0, 0, 0, 0.7), 0 0 20px rgba(255, 188, 0, 0.3)',
+            width: '100%',
+            maxWidth: '480px',
+            zIndex: 9999,
+            background: 'linear-gradient(180deg, #1E293B 0%, #0F172A 100%)',
+            borderTop: '3px solid #FFBC00',
+            borderTopLeftRadius: '24px',
+            borderTopRightRadius: '24px',
+            padding: '14px 18px calc(14px + env(safe-area-inset-bottom, 0px))',
+            boxShadow: '0 -10px 30px rgba(0, 0, 0, 0.85), 0 0 20px rgba(255, 188, 0, 0.25)',
             pointerEvents: 'auto',
+            boxSizing: 'border-box',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '10px',
             animation: 'slideUpBounce 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-            <div style={{ width: '52px', height: '52px', flexShrink: 0 }}>
-              <PlayBankMascot variant="cheer" size={52} interactive={false} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ width: '44px', height: '44px', flexShrink: 0 }}>
+              <PlayBankMascot variant="wave" size={44} interactive={false} />
             </div>
             <div style={{ flex: 1 }}>
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#FFBC00', color: '#000', borderRadius: '9999px', padding: '1px 8px', fontSize: '10px', fontWeight: 900, marginBottom: '4px' }}>
-                <Sparkles size={11} /> STEP 3/4 · 商店体验
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#FFBC00', color: '#000', borderRadius: '9999px', padding: '1px 8px', fontSize: '10px', fontWeight: 900, marginBottom: '2px' }}>
+                <Sparkles size={11} /> STEP 3/4 · 商城好礼
               </div>
               <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 900, color: '#FFFFFF' }}>
-                {stepConfig.shopTitle}
+                真实商城 · 兑换好礼
               </h4>
             </div>
-          </div>
-
-          {/* Real-time BP comparison pill badges */}
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
-            <div style={{ flex: 1, background: 'rgba(255, 188, 0, 0.15)', border: '1px solid rgba(255, 188, 0, 0.4)', borderRadius: '12px', padding: '6px 10px', textAlign: 'center' }}>
-              <div style={{ fontSize: '10px', color: '#94A3B8', fontWeight: 800 }}>你的当前点数</div>
-              <div style={{ fontSize: '14px', color: '#FFBC00', fontWeight: 900 }}>🪙 {userBP} BP</div>
-            </div>
-            <div style={{ flex: 1, background: 'rgba(59, 130, 246, 0.15)', border: '1px solid rgba(59, 130, 246, 0.4)', borderRadius: '12px', padding: '6px 10px', textAlign: 'center' }}>
-              <div style={{ fontSize: '10px', color: '#94A3B8', fontWeight: 800 }}>商品兑换所需</div>
-              <div style={{ fontSize: '14px', color: '#60A5FA', fontWeight: 900 }}>800 ~ 1,500 BP</div>
+            <div style={{ background: 'rgba(255, 188, 0, 0.15)', border: '1px solid rgba(255, 188, 0, 0.4)', borderRadius: '12px', padding: '4px 10px', textAlign: 'center' }}>
+              <div style={{ fontSize: '9px', color: '#94A3B8', fontWeight: 800 }}>你的当前点数</div>
+              <div style={{ fontSize: '13px', color: '#FFBC00', fontWeight: 900 }}>🪙 {userBP} BP</div>
             </div>
           </div>
 
-          <p style={{ margin: '0 0 12px 0', fontSize: '12.5px', lineHeight: 1.45, color: '#CBD5E1', fontWeight: 600 }}>
-            {stepConfig.shopDescription(userBP)}
+          <p style={{ margin: 0, fontSize: '12.5px', lineHeight: 1.45, color: '#CBD5E1', fontWeight: 600 }}>
+            答题累积的 BankPoint 可在这里兑换真实的实体文具与好礼！尽情向上滑动浏览心仪好物吧～
           </p>
 
           <PrimaryButton
@@ -420,13 +455,13 @@ const HomeTutorialOverlay = ({
             size="medium"
             variant="primary"
           >
-            {stepConfig.returnButtonText}
+            {stepConfig.returnButtonText || '返回大厅，继续 →'}
           </PrimaryButton>
         </div>
       )}
 
-      {/* 4. MODAL OPENED STEP (Step 1 & Step 2 Inside Daily/Streak Modal) */}
-      {isTargetInModal && (
+      {/* 4.1 STEP 1: MODAL OPENED (Daily Mission Modal) - Bottom Next Step Banner */}
+      {isDailyModalOpened && (
         <div
           style={{
             position: 'fixed',
@@ -451,7 +486,7 @@ const HomeTutorialOverlay = ({
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#FFBC00', color: '#000', borderRadius: '9999px', padding: '1px 8px', fontSize: '10px', fontWeight: 900, marginBottom: '2px' }}>
-                STEP {currentStep}/4
+                STEP 1/4
               </div>
               <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 900, color: '#FFF' }}>
                 {stepConfig.modalTitle}
@@ -470,6 +505,67 @@ const HomeTutorialOverlay = ({
           >
             {stepConfig.nextButtonText}
           </PrimaryButton>
+        </div>
+      )}
+
+      {/* 4.2 STEP 2: MODAL OPENED (Streak Modal) - Top Non-Obstructive Banner (NO next step button) */}
+      {isStreakModalOpened && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 'calc(16px + env(safe-area-inset-top, 0px))',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            width: 'calc(100% - 32px)',
+            maxWidth: '380px',
+            zIndex: 10005,
+            background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.98) 0%, rgba(30, 41, 59, 0.98) 100%)',
+            border: '2px solid #FFBC00',
+            borderRadius: '20px',
+            padding: '10px 14px',
+            boxShadow: '0 12px 32px rgba(0, 0, 0, 0.8), 0 0 20px rgba(255, 188, 0, 0.35)',
+            pointerEvents: 'auto',
+            animation: 'slideDownBounce 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px'
+          }}
+        >
+          <div style={{ width: '40px', height: '40px', flexShrink: 0 }}>
+            <PlayBankMascot variant="cheer" size={40} interactive={false} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#FFBC00', color: '#000', borderRadius: '9999px', padding: '1px 8px', fontSize: '10px', fontWeight: 900, marginBottom: '2px' }}>
+              STEP 2/4 · 7天连续打卡
+            </div>
+            <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 900, color: '#FFF' }}>
+              🔥 今日签到 · 领取奖励
+            </h4>
+            <p style={{ margin: 0, fontSize: '11.5px', lineHeight: 1.35, color: '#E2E8F0', fontWeight: 600 }}>
+              请点击下方「今日立即签到」按钮，免费领取今日奖励！
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* 4.3 STEP 2: 48px ARROW POINTING AT STREAK CLAIM BUTTON FROM TOP-RIGHT */}
+      {isStreakModalOpened && streakClaimRect && (
+        <div
+          style={{
+            position: 'fixed',
+            top: `${streakClaimRect.top - 46}px`,
+            left: `${streakClaimRect.right - 46}px`,
+            zIndex: 10006,
+            color: '#FFBC00',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            filter: 'drop-shadow(0 2px 10px rgba(255, 188, 0, 0.95)) drop-shadow(0 0 3px #000000)',
+            animation: 'bounceArrowCorner 1s ease-in-out infinite',
+            pointerEvents: 'none'
+          }}
+        >
+          <ArrowDownLeft size={48} strokeWidth={3.5} />
         </div>
       )}
 
@@ -599,12 +695,20 @@ const HomeTutorialOverlay = ({
           0%, 100% { transform: translateY(0); }
           50% { transform: translateY(-8px); }
         }
+        @keyframes bounceArrowCorner {
+          0%, 100% { transform: translate(0, 0); }
+          50% { transform: translate(-6px, 6px); }
+        }
         @keyframes popIn {
           0% { transform: scale(0.85); opacity: 0; }
           100% { transform: scale(1); opacity: 1; }
         }
         @keyframes slideUpBounce {
           0% { transform: translate(-50%, 40px); opacity: 0; }
+          100% { transform: translate(-50%, 0); opacity: 1; }
+        }
+        @keyframes slideDownBounce {
+          0% { transform: translate(-50%, -30px); opacity: 0; }
           100% { transform: translate(-50%, 0); opacity: 1; }
         }
       `}</style>

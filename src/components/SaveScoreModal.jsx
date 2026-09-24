@@ -112,8 +112,8 @@ const SaveScoreModal = ({ onClose, onRegisterSuccess, onSwitchAccountSuccess, cu
       return;
     }
     const parsedAge = parseInt(age, 10);
-    if (isNaN(parsedAge) || parsedAge < 5 || parsedAge > 25) {
-      setError("玩家年龄必须在 5 至 25 岁之间。");
+    if (isNaN(parsedAge) || parsedAge < 7 || parsedAge > 17) {
+      setError("玩家年龄必须在 7 至 17 岁之间。");
       return;
     }
     if (password !== confirmPassword) {
@@ -301,7 +301,7 @@ const SaveScoreModal = ({ onClose, onRegisterSuccess, onSwitchAccountSuccess, cu
             />
           </div>
 
-          {/* Player Age Dropdown (PlayBank Rule: Required, 5-25 years old) */}
+          {/* Player Age Dropdown (PlayBank Rule: Required, 7-17 years old) */}
           <select
             value={age}
             onChange={(e) => setAge(e.target.value)}
@@ -316,9 +316,9 @@ const SaveScoreModal = ({ onClose, onRegisterSuccess, onSwitchAccountSuccess, cu
             }}
           >
             <option value="" disabled>
-              请选择玩家年龄 / Select Player Age (5-25 岁) *
+              请选择玩家年龄 / Select Player Age (7-17 岁) *
             </option>
-            {Array.from({ length: 21 }, (_, i) => i + 5).map((a) => (
+            {Array.from({ length: 11 }, (_, i) => i + 7).map((a) => (
               <option key={a} value={a}>
                 {a} 岁
               </option>

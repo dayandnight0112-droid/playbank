@@ -13,7 +13,7 @@
 import { supabase, isSupabaseConfigured } from './supabaseClient.js';
 
 /**
- * Map exact integer age (5-25) to standard Admin Age Group filter ('7-9' | '10-12' | '13-15' | '16-17')
+ * Map exact integer age (7-17) to standard Admin Age Group filter ('7-9' | '10-12' | '13-15' | '16-17')
  */
 export function mapExactAgeToAgeGroup(exactAge) {
   const age = Number(exactAge);

@@ -16,9 +16,14 @@ const CompleteProfileModal = ({ currentUser, onComplete }) => {
       setError("Please fill in all fields.");
       return;
     }
+    const parsedAge = parseInt(age, 10);
+    if (isNaN(parsedAge) || parsedAge < 7 || parsedAge > 17) {
+      setError("Age must be between 7 and 17.");
+      return;
+    }
     
     // Save to MockDB
-    const result = mockDb.completeUserProfile(currentUser.id, icName, icNo, parseInt(age), school, referralCode.trim());
+    const result = mockDb.completeUserProfile(currentUser.id, icName, icNo, parsedAge, school, referralCode.trim());
     if (result.error) {
       setError(result.error);
     } else {
@@ -97,10 +102,12 @@ const CompleteProfileModal = ({ currentUser, onComplete }) => {
           </div>
 
           <div>
-            <label className="text-small-bold" style={{ display: 'block', marginBottom: '8px' }}>Age</label>
+            <label className="text-small-bold" style={{ display: 'block', marginBottom: '8px' }}>Age (7-17)</label>
             <input 
               type="number" 
-              placeholder="e.g. 15" 
+              min="7"
+              max="17"
+              placeholder="e.g. 12" 
               className="input-field"
               value={age}
               onChange={(e) => setAge(e.target.value)}

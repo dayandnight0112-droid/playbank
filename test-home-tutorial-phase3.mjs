@@ -46,6 +46,17 @@ assert(
   'LobbySideAction must forward ...restProps to allow data-tutorial-target rendering'
 );
 
+const streakModalPath = path.resolve('src/components/home/StreakRewardModal.jsx');
+const streakModalContent = fs.readFileSync(streakModalPath, 'utf-8');
+assert(
+  streakModalContent.includes('data-tutorial-target="streak-claim-button"'),
+  'StreakRewardModal must tag claim button with data-tutorial-target="streak-claim-button"'
+);
+assert(
+  streakModalContent.includes('playbank:streak-claimed'),
+  'StreakRewardModal must dispatch playbank:streak-claimed on successful claim'
+);
+
 
 // 2. Step 1 (Daily Mission) Step Flow Simulation
 console.log('\n--- Test 2: Step 1 Daily Mission Flow ---');
