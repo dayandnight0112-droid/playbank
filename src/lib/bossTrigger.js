@@ -5,6 +5,12 @@ import { quizService } from './quizService.js';
 import { playerAuthService } from './playerAuthService.js';
 
 /**
+ * Safety switch: Set to false to safely disable Boss Battles while keeping all code,
+ * assets, and models 100% intact for future reactivation.
+ */
+export const ENABLE_BOSS_BATTLE = false;
+
+/**
  * Evaluates whether a Boss Encounter should be triggered after a normal quiz
  * and draws genuine, unserved questions from Supabase for the Boss Battle.
  *
@@ -26,6 +32,16 @@ export const evaluateBossTrigger = async ({
   currentUser = null,
   forceTrigger = false
 }) => {
+  // Safe Bypass: If Boss Battle is disabled, immediately bypass without deleting any logic
+  if (!ENABLE_BOSS_BATTLE) {
+    return {
+      shouldTrigger: false,
+      reason: 'boss_temporarily_disabled',
+      encounter: null,
+      questions: []
+    };
+  }
+
   // 1. Get enabled Boss Types (Production safety guard)
   const enabledTypes = getEnabledBossTypes();
   const speedTypeAvailable = enabledTypes.some(t => t.type === BOSS_TYPE_KEYS.SPEED);

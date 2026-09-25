@@ -1912,5 +1912,49 @@ export const mockDb = {
   resetHomeTutorial: (playerId) => {
     if (!playerId) return false;
     return saveHomeTutorialStateRaw(playerId, null);
+  },
+
+  // English Typing Game: Player Age and Round Index Persistence
+  getPlayerAge: () => {
+    if (typeof window === 'undefined') return 10;
+    const guest = mockDb.getGuestProfile();
+    const guestAge = guest?.ageGroup;
+    if (guestAge) {
+      const parsed = parseInt(typeof guestAge === 'object' ? guestAge.id : guestAge, 10);
+      if (!isNaN(parsed) && parsed >= 7 && parsed <= 17) return parsed;
+    }
+    const saved = localStorage.getItem('playbank_player_age');
+    if (saved) {
+      const parsed = parseInt(saved, 10);
+      if (!isNaN(parsed) && parsed >= 7 && parsed <= 17) return parsed;
+    }
+    return 10;
+  },
+
+  savePlayerAge: (age) => {
+    if (typeof window === 'undefined') return;
+    const targetAge = parseInt(age, 10) || 10;
+    localStorage.setItem('playbank_player_age', String(targetAge));
+    const guest = mockDb.getGuestProfile();
+    if (guest) {
+      mockDb.updateGuestProfile({ exactAge: targetAge });
+    }
+  },
+
+  getGameRoundIndex: () => {
+    if (typeof window === 'undefined') return 1;
+    const saved = localStorage.getItem('playbank_game_round_index');
+    if (saved) {
+      const parsed = parseInt(saved, 10);
+      if (!isNaN(parsed) && parsed >= 1) return parsed;
+    }
+    return 1;
+  },
+
+  saveGameRoundIndex: (roundIndex) => {
+    if (typeof window === 'undefined') return;
+    const nextRound = parseInt(roundIndex, 10) || 1;
+    localStorage.setItem('playbank_game_round_index', String(nextRound));
   }
 };
+

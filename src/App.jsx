@@ -26,6 +26,9 @@ import OnboardingFlow from './views/onboarding/OnboardingFlow';
 import { quizService } from './lib/quizService';
 import { playerAuthService } from './lib/playerAuthService';
 import HomeTutorialOverlay from './components/tutorial/HomeTutorialOverlay';
+import TypingGame from './views/TypingGame';
+import AgeSelectModal from './components/typing/AgeSelectModal';
+import { getTypingAgeConfig } from './data/typingConfig';
 
 function App() {
   const [guestProfile, setGuestProfile] = useState(() => mockDb.getGuestProfile());
@@ -33,6 +36,9 @@ function App() {
   const [showExitRetention, setShowExitRetention] = useState(false);
   const [tutorialStats, setTutorialStats] = useState({ earnedBP: 120, maxCombo: 6 });
   const [lobbyActiveModal, setLobbyActiveModal] = useState(null);
+  const [showAgeSelectModal, setShowAgeSelectModal] = useState(false);
+  const [playerAge, setPlayerAge] = useState(() => mockDb.getPlayerAge());
+  const [gameRoundIndex, setGameRoundIndex] = useState(() => mockDb.getGameRoundIndex());
 
   // Phase 2: Top-level Home Tutorial State
   const currentActivePlayerId = guestProfile?.playerId || guestProfile?.id || 'guest';
@@ -357,9 +363,66 @@ function App() {
     if (tutorial && tutorial.eligible && tutorial.status !== 'completed' && tutorial.currentStep === 4) {
       handleTutorialComplete();
     }
-    // Step 32: Unlimited Practice Policy - Never block or expel players!
-    // Players can play infinitely. Plays 1-5 give 100% BP; plays > 5 give 20% practice BP.
-    setCurrentView('select_subject');
+    // Show Age Select Modal to determine exact age and round gameplay
+    setShowAgeSelectModal(true);
+  };
+
+  const handleConfirmAgeAndStart = async (chosenAge) => {
+    setShowAgeSelectModal(false);
+    const validAge = parseInt(chosenAge, 10) || 10;
+    setPlayerAge(validAge);
+    mockDb.savePlayerAge(validAge);
+
+    // Check round alternation: Odd = Multiple Choice, Even = Typing Game
+    const currentRound = gameRoundIndex || 1;
+    const isMultipleChoice = currentRound % 2 === 1;
+
+    if (isMultipleChoice) {
+      // Single/Odd round: English Multiple Choice
+      const mapAgeToGrade = (age) => {
+        const num = parseInt(age, 10);
+        if (num <= 7) return { gradeId: 'year-1', gradeName: 'Year 1', form: 1 };
+        if (num === 8) return { gradeId: 'year-2', gradeName: 'Year 2', form: 2 };
+        if (num === 9) return { gradeId: 'year-3', gradeName: 'Year 3', form: 3 };
+        if (num === 10) return { gradeId: 'year-4', gradeName: 'Year 4', form: 4 };
+        if (num === 11) return { gradeId: 'year-5', gradeName: 'Year 5', form: 5 };
+        if (num === 12) return { gradeId: 'year-6', gradeName: 'Year 6', form: 6 };
+        if (num === 13) return { gradeId: 'form-1', gradeName: 'Form 1', form: 1 };
+        if (num === 14) return { gradeId: 'form-2', gradeName: 'Form 2', form: 2 };
+        if (num === 15) return { gradeId: 'form-3', gradeName: 'Form 3', form: 3 };
+        if (num === 16) return { gradeId: 'form-4', gradeName: 'Form 4', form: 4 };
+        return { gradeId: 'form-5', gradeName: 'Form 5', form: 5 };
+      };
+
+      const gradeInfo = mapAgeToGrade(validAge);
+      let selectedChapter = null;
+      try {
+        const pubChapters = await quizService.getPublishedChapters(gradeInfo.gradeId, 'english');
+        if (pubChapters && pubChapters.length > 0) {
+          selectedChapter = pubChapters[0];
+        }
+      } catch (err) {
+        console.warn('[App] Could not load published English chapters for grade:', gradeInfo.gradeId, err);
+      }
+
+      startQuizFlow({
+        gradeId: gradeInfo.gradeId,
+        gradeName: gradeInfo.gradeName,
+        form: gradeInfo.form,
+        subject: 'english',
+        subjectTitle: 'English',
+        chapterId: selectedChapter?.id || '8bde7fd7-a4c0-485c-8328-5e08a6eb3db8',
+        chapterTitle: selectedChapter?.title || 'Vocabulary & Grammar',
+        babNumber: selectedChapter?.babNumber || 'Unit 1',
+        versionNo: selectedChapter?.versionNo || 1,
+        questionCount: 10,
+        randomQuestions: true
+      });
+    } else {
+      // Double/Even round: English Typing Game
+      setPlaysToday(prev => prev + 1);
+      setCurrentView('typing');
+    }
   };
 
   const resetAttempts = () => {
@@ -369,6 +432,8 @@ function App() {
     mockDb.clearGuestProfile();
     mockDb.resetOnboarding();
     setGuestProfile(null);
+    mockDb.saveGameRoundIndex(1);
+    setGameRoundIndex(1);
     localStorage.removeItem(`playbank_plays_today_${currentUser ? currentUser.id : 'guest'}`);
     localStorage.removeItem(`playbank_last_play_date_${currentUser ? currentUser.id : 'guest'}`);
     localStorage.removeItem('playbank_user_bp');
@@ -449,6 +514,11 @@ function App() {
   };
 
   const handleQuizComplete = (earnedBP) => {
+    // Advance game round index (Odd -> Even, Even -> Odd)
+    const nextRound = (gameRoundIndex || 1) + 1;
+    setGameRoundIndex(nextRound);
+    mockDb.saveGameRoundIndex(nextRound);
+
     // Note: earnedBP was already settled in cloud by completeGameSession RPC.
     // Local state (userBP / mockDb) has already been updated by the playbank:wallet-updated event.
     const currentBP = mockDb.getSafeUserBP();
@@ -461,6 +531,32 @@ function App() {
       setCurrentView('home');
     } else {
       // Guest First Play OR Hit 200 BP
+      if (!sessionStorage.getItem('guest_first_play_register')) {
+        sessionStorage.setItem('guest_first_play_register', 'true');
+        setShowSaveModal('guest_first_play');
+      } else if (currentBP >= 200 && !sessionStorage.getItem('guest_200_register')) {
+        sessionStorage.setItem('guest_200_register', 'true');
+        setShowSaveModal('guest_200');
+      } else {
+        setCurrentView('home');
+      }
+    }
+  };
+
+  const handleTypingComplete = (earnedBP) => {
+    // Advance game round index (Even -> Odd)
+    const nextRound = (gameRoundIndex || 1) + 1;
+    setGameRoundIndex(nextRound);
+    mockDb.saveGameRoundIndex(nextRound);
+
+    const currentBP = mockDb.getSafeUserBP();
+
+    if (currentUser) {
+      if (currentBP >= 200 && currentUser.score_multiplier !== 3 && !localStorage.getItem(`playbank_booster_rejected_${currentUser.id}`)) {
+        setShowBoosterOffer({ isFirstTimeOffer: true });
+      }
+      setCurrentView('home');
+    } else {
       if (!sessionStorage.getItem('guest_first_play_register')) {
         sessionStorage.setItem('guest_first_play_register', 'true');
         setShowSaveModal('guest_first_play');
@@ -691,6 +787,14 @@ function App() {
             onTriggerBossEncounter={handleTriggerBossEncounter}
           />
         );
+      case 'typing':
+        return (
+          <TypingGame
+            age={playerAge}
+            onComplete={handleTypingComplete}
+            onQuit={() => setCurrentView('home')}
+          />
+        );
       case 'boss_battle':
         return (
           <BossBattle
@@ -772,7 +876,7 @@ function App() {
     return <AdminDashboard onLogout={() => { mockDb.logoutUser(); setCurrentUser(null); }} />;
   }
 
-  const hideBottomNav = ['onboarding', 'welcome', 'choose_path', 'tutorial', 'tutorial_reward', 'quiz', 'boss_battle'].includes(currentView);
+  const hideBottomNav = ['onboarding', 'welcome', 'choose_path', 'tutorial', 'tutorial_reward', 'quiz', 'typing', 'boss_battle'].includes(currentView);
 
   return (
     <div className={`app-container ${currentView === 'home' ? 'home-active' : ''}`}>
@@ -1092,6 +1196,15 @@ function App() {
         }}
         guestProfile={guestProfile}
         userBP={userBP}
+      />
+
+      {/* Age Selection Modal for English Multiple Choice & Typing Game */}
+      <AgeSelectModal
+        isOpen={showAgeSelectModal}
+        onClose={() => setShowAgeSelectModal(false)}
+        onConfirmAge={handleConfirmAgeAndStart}
+        defaultAge={playerAge}
+        gameRound={gameRoundIndex}
       />
     </div>
   );
