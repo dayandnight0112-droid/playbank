@@ -437,6 +437,7 @@ function App() {
     localStorage.removeItem(`playbank_plays_today_${currentUser ? currentUser.id : 'guest'}`);
     localStorage.removeItem(`playbank_last_play_date_${currentUser ? currentUser.id : 'guest'}`);
     localStorage.removeItem('playbank_user_bp');
+    localStorage.removeItem('playbank_first_game_register_prompted');
     sessionStorage.removeItem('guest_first_play_register');
     sessionStorage.removeItem('guest_200_register');
     sessionStorage.removeItem('user_200_booster_shown');
@@ -530,15 +531,13 @@ function App() {
       }
       setCurrentView('home');
     } else {
-      // Transition view to home so when modal closes player is in lobby
+      // Transition view to home so player is in lobby
       setCurrentView('home');
-      // Guest First Play OR Hit 200 BP
-      if (!sessionStorage.getItem('guest_first_play_register')) {
-        sessionStorage.setItem('guest_first_play_register', 'true');
+      // Only ask new guest to register ONCE after their very first game
+      const hasAskedRegister = localStorage.getItem('playbank_first_game_register_prompted');
+      if (!hasAskedRegister) {
+        localStorage.setItem('playbank_first_game_register_prompted', 'true');
         setShowSaveModal('guest_first_play');
-      } else if (currentBP >= 200 && !sessionStorage.getItem('guest_200_register')) {
-        sessionStorage.setItem('guest_200_register', 'true');
-        setShowSaveModal('guest_200');
       }
     }
   };
@@ -557,14 +556,13 @@ function App() {
       }
       setCurrentView('home');
     } else {
-      // Transition view to home so when modal closes player is in lobby
+      // Transition view to home so player is in lobby
       setCurrentView('home');
-      if (!sessionStorage.getItem('guest_first_play_register')) {
-        sessionStorage.setItem('guest_first_play_register', 'true');
+      // Only ask new guest to register ONCE after their very first game
+      const hasAskedRegister = localStorage.getItem('playbank_first_game_register_prompted');
+      if (!hasAskedRegister) {
+        localStorage.setItem('playbank_first_game_register_prompted', 'true');
         setShowSaveModal('guest_first_play');
-      } else if (currentBP >= 200 && !sessionStorage.getItem('guest_200_register')) {
-        sessionStorage.setItem('guest_200_register', 'true');
-        setShowSaveModal('guest_200');
       }
     }
   };
@@ -792,6 +790,7 @@ function App() {
           <TypingGame
             age={playerAge}
             onComplete={handleTypingComplete}
+            onBack={() => setCurrentView('home')}
             onQuit={() => setCurrentView('home')}
           />
         );

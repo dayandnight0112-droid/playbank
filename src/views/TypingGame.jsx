@@ -89,12 +89,23 @@ export default function TypingGame({
   age = 10,
   onComplete,
   onBack,
+  onQuit,
   currentUser = null,
   guestProfile = null,
   userBP = 0
 }) {
   const { width, height } = useWindowSize();
   const ageConfig = getTypingAgeConfig(age);
+
+  const handleExitGame = () => {
+    setShowQuitModal(false);
+    speechService.stop();
+    if (typeof onBack === 'function') {
+      onBack();
+    } else if (typeof onQuit === 'function') {
+      onQuit();
+    }
+  };
 
   const [gameState, setGameState] = useState('loading'); // 'loading' | 'countdown' | 'playing' | 'saving' | 'result'
   const [countdown, setCountdown] = useState(3);
@@ -395,8 +406,8 @@ export default function TypingGame({
           onClick={() => {
             if (onComplete) {
               onComplete(earnedBP);
-            } else if (onBack) {
-              onBack();
+            } else {
+              handleExitGame();
             }
           }}
           style={{
@@ -794,10 +805,7 @@ export default function TypingGame({
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setShowQuitModal(false);
-                  if (onBack) onBack();
-                }}
+                onClick={handleExitGame}
                 style={{
                   padding: '10px 22px',
                   borderRadius: '8px',
