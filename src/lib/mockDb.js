@@ -1162,10 +1162,34 @@ export const mockDb = {
     return Number.isFinite(rawBp) ? Math.max(0, rawBp) : 0;
   },
 
+  // Add BP to current session or guest profile
+  addBP: (amount = 0) => {
+    const num = Math.round(Number(amount) || 0);
+    const session = mockDb.getCurrentSession();
+    if (session && session.id) {
+      session.total_bp = (Number(session.total_bp) || 0) + num;
+      if (typeof mockDb.saveSession === 'function') {
+        mockDb.saveSession(session);
+      } else {
+        localStorage.setItem('playbank_session', JSON.stringify(session));
+      }
+      return session.total_bp;
+    }
+    const guest = getGuestProfileRaw() || {};
+    const newBp = (Number(guest.bankPoint) || 0) + num;
+    mockDb.updateGuestProfile({ bankPoint: newBp });
+    localStorage.setItem('playbank_user_bp', String(newBp));
+    return newBp;
+  },
+
+  updateGuestBP: (amount = 0) => {
+    return mockDb.addBP(amount);
+  },
+
   // Authoritative server RPC protection: Client direct awardBP is disabled
   awardBP: (amount = 0) => {
     console.warn('[mockDb] Client-side awardBP is deprecated. All BP changes must go through Supabase RPCs.');
-    return mockDb.getSafeUserBP();
+    return mockDb.addBP(amount);
   },
 
   // Step 9: 100% 树木成熟结算与领取一次性 BP 奖励（严格防重）

@@ -212,40 +212,47 @@ export default function TypingGame({
 
     const earnedBP = questions.length * ageConfig.scorePerQuestion;
 
-    // 1. Authoritative local wallet update via mockDb
-    let currentBalance = mockDb.getSafeUserBP();
-    if (mockDb.addBP) {
-      mockDb.addBP(earnedBP);
-    } else {
-      mockDb.updateGuestBP(earnedBP);
-    }
-    const newBalance = mockDb.getSafeUserBP();
-
-    // 2. Dispatch global wallet event
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(
-        new CustomEvent('playbank:wallet-updated', {
-          detail: {
-            balance_bp: newBalance,
-            earned_bp: earnedBP,
-            source: 'typing_game'
-          }
-        })
-      );
-    }
-
-    // 3. Advance daily missions
     try {
-      mockDb.recordQuizForDailyMissions({
-        quizCompleted: 1,
-        questionsAnswered: questions.length,
-        correctAnswers: questions.length
-      });
-    } catch (e) {
-      console.warn('[TypingGame] Daily mission record error:', e);
-    }
+      // 1. Authoritative local wallet update via mockDb
+      if (typeof mockDb.addBP === 'function') {
+        mockDb.addBP(earnedBP);
+      } else if (typeof mockDb.updateGuestBP === 'function') {
+        mockDb.updateGuestBP(earnedBP);
+      } else {
+        const current = mockDb.getSafeUserBP();
+        mockDb.updateGuestProfile({ bankPoint: current + earnedBP });
+      }
+      const newBalance = mockDb.getSafeUserBP();
 
-    setGameState('result');
+      // 2. Dispatch global wallet event
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('playbank:wallet-updated', {
+            detail: {
+              balance_bp: newBalance,
+              earned_bp: earnedBP,
+              source: 'typing_game'
+            }
+          })
+        );
+      }
+
+      // 3. Advance daily missions
+      try {
+        mockDb.recordQuizForDailyMissions({
+          quizCompleted: 1,
+          questionsAnswered: questions.length,
+          correctAnswers: questions.length
+        });
+      } catch (e) {
+        console.warn('[TypingGame] Daily mission record error:', e);
+      }
+    } catch (err) {
+      console.error('[TypingGame] Error finalizing typing session:', err);
+    } finally {
+      // Always transition to result screen!
+      setGameState('result');
+    }
   };
 
   // Replay Pronunciation Button
@@ -381,6 +388,40 @@ export default function TypingGame({
         }}
       >
         <Confetti width={width} height={height} recycle={false} numberOfPieces={400} colors={['#ffffff', '#000000', '#FFBC00', '#38BDF8', '#10B981']} />
+
+        {/* Top-Left Back to Lobby Button */}
+        <button
+          type="button"
+          onClick={() => {
+            if (onComplete) {
+              onComplete(earnedBP);
+            } else if (onBack) {
+              onBack();
+            }
+          }}
+          style={{
+            position: 'absolute',
+            top: 'max(16px, env(safe-area-inset-top, 16px))',
+            left: '16px',
+            zIndex: 100,
+            width: '42px',
+            height: '42px',
+            borderRadius: '50%',
+            background: '#FFFFFF',
+            border: '2.5px solid #000000',
+            boxShadow: '0 3.5px 0 #000000',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            outline: 'none',
+            transition: 'transform 0.08s ease, box-shadow 0.08s ease'
+          }}
+          aria-label="Back to Lobby"
+          title="返回主页"
+        >
+          <ArrowLeft size={20} strokeWidth={3} color="#000000" />
+        </button>
 
         <div style={{ flex: 1, overflowY: 'auto', paddingBottom: '32px', paddingTop: '16px' }}>
           <PlayBankMiniLogo />

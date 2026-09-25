@@ -228,7 +228,51 @@ const SaveScoreModal = ({ onClose, onRegisterSuccess, onSwitchAccountSuccess, cu
         animation: 'slideUpModal 0.4s cubic-bezier(0.16, 1, 0.3, 1)'
       }}>
         
-        {/* Close button */}
+        {/* Top-Left Exit Button (Tactile circular button matching onboarding design) */}
+        <button
+          type="button"
+          onClick={onClose}
+          style={{
+            position: 'absolute',
+            top: '20px',
+            left: '20px',
+            zIndex: 10,
+            width: '42px',
+            height: '42px',
+            borderRadius: '50%',
+            background: '#FFFFFF',
+            border: '2.5px solid #000000',
+            boxShadow: '0 3.5px 0 #000000',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            outline: 'none',
+            transition: 'transform 0.08s ease, box-shadow 0.08s ease'
+          }}
+          onMouseDown={(e) => {
+            e.currentTarget.style.transform = 'translateY(2px)';
+            e.currentTarget.style.boxShadow = '0 1.5px 0 #000000';
+          }}
+          onMouseUp={(e) => {
+            e.currentTarget.style.transform = 'none';
+            e.currentTarget.style.boxShadow = '0 3.5px 0 #000000';
+          }}
+          onTouchStart={(e) => {
+            e.currentTarget.style.transform = 'translateY(2px)';
+            e.currentTarget.style.boxShadow = '0 1.5px 0 #000000';
+          }}
+          onTouchEnd={(e) => {
+            e.currentTarget.style.transform = 'none';
+            e.currentTarget.style.boxShadow = '0 3.5px 0 #000000';
+          }}
+          aria-label="Exit"
+          title="退出 / Exit"
+        >
+          <ArrowLeft size={20} strokeWidth={3} color="#000000" />
+        </button>
+
+        {/* Top-Right Close Button */}
         <button 
           onClick={onClose}
           style={{
@@ -246,6 +290,7 @@ const SaveScoreModal = ({ onClose, onRegisterSuccess, onSwitchAccountSuccess, cu
             cursor: 'pointer',
             color: 'var(--text-secondary)'
           }}
+          aria-label="Close"
         >
           <X size={20} />
         </button>
@@ -262,10 +307,10 @@ const SaveScoreModal = ({ onClose, onRegisterSuccess, onSwitchAccountSuccess, cu
             <img src={`${import.meta.env.BASE_URL}playbanklogo.png`} alt="PlayBank Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           </div>
           <h2 className="text-h2" style={{ marginBottom: '8px' }}>
-            {registerContext === 'guest_200' ? "You've reached 200 BP!" : 'Register to collect your BP!'}
+            {registerContext === 'guest_200' ? "恭喜达到 200 BP！" : '注册正式账号 (Create Account)'}
           </h2>
           <p className="text-body">
-            Register now to save your score, unlock the leaderboard, and keep earning rewards.
+            注册正式账号以同步云端学习档案，解锁全球排行榜，随时继续你的冒险之旅！
           </p>
         </div>
 

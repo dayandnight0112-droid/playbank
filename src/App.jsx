@@ -530,6 +530,8 @@ function App() {
       }
       setCurrentView('home');
     } else {
+      // Transition view to home so when modal closes player is in lobby
+      setCurrentView('home');
       // Guest First Play OR Hit 200 BP
       if (!sessionStorage.getItem('guest_first_play_register')) {
         sessionStorage.setItem('guest_first_play_register', 'true');
@@ -537,8 +539,6 @@ function App() {
       } else if (currentBP >= 200 && !sessionStorage.getItem('guest_200_register')) {
         sessionStorage.setItem('guest_200_register', 'true');
         setShowSaveModal('guest_200');
-      } else {
-        setCurrentView('home');
       }
     }
   };
@@ -557,14 +557,14 @@ function App() {
       }
       setCurrentView('home');
     } else {
+      // Transition view to home so when modal closes player is in lobby
+      setCurrentView('home');
       if (!sessionStorage.getItem('guest_first_play_register')) {
         sessionStorage.setItem('guest_first_play_register', 'true');
         setShowSaveModal('guest_first_play');
       } else if (currentBP >= 200 && !sessionStorage.getItem('guest_200_register')) {
         sessionStorage.setItem('guest_200_register', 'true');
         setShowSaveModal('guest_200');
-      } else {
-        setCurrentView('home');
       }
     }
   };
@@ -1071,20 +1071,8 @@ function App() {
         <SaveScoreModal 
           registerContext={showSaveModal}
           onClose={() => {
-            if (showSaveModal === 'guest_first_play') {
-              openModal({
-                title: 'Are you sure?',
-                message: "If you don't register, your BP will reset when you exit. Are you sure you want to skip?",
-                showCancel: true,
-                confirmText: 'Skip Registration',
-                onConfirm: () => {
-                  closeModal();
-                  setShowSaveModal(false);
-                }
-              });
-            } else {
-              setShowSaveModal(false);
-            }
+            setShowSaveModal(false);
+            setCurrentView('home');
           }} 
           currentBP={userBP}
           onRegisterSuccess={(user) => {

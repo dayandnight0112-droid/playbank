@@ -74,77 +74,115 @@ export default function TypingDisplay({
         )}
       </div>
 
-      {/* Target Text Character-by-Character Display */}
-      <div
-        className="typing-text-container"
-        style={{
-          fontSize: charStates.length > 25 ? '1.4rem' : charStates.length > 15 ? '1.8rem' : '2.2rem',
-          fontWeight: 900,
-          lineHeight: 1.5,
-          fontFamily: "'Courier New', Courier, monospace",
-          letterSpacing: '0.04em',
-          minHeight: '64px',
-          display: 'flex',
-          flexWrap: 'wrap',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: '2px',
-          wordBreak: 'break-word',
-          padding: '8px 0'
-        }}
-      >
-        {charStates.map((item, idx) => {
-          let charColor = '#94A3B8'; // default pending: soft slate gray
-          let charBg = 'transparent';
-          let borderBottom = 'none';
+      {/* Target Text Character-by-Character Display with Atomic Word Wrapping */}
+      {(() => {
+        // Group charStates into atomic word units and spaces to prevent words from splitting across lines
+        const tokens = [];
+        let currentWordChars = [];
 
-          if (item.status === 'completed') {
-            charColor = '#10B981'; // Vibrant Green
-          } else if (item.status === 'correct') {
-            charColor = '#0284C7'; // Vibrant Blue
-          } else if (item.status === 'wrong') {
-            charColor = '#DC2626'; // Vibrant Red
-            charBg = 'rgba(239, 68, 68, 0.15)';
-          } else if (item.status === 'current') {
-            borderBottom = '3px solid #111111';
-          }
-
-          // Render Space visibly
+        charStates.forEach((item, idx) => {
           if (item.isSpace) {
-            return (
-              <span
-                key={idx}
-                style={{
-                  display: 'inline-block',
-                  width: '12px',
-                  borderBottom: borderBottom !== 'none' ? '3px solid #111111' : 'none',
-                  margin: '0 2px'
-                }}
-              >
-                &nbsp;
-              </span>
-            );
+            if (currentWordChars.length > 0) {
+              tokens.push({ isSpace: false, items: currentWordChars });
+              currentWordChars = [];
+            }
+            tokens.push({ isSpace: true, item: { ...item, index: idx } });
+          } else {
+            currentWordChars.push({ ...item, index: idx });
           }
+        });
+        if (currentWordChars.length > 0) {
+          tokens.push({ isSpace: false, items: currentWordChars });
+        }
 
-          return (
-            <span
-              key={idx}
-              style={{
-                display: 'inline-block',
-                color: charColor,
-                background: charBg,
-                borderBottom,
-                borderRadius: '3px',
-                padding: '0 1px',
-                transition: 'color 0.1s ease, background 0.1s ease',
-                position: 'relative'
-              }}
-            >
-              {item.status === 'wrong' ? item.typedChar || item.expectedChar : item.expectedChar}
-            </span>
-          );
-        })}
-      </div>
+        return (
+          <div
+            className="typing-text-container"
+            style={{
+              fontSize: charStates.length > 25 ? '1.4rem' : charStates.length > 15 ? '1.8rem' : '2.2rem',
+              fontWeight: 900,
+              lineHeight: 1.6,
+              fontFamily: "'Courier New', Courier, monospace",
+              letterSpacing: '0.04em',
+              minHeight: '64px',
+              display: 'flex',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              justifyContent: 'center',
+              rowGap: '6px',
+              wordBreak: 'keep-all',
+              padding: '8px 0'
+            }}
+          >
+            {tokens.map((token, tIdx) => {
+              if (token.isSpace) {
+                const item = token.item;
+                const borderBottom = item.status === 'current' ? '3px solid #111111' : 'none';
+                return (
+                  <span
+                    key={`space-${item.index}`}
+                    style={{
+                      display: 'inline-block',
+                      width: '12px',
+                      borderBottom,
+                      margin: '0 2px'
+                    }}
+                  >
+                    &nbsp;
+                  </span>
+                );
+              }
+
+              return (
+                <span
+                  key={`word-${tIdx}`}
+                  className="typing-word"
+                  style={{
+                    display: 'inline-flex',
+                    flexWrap: 'nowrap',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  {token.items.map((item) => {
+                    let charColor = '#94A3B8'; // default pending
+                    let charBg = 'transparent';
+                    let borderBottom = 'none';
+
+                    if (item.status === 'completed') {
+                      charColor = '#10B981'; // Vibrant Green
+                    } else if (item.status === 'correct') {
+                      charColor = '#0284C7'; // Vibrant Blue
+                    } else if (item.status === 'wrong') {
+                      charColor = '#DC2626'; // Vibrant Red
+                      charBg = 'rgba(239, 68, 68, 0.15)';
+                    } else if (item.status === 'current') {
+                      borderBottom = '3px solid #111111';
+                    }
+
+                    return (
+                      <span
+                        key={item.index}
+                        style={{
+                          display: 'inline-block',
+                          color: charColor,
+                          background: charBg,
+                          borderBottom,
+                          borderRadius: '3px',
+                          padding: '0 1px',
+                          transition: 'color 0.1s ease, background 0.1s ease',
+                          position: 'relative'
+                        }}
+                      >
+                        {item.status === 'wrong' ? item.typedChar || item.expectedChar : item.expectedChar}
+                      </span>
+                    );
+                  })}
+                </span>
+              );
+            })}
+          </div>
+        );
+      })()}
 
       {/* Chinese Translation Hint */}
       {translation && (
