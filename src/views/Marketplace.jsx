@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Star, Book, Lightbulb, Rocket, Droplet, ArrowLeft, History, ShoppingBag, MapPin, CreditCard, ChevronRight, Check } from 'lucide-react';
 import { mockDb } from '../lib/mockDb';
 import { playerAuthService } from '../lib/playerAuthService';
+import { fetchPublishedProducts } from '../lib/marketplaceService';
 import CustomModal from '../components/CustomModal';
 
 const countryCodes = [
@@ -21,6 +22,27 @@ const renderProductIcon = (iconType, size = 48) => {
     case 'droplet': return <Droplet {...props} />;
     default: return <ShoppingBag {...props} />;
   }
+};
+
+const renderProductMedia = (product, size = 48) => {
+  if (product && product.image_url) {
+    return (
+      <img
+        src={product.image_url}
+        alt={product.name}
+        style={{
+          width: '100%',
+          height: '100%',
+          objectFit: 'contain',
+          borderRadius: 'inherit'
+        }}
+        onError={(e) => {
+          e.target.style.display = 'none';
+        }}
+      />
+    );
+  }
+  return renderProductIcon(product ? product.icon_type : 'book', size);
 };
 
 const Marketplace = ({ userBP, currentUser, onRegister, onUserUpdate }) => {
@@ -48,9 +70,30 @@ const Marketplace = ({ userBP, currentUser, onRegister, onUserUpdate }) => {
   // Custom Modal for Guest Prompts
   const [guestModal, setGuestModal] = useState({ isOpen: false, title: '', message: '' });
 
-  // Initial load
+  const [loadingProducts, setLoadingProducts] = useState(false);
+
+  // Load Published Catalog from Supabase
   useEffect(() => {
-    setProducts(mockDb.getProducts());
+    let isMounted = true;
+    async function loadCatalog() {
+      setLoadingProducts(true);
+      try {
+        const catalog = await fetchPublishedProducts();
+        if (isMounted) {
+          setProducts(catalog);
+        }
+      } catch (err) {
+        console.warn('[Marketplace] Catalog load exception, using fallback:', err);
+        if (isMounted) {
+          setProducts(mockDb.getProducts());
+        }
+      } finally {
+        if (isMounted) setLoadingProducts(false);
+      }
+    }
+
+    loadCatalog();
+    return () => { isMounted = false; };
   }, [view]);
 
   // Handle auto fill on checkout screen if user logged in
@@ -352,9 +395,11 @@ const Marketplace = ({ userBP, currentUser, onRegister, onUserUpdate }) => {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  boxShadow: 'inset 0 0 20px rgba(0,0,0,0.02)'
+                  boxShadow: 'inset 0 0 20px rgba(0,0,0,0.02)',
+                  overflow: 'hidden',
+                  padding: product.image_url ? '8px' : '0',
                 }}>
-                  {renderProductIcon(product.icon_type, 56)}
+                  {renderProductMedia(product, 56)}
                 </div>
                 <h3 className="text-body-bold" style={{ marginBottom: '8px', fontSize: '15px', lineHeight: 1.2, flex: 1 }}>{product.name}</h3>
                 
@@ -439,9 +484,11 @@ const Marketplace = ({ userBP, currentUser, onRegister, onUserUpdate }) => {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            transform: 'translateY(-10px)'
+            transform: 'translateY(-10px)',
+            overflow: 'hidden',
+            padding: selectedProduct.image_url ? '12px' : '0',
           }}>
-            {renderProductIcon(selectedProduct.icon_type, 80)}
+            {renderProductMedia(selectedProduct, 80)}
           </div>
         </div>
 
