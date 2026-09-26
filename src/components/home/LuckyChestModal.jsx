@@ -4,6 +4,7 @@ import PrimaryButton from '../common/PrimaryButton';
 import { mockDb } from '../../lib/mockDb';
 import { playerAuthService } from '../../lib/playerAuthService';
 import { playLootSparkleSound, playPunchyPopSound } from '../../lib/soundEffects';
+import { ENABLE_GARDEN } from '../../config/features';
 
 /**
  * LuckyChestModal
@@ -62,7 +63,7 @@ const LuckyChestModal = ({
       setRewardResult({
         tier: rpcRes.tier || localRes.tier,
         rewardBP: rpcRes.reward_bp ?? localRes.rewardBP,
-        rewardWater: rpcRes.reward_water ?? localRes.rewardWater,
+        rewardWater: ENABLE_GARDEN ? (rpcRes.reward_water ?? localRes.rewardWater) : 0,
         specialItem: localRes.specialItem
       });
       setAnimationStage('revealed');
@@ -291,19 +292,21 @@ const LuckyChestModal = ({
 
               {/* Secondary Rewards */}
               <div style={{ display: 'flex', gap: '8px' }}>
-                <span
-                  style={{
-                    background: 'rgba(59, 130, 246, 0.2)',
-                    border: '1px solid rgba(59, 130, 246, 0.4)',
-                    color: '#93C5FD',
-                    fontSize: '11px',
-                    fontWeight: 800,
-                    padding: '3px 10px',
-                    borderRadius: '9999px'
-                  }}
-                >
-                  +{rewardResult.rewardWater} 💧 甘露
-                </span>
+                {ENABLE_GARDEN && rewardResult.rewardWater > 0 && (
+                  <span
+                    style={{
+                      background: 'rgba(59, 130, 246, 0.2)',
+                      border: '1px solid rgba(59, 130, 246, 0.4)',
+                      color: '#93C5FD',
+                      fontSize: '11px',
+                      fontWeight: 800,
+                      padding: '3px 10px',
+                      borderRadius: '9999px'
+                    }}
+                  >
+                    +{rewardResult.rewardWater} 💧 甘露
+                  </span>
+                )}
                 {rewardResult.specialItem && (
                   <span
                     style={{

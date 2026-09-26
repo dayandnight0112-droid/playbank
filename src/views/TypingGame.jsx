@@ -9,6 +9,7 @@ import { useTypingEngine } from '../hooks/useTypingEngine.js';
 import TypingDisplay from '../components/typing/TypingDisplay.jsx';
 import TypingHiddenInput from '../components/typing/TypingHiddenInput.jsx';
 import { mockDb } from '../lib/mockDb.js';
+import { ENABLE_GARDEN } from '../config/features.js';
 import { isSoundEnabled, setSoundEnabled, playPunchyPopSound } from '../lib/soundEffects.js';
 
 function PlayBankMiniLogo() {
@@ -511,29 +512,31 @@ export default function TypingGame({
               <MetricItem label="用时" value={formatTime(timeTaken)} />
             </div>
 
-            {/* Garden Mission Notice */}
-            <div
-              style={{
-                marginTop: '12px',
-                background: '#F1F8E9',
-                border: '2px solid #66BB6A',
-                borderRadius: '16px',
-                padding: '10px 14px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px'
-              }}
-            >
-              <span style={{ fontSize: '20px' }}>🌱</span>
-              <div>
-                <p style={{ fontSize: '12px', fontWeight: 900, color: '#1B5E20', margin: 0 }}>
-                  每日任务已同步推进！
-                </p>
-                <p style={{ fontSize: '11px', fontWeight: 600, color: '#2E7D32', margin: '2px 0 0 0' }}>
-                  +1 对局 · +{questions.length} 英文题目
-                </p>
+            {/* Garden Mission Notice (暂时暂停使用状态下隐藏) */}
+            {ENABLE_GARDEN && (
+              <div
+                style={{
+                  marginTop: '12px',
+                  background: '#F1F8E9',
+                  border: '2px solid #66BB6A',
+                  borderRadius: '16px',
+                  padding: '10px 14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px'
+                }}
+              >
+                <span style={{ fontSize: '20px' }}>🌱</span>
+                <div>
+                  <p style={{ fontSize: '12px', fontWeight: 900, color: '#1B5E20', margin: 0 }}>
+                    每日任务已同步推进！
+                  </p>
+                  <p style={{ fontSize: '11px', fontWeight: 600, color: '#2E7D32', margin: '2px 0 0 0' }}>
+                    +1 对局 · +{questions.length} 英文题目
+                  </p>
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Claim BP CTA Button */}
             <button

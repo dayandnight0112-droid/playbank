@@ -4,6 +4,7 @@ import PrimaryButton from '../common/PrimaryButton';
 import { mockDb, getTimeUntilMalaysiaMidnight } from '../../lib/mockDb';
 import { playLootSparkleSound } from '../../lib/soundEffects';
 import { playerAuthService } from '../../lib/playerAuthService';
+import { ENABLE_GARDEN } from '../../config/features';
 
 /**
  * DailyMissionModal
@@ -98,7 +99,10 @@ const DailyMissionModal = ({
         if (onUpdateBP) {
           onUpdateBP((userBP || 0) + rewardBP);
         }
-        setClaimedNotice(`+${rewardBP} BP & +${rewardWater} 💧 claimed!`);
+        const toastText = ENABLE_GARDEN 
+          ? `+${rewardBP} BP & +${rewardWater} 💧 claimed!`
+          : `+${rewardBP} BP claimed!`;
+        setClaimedNotice(toastText);
         setTimeout(() => {
           setClaimedNotice(null);
         }, 2500);
@@ -124,7 +128,11 @@ const DailyMissionModal = ({
     }
 
     // Trigger celebration toast
-    setClaimedNotice(`+${res.earned_bp ?? rewardBP} BP & +${rewardWater} 💧 claimed!`);
+    const earnedBP = res.earned_bp ?? rewardBP;
+    const toastText = ENABLE_GARDEN
+      ? `+${earnedBP} BP & +${rewardWater} 💧 claimed!`
+      : `+${earnedBP} BP claimed!`;
+    setClaimedNotice(toastText);
     setTimeout(() => {
       setClaimedNotice(null);
     }, 2500);
@@ -228,7 +236,7 @@ const DailyMissionModal = ({
           </h2>
 
           <p style={{ fontSize: '12px', color: '#FDE68A', margin: 0, opacity: 0.9 }}>
-            完成每日目标，获得大量 BankPoint 与庄园甘露！
+            {ENABLE_GARDEN ? '完成每日目标，获得大量 BankPoint 与庄园甘露！' : '完成每日目标，获得大量 BankPoint 奖励！'}
           </p>
         </div>
 

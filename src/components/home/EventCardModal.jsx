@@ -3,6 +3,7 @@ import { X, Zap, Trophy, Clock, Sparkles, Check, ArrowRight } from 'lucide-react
 import PrimaryButton from '../common/PrimaryButton';
 import { mockDb } from '../../lib/mockDb';
 import { playLootSparkleSound } from '../../lib/soundEffects';
+import { ENABLE_GARDEN } from '../../config/features';
 
 /**
  * EventCardModal
@@ -272,7 +273,7 @@ const EventCardModal = ({
                 连胜签到狂欢增益
               </div>
               <p style={{ fontSize: '11px', color: '#C4B5FD', margin: 0, lineHeight: 1.2 }}>
-                每日签到额外加赠 +50% BankPoint 与庄园甘露。
+                {ENABLE_GARDEN ? '每日签到额外加赠 +50% BankPoint 与庄园甘露。' : '每日签到额外加赠 +50% BankPoint。'}
               </p>
             </div>
             <span

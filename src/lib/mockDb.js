@@ -1,6 +1,7 @@
 // Mock Database using LocalStorage
 import { questions as defaultQuestions } from '../data/questions.js';
 import { DEFAULT_AVATAR_ID } from '../data/playerAvatars.js';
+import { ENABLE_GARDEN } from '../config/features.js';
 const USERS_KEY = 'playbank_users';
 const CURRENT_SESSION_KEY = 'playbank_session';
 const PRODUCTS_KEY = 'playbank_products';
@@ -1028,9 +1029,12 @@ export const mockDb = {
     return { success: true, gardenState: updated };
   },
 
-  // 增加 Water 资源
+  // 增加 Water 资源 (Garden 暂停期间停止计算水滴)
   addWater: (amount = 1) => {
     const state = getGardenStateRaw();
+    if (!ENABLE_GARDEN) {
+      return state;
+    }
     const updated = {
       ...state,
       water: (state.water || 0) + amount,
@@ -1053,11 +1057,11 @@ export const mockDb = {
     mission.claimed = true;
     saveDailyMissionsRaw(state);
 
-    const updatedGarden = mockDb.addWater(mission.reward || 1);
+    const updatedGarden = ENABLE_GARDEN ? mockDb.addWater(mission.reward || 1) : getGardenStateRaw();
     return {
       success: true,
       mission,
-      waterAdded: mission.reward || 1,
+      waterAdded: ENABLE_GARDEN ? (mission.reward || 1) : 0,
       gardenState: updatedGarden,
       missionsState: state
     };
@@ -1610,15 +1614,17 @@ export const mockDb = {
     localStorage.setItem(CHEST_KEY, JSON.stringify(updatedChest));
     localStorage.setItem('playbank_chests_opened', updatedChest.totalOpened.toString());
 
-    // Award BP & Water
+    // Award BP & Water (Water paused when ENABLE_GARDEN is false)
     const newTotalBP = mockDb.awardBP(rewardBP);
-    mockDb.addWater(rewardWater);
+    if (ENABLE_GARDEN) {
+      mockDb.addWater(rewardWater);
+    }
 
     return {
       success: true,
       tier,
       rewardBP,
-      rewardWater,
+      rewardWater: ENABLE_GARDEN ? rewardWater : 0,
       specialItem,
       newTotalBP,
       nextState: mockDb.getLuckyChestState()

@@ -8,6 +8,7 @@ import Marketplace from './views/Marketplace';
 import Profile from './views/Profile';
 import Leaderboard from './views/Leaderboard';
 import Garden from './views/Garden';
+import { ENABLE_GARDEN } from './config/features';
 import SaveScoreModal from './components/SaveScoreModal';
 import CustomModal from './components/CustomModal';
 import BoosterOfferModal from './components/BoosterOfferModal';
@@ -814,6 +815,11 @@ function App() {
           />
         );
       case 'garden':
+        if (!ENABLE_GARDEN) {
+          // Garden 功能暂时暂停使用，自动返回大厅
+          setTimeout(() => setCurrentView('home'), 0);
+          return null;
+        }
         return <Garden userBP={userBP} onUpdateBP={(newBP) => setUserBP(newBP)} onGoQuiz={() => setCurrentView('select_subject')} />;
       case 'marketplace':
         return (

@@ -4,6 +4,7 @@ import PrimaryButton from '../common/PrimaryButton';
 import { mockDb } from '../../lib/mockDb';
 import { playCelebrationSound } from '../../lib/soundEffects';
 import { playerAuthService } from '../../lib/playerAuthService';
+import { ENABLE_GARDEN } from '../../config/features';
 
 /**
  * StreakRewardModal
@@ -33,8 +34,8 @@ const StreakRewardModal = ({
     { day: 1, bp: 10, icon: '🪙', title: 'Day 1' },
     { day: 2, bp: 15, icon: '🪙', title: 'Day 2' },
     { day: 3, bp: 20, icon: '🪙', title: 'Day 3' },
-    { day: 4, bp: 25, icon: '💧', title: 'Day 4' },
-    { day: 5, bp: 30, icon: '💧', title: 'Day 5' },
+    { day: 4, bp: 25, icon: ENABLE_GARDEN ? '💧' : '🪙', title: 'Day 4' },
+    { day: 5, bp: 30, icon: ENABLE_GARDEN ? '💧' : '🪙', title: 'Day 5' },
     { day: 6, bp: 40, icon: '🪙', title: 'Day 6' },
     { day: 7, bp: 100, icon: '👑', title: 'Day 7 · GRAND CHEST', isMega: true }
   ];

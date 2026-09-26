@@ -3,6 +3,7 @@ import { ArrowLeft, Clock, Check, Trophy, Flame, ChevronRight, CheckCircle2, Min
 import { mockDb } from '../lib/mockDb';
 import { quizService } from '../lib/quizService.js';
 import { playerAuthService } from '../lib/playerAuthService.js';
+import { ENABLE_GARDEN } from '../config/features.js';
 import Confetti from 'react-confetti';
 import { useWindowSize } from 'react-use';
 
@@ -901,47 +902,49 @@ const Quiz = ({
               </div>
             </div>
 
-            {/* Garden Missions Progress Notification */}
-            <div 
-              onClick={() => {
-                if (onGoGarden) onGoGarden();
-              }}
-              style={{
-                marginTop: '14px',
-                background: '#F1F8E9',
-                border: '1.5px solid #66BB6A',
-                borderRadius: '16px',
-                padding: '10px 12px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                cursor: onGoGarden ? 'pointer' : 'default',
-                boxShadow: '0 2px 0px #2E7D32'
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '18px' }}>🌱</span>
-                <div>
-                  <p style={{ fontSize: '12px', fontWeight: 900, color: '#1B5E20', margin: 0 }}>
-                    花园任务已同步！
-                  </p>
-                  <p style={{ fontSize: '10.5px', fontWeight: 600, color: '#2E7D32', margin: '2px 0 0' }}>
-                    +1 答题 · +{displayQuestions.length} 题作答 · +{actualCorrect} 题正确
-                  </p>
+            {/* Garden Missions Progress Notification (暂时暂停使用状态下隐藏) */}
+            {ENABLE_GARDEN && (
+              <div 
+                onClick={() => {
+                  if (onGoGarden) onGoGarden();
+                }}
+                style={{
+                  marginTop: '14px',
+                  background: '#F1F8E9',
+                  border: '1.5px solid #66BB6A',
+                  borderRadius: '16px',
+                  padding: '10px 12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  cursor: onGoGarden ? 'pointer' : 'default',
+                  boxShadow: '0 2px 0px #2E7D32'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '18px' }}>🌱</span>
+                  <div>
+                    <p style={{ fontSize: '12px', fontWeight: 900, color: '#1B5E20', margin: 0 }}>
+                      花园任务已同步！
+                    </p>
+                    <p style={{ fontSize: '10.5px', fontWeight: 600, color: '#2E7D32', margin: '2px 0 0' }}>
+                      +1 答题 · +{displayQuestions.length} 题作答 · +{actualCorrect} 题正确
+                    </p>
+                  </div>
+                </div>
+                <div style={{
+                  background: '#2E7D32',
+                  color: '#FFF',
+                  padding: '5px 10px',
+                  borderRadius: '8px',
+                  fontSize: '11px',
+                  fontWeight: 900,
+                  whiteSpace: 'nowrap'
+                }}>
+                  领取水滴 💧 →
                 </div>
               </div>
-              <div style={{
-                background: '#2E7D32',
-                color: '#FFF',
-                padding: '5px 10px',
-                borderRadius: '8px',
-                fontSize: '11px',
-                fontWeight: 900,
-                whiteSpace: 'nowrap'
-              }}>
-                领取水滴 💧 →
-              </div>
-            </div>
+            )}
           </div>
 
           {/* Section: Question History Breakdown */}
