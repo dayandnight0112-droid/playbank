@@ -45,6 +45,7 @@ const BottomNav = ({ currentView, setCurrentView }) => {
       }}
     >
       {navItems.map((item) => {
+        const Icon = item.icon;
         const nonHomeViews = ['select_subject', 'marketplace', 'profile', ...(ENABLE_GARDEN ? ['garden'] : [])];
         const isActive = currentView === item.id || (item.id === 'home' && !nonHomeViews.includes(currentView));
 
