@@ -134,6 +134,7 @@ const Quiz = ({
   const [skippedCount, setSkippedCount] = useState(0);
   const [startTime, setStartTime] = useState(null);
   const [timeTaken, setTimeTaken] = useState(0);
+  const [sessionQuestionsDetails, setSessionQuestionsDetails] = useState([]);
 
   // Animation Refs & State
   const bpTextRef = useRef(null);
@@ -274,6 +275,8 @@ const Quiz = ({
         response_time_ms: q.responseTimeMs || 2000
       };
     });
+
+    setSessionQuestionsDetails(questionsDetails);
 
     try {
       // Step 6: MUST await completeGameSession and confirm Supabase returned success
@@ -742,11 +745,51 @@ const Quiz = ({
       return `${m}:${s}`;
     };
     
-    const accuracy = Math.round((correctCount / questions.length) * 100);
-    const wrongCount = questions.length - correctCount - skippedCount;
+    // Derive question details list for this session
+    const displayQuestions = (sessionQuestionsDetails && sessionQuestionsDetails.length > 0)
+      ? sessionQuestionsDetails
+      : (questionsRef.current && questionsRef.current.length > 0 ? questionsRef.current : questions).map((q, idx) => {
+          const rawOpts = q.options || [];
+          const selectedOpt = rawOpts.find(o => o.id === q.selectedOptionId);
+          const correctOpt = rawOpts.find(o => o.id === (q.revealedCorrectOptionId || q.correct_option_id));
+          const isUserCorrect = q.isUserCorrect !== undefined
+            ? q.isUserCorrect
+            : (q.revealedCorrectOptionId ? q.revealedCorrectOptionId === q.selectedOptionId : false);
+
+          let selectedText = q.selectedOptionText || selectedOpt?.text || null;
+          if (!selectedText || q.selectedOptionId === 'timeout' || q.selectedOptionId === 'unanswered' || !q.selectedOptionId) {
+            selectedText = '未作答 / Time Out';
+          }
+
+          let correctText = correctOpt?.text || q.revealedCorrectText || q.correctAnswer || '正确答案';
+          if (typeof correctText === 'string' && correctText.startsWith('opt_')) {
+            correctText = '正确答案';
+          }
+
+          return {
+            question_no: idx + 1,
+            question_text: q.question || q.text || `题目 #${idx + 1}`,
+            selected_option_text: selectedText,
+            correct_option_text: correctText,
+            explanation: q.revealedExplanation || q.explanation || '',
+            is_correct: isUserCorrect,
+            response_time_ms: q.responseTimeMs || 2000
+          };
+        });
+
+    const actualCorrect = displayQuestions.filter(q => q.is_correct).length;
+    const totalCount = displayQuestions.length || questions.length || 1;
+    const accuracy = Math.round((actualCorrect / totalCount) * 100);
 
     const handleClaimClick = () => {
-      if (!bpTextRef.current || !claimBtnRef.current || isAnimating) return;
+      if (isAnimating) return;
+      if (!bpTextRef.current || !claimBtnRef.current) {
+        if (currentUser) {
+          mockDb.logQuizAttempt(currentUser.id, questions[0]?.subject || 'mixed', sessionBP);
+        }
+        onComplete(sessionBP);
+        return;
+      }
       const startRect = bpTextRef.current.getBoundingClientRect();
       const endRect = claimBtnRef.current.getBoundingClientRect();
       
@@ -771,133 +814,286 @@ const Quiz = ({
     };
 
     return (
-      <div style={{ flex: 1, minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#FFBC00', padding: '16px' }}>
+      <div style={{ flex: 1, minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#FFBC00', padding: '16px', position: 'relative' }}>
         <Confetti width={width} height={height} recycle={false} numberOfPieces={500} colors={['#ffffff', '#000000', '#FFBC00', '#FF5722']} />
         
-        <div style={{ flex: 1, overflowY: 'auto', paddingBottom: '40px', paddingTop: '24px' }}>
-          <PlayBankMiniLogo />
+        {/* Top Header Bar with tactile back button & title */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 4px 16px', zIndex: 10 }}>
+          <button
+            type="button"
+            onClick={handleClaimClick}
+            disabled={isAnimating}
+            style={{
+              width: '42px',
+              height: '42px',
+              borderRadius: '50%',
+              background: '#FFFFFF',
+              border: '2.5px solid #000000',
+              boxShadow: '0 3.5px 0 #000000',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: isAnimating ? 'wait' : 'pointer',
+              outline: 'none',
+              transition: 'transform 0.08s ease, box-shadow 0.08s ease',
+              flexShrink: 0
+            }}
+            title="返回主页"
+            aria-label="Back"
+          >
+            <ArrowLeft size={20} color="#000000" strokeWidth={2.5} />
+          </button>
 
-          <div className="animate-slide-up" style={{ marginTop: '12px', textAlign: 'center', animationDelay: '0.2s' }}>
-            <h1 style={{ fontSize: '33px', fontWeight: 900, lineHeight: 1, color: '#000' }}>
-              Quiz Completed!
+          <div style={{ textAlign: 'center', flex: 1, padding: '0 10px' }}>
+            <h1 style={{ fontSize: '20px', fontWeight: 900, color: '#000000', margin: 0, letterSpacing: '-0.3px' }}>
+              本局答题历史总结
             </h1>
-            <p style={{ marginTop: '8px', fontSize: '13px', fontWeight: 600, color: '#5E5E5E' }}>
-              Here is your performance.
+            <p style={{ fontSize: '11.5px', fontWeight: 700, color: '#4A3B00', margin: '2px 0 0' }}>
+              {quizParams?.chapterTitle || quizParams?.chapterName || 'Sejarah'} · 历史作答明细
             </p>
           </div>
 
-          <TrophyHero />
+          <div style={{ width: '42px', height: '42px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <PlayBankMiniLogo />
+          </div>
+        </div>
 
-          <div className="animate-slide-up" style={{ position: 'relative', zIndex: 1, marginTop: '-20px', borderRadius: '26px', background: '#FFF', padding: '20px 16px', boxShadow: '0 15px 35px rgba(0,0,0,0.08)', animationDelay: '0.4s' }}>
+        {/* Scrollable Content */}
+        <div style={{ flex: 1, overflowY: 'auto', paddingBottom: '32px' }}>
+          
+          {/* BP & Performance Hero Card */}
+          <div className="animate-slide-up" style={{ borderRadius: '24px', background: '#FFF', padding: '20px 16px', boxShadow: '0 12px 30px rgba(0,0,0,0.08)', border: '2.5px solid #000' }}>
             <div style={{ textAlign: 'center' }}>
               <p 
                 ref={bpTextRef} 
-                style={{ fontSize: '46px', fontWeight: 900, lineHeight: 1, color: '#F2B400', opacity: isAnimating ? 0 : 1 }}
+                style={{ fontSize: '46px', fontWeight: 900, lineHeight: 1, color: '#F2B400', margin: 0, opacity: isAnimating ? 0 : 1 }}
               >
                 +{sessionBP} BP
               </p>
 
-              <div style={{ margin: '12px auto 0', display: 'inline-flex', alignItems: 'center', gap: '8px', borderRadius: '9999px', border: '1px solid #F4DFA0', background: '#FFF8E1', padding: '4px 12px' }}>
-                <span style={{ display: 'flex', height: '20px', width: '20px', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', background: '#FFBC00', fontSize: '11px', fontWeight: 900, color: '#FFF' }}>
+              <div style={{ margin: '12px auto 0', display: 'inline-flex', alignItems: 'center', gap: '8px', borderRadius: '9999px', border: '1.5px solid #F4DFA0', background: '#FFF8E1', padding: '4px 14px' }}>
+                <span style={{ display: 'flex', height: '18px', width: '18px', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', background: '#FFBC00', fontSize: '10px', fontWeight: 900, color: '#FFF' }}>
                   ★
                 </span>
-                <span style={{ fontSize: '11px', fontWeight: 900, color: '#5D4A00' }}>
-                  {accuracy >= 80 ? "Great Job! You're on fire! 🔥" : "Good Effort! Keep going! 💪"}
+                <span style={{ fontSize: '12px', fontWeight: 900, color: '#5D4A00' }}>
+                  {accuracy >= 80 ? "太棒了！状态极佳！ 🔥" : (accuracy >= 60 ? "表现不错！继续加油！ 💪" : "再接再厉！多复习巩固！ 📚")}
                 </span>
               </div>
             </div>
 
-            <div style={{ marginTop: '20px', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', borderBottom: '1px solid #EFEFEF', paddingBottom: '16px' }}>
-              <MetricItem label="Accuracy" value={`${accuracy}%`} />
-              <MetricItem label="Max Combo" value={maxCombo} />
-              <MetricItem label="Time Taken" value={formatTime(timeTaken)} />
+            {/* Quick 4 Metrics Grid */}
+            <div style={{ marginTop: '18px', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', borderTop: '1px solid #F0F0F0', paddingTop: '14px' }}>
+              <div style={{ textAlign: 'center' }}>
+                <p style={{ fontSize: '10.5px', fontWeight: 700, color: '#7B7B7B', margin: 0 }}>正确率</p>
+                <p style={{ marginTop: '4px', fontSize: '17px', fontWeight: 900, color: '#000', margin: 0 }}>{accuracy}%</p>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <p style={{ fontSize: '10.5px', fontWeight: 700, color: '#7B7B7B', margin: 0 }}>答对/总题</p>
+                <p style={{ marginTop: '4px', fontSize: '17px', fontWeight: 900, color: '#16A34A', margin: 0 }}>{actualCorrect}/{totalCount}</p>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <p style={{ fontSize: '10.5px', fontWeight: 700, color: '#7B7B7B', margin: 0 }}>最高连击</p>
+                <p style={{ marginTop: '4px', fontSize: '17px', fontWeight: 900, color: '#EA580C', margin: 0 }}>x{maxCombo}</p>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <p style={{ fontSize: '10.5px', fontWeight: 700, color: '#7B7B7B', margin: 0 }}>答题用时</p>
+                <p style={{ marginTop: '4px', fontSize: '17px', fontWeight: 900, color: '#000', margin: 0 }}>{formatTime(timeTaken)}</p>
+              </div>
             </div>
 
-            <ProgressCard />
-
-            {/* Step 7: Garden Missions Progress Notification */}
+            {/* Garden Missions Progress Notification */}
             <div 
               onClick={() => {
                 if (onGoGarden) onGoGarden();
               }}
               style={{
-                marginTop: '12px',
+                marginTop: '14px',
                 background: '#F1F8E9',
-                border: '2px solid #66BB6A',
-                borderRadius: '18px',
-                padding: '12px 14px',
+                border: '1.5px solid #66BB6A',
+                borderRadius: '16px',
+                padding: '10px 12px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 cursor: onGoGarden ? 'pointer' : 'default',
-                boxShadow: '0 3px 0px #2E7D32'
+                boxShadow: '0 2px 0px #2E7D32'
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{
-                  width: '38px',
-                  height: '38px',
-                  borderRadius: '50%',
-                  background: '#C8E6C9',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '18px'
-                }}>
-                  🌱
-                </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '18px' }}>🌱</span>
                 <div>
-                  <p style={{ fontSize: '13px', fontWeight: 900, color: '#1B5E20' }}>
-                    Garden Missions Updated!
+                  <p style={{ fontSize: '12px', fontWeight: 900, color: '#1B5E20', margin: 0 }}>
+                    花园任务已同步！
                   </p>
-                  <p style={{ fontSize: '11px', fontWeight: 600, color: '#2E7D32', marginTop: '2px' }}>
-                    +1 Quiz · +{questions.length} Qs · +{correctCount} Correct
+                  <p style={{ fontSize: '10.5px', fontWeight: 600, color: '#2E7D32', margin: '2px 0 0' }}>
+                    +1 答题 · +{displayQuestions.length} 题作答 · +{actualCorrect} 题正确
                   </p>
                 </div>
               </div>
               <div style={{
                 background: '#2E7D32',
                 color: '#FFF',
-                padding: '6px 12px',
-                borderRadius: '10px',
+                padding: '5px 10px',
+                borderRadius: '8px',
                 fontSize: '11px',
                 fontWeight: 900,
-                display: 'flex',
-                alignItems: 'center',
-                gap: '3px',
                 whiteSpace: 'nowrap'
               }}>
-                CLAIM 💧 →
+                领取水滴 💧 →
               </div>
             </div>
+          </div>
 
-            <div style={{ marginTop: '16px', borderRadius: '18px', border: '1px solid #EEEEEE', background: '#FFF', padding: '12px' }}>
-              <h2 style={{ fontSize: '13px', fontWeight: 900, color: '#000' }}>
-                Performance Overview
-              </h2>
-
-              <SimpleChart />
-
-              <div style={{ marginTop: '16px', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', borderTop: '1px solid #EFEFEF', paddingTop: '12px' }}>
-                <SummaryItem icon={<CheckCircle2 size={18} />} color="#34B450" label="Correct" value={correctCount} />
-                <SummaryItem icon={<XCircle size={18} />} color="#E55353" label="Wrong" value={wrongCount} />
-                <SummaryItem icon={<MinusCircle size={18} />} color="#F2B400" label="Skipped" value={skippedCount} />
+          {/* Section: Question History Breakdown */}
+          <div style={{ marginTop: '20px' }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: '10px',
+              padding: '0 4px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '16px' }}>📋</span>
+                <span style={{ fontSize: '14px', fontWeight: 900, color: '#000' }}>
+                  作答题目明细与解析
+                </span>
               </div>
+              <span style={{ fontSize: '12px', fontWeight: 800, color: '#3A2E00' }}>
+                共 {displayQuestions.length} 题
+              </span>
             </div>
 
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {displayQuestions.map((q, qIdx) => {
+                const isQCorrect = Boolean(q.is_correct);
+                const respTimeText = q.response_time || (q.response_time_ms ? `${(q.response_time_ms / 1000).toFixed(1)}秒` : '2.0秒');
+
+                return (
+                  <div
+                    key={q.question_no || qIdx}
+                    style={{
+                      backgroundColor: '#FFFFFF',
+                      borderRadius: '16px',
+                      border: isQCorrect ? '2px solid #86EFAC' : '2px solid #FCA5A5',
+                      padding: '14px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '8px',
+                      boxShadow: '0 3px 0 ' + (isQCorrect ? '#BBF7D0' : '#FECDD3')
+                    }}
+                  >
+                    {/* Question Header & Result Pill */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontWeight: 900, fontSize: '13px', color: '#111827' }}>
+                          第 {q.question_no || qIdx + 1} 题
+                        </span>
+                        <span
+                          style={{
+                            padding: '2px 8px',
+                            borderRadius: '9999px',
+                            fontSize: '11px',
+                            fontWeight: 900,
+                            backgroundColor: isQCorrect ? '#DCFCE7' : '#FEE2E2',
+                            color: isQCorrect ? '#166534' : '#991B1B',
+                            border: `1px solid ${isQCorrect ? '#86EFAC' : '#FCA5A5'}`
+                          }}
+                        >
+                          {isQCorrect ? '✓ 答对 Correct' : '✗ 答错 Wrong'}
+                        </span>
+                      </div>
+                      <span style={{ fontSize: '11px', fontWeight: 700, color: '#6B7280' }}>
+                        用时: {respTimeText}
+                      </span>
+                    </div>
+
+                    {/* Question Text */}
+                    <div style={{ fontWeight: 800, fontSize: '13.5px', color: '#111827', lineHeight: 1.5 }}>
+                      题目：{q.question_text}
+                    </div>
+
+                    {/* Answers Comparison */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {!isQCorrect && (
+                        <div
+                          style={{
+                            padding: '8px 12px',
+                            backgroundColor: '#FEF2F2',
+                            borderRadius: '8px',
+                            border: '1px solid #FCA5A5',
+                            fontSize: '12.5px',
+                            fontWeight: 700,
+                            color: '#B91C1C'
+                          }}
+                        >
+                          你的答案：{q.selected_option_text || '未作答 / Time Out'}
+                        </div>
+                      )}
+
+                      <div
+                        style={{
+                          padding: '8px 12px',
+                          backgroundColor: '#F0FDF4',
+                          borderRadius: '8px',
+                          border: '1px solid #86EFAC',
+                          fontSize: '12.5px',
+                          fontWeight: 700,
+                          color: '#15803D'
+                        }}
+                      >
+                        正确答案：{q.correct_option_text || '正确答案'}
+                      </div>
+                    </div>
+
+                    {/* Explanation */}
+                    {q.explanation && (
+                      <div
+                        style={{
+                          padding: '8px 12px',
+                          backgroundColor: '#FFFBEB',
+                          borderRadius: '8px',
+                          border: '1px solid #FDE68A',
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          color: '#92400E',
+                          lineHeight: 1.45
+                        }}
+                      >
+                        💡 <strong>解析：</strong>{q.explanation}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Bottom CTA Claim Button */}
+          <div style={{ marginTop: '20px' }}>
             <button 
               ref={claimBtnRef}
               onClick={handleClaimClick}
               disabled={isAnimating}
-              style={{ marginTop: '16px', display: 'flex', height: '48px', width: '100%', alignItems: 'center', justifyContent: 'center', borderRadius: '9999px', background: '#000', fontSize: '15px', fontWeight: 900, color: '#FFF', border: 'none', cursor: isAnimating ? 'wait' : 'pointer', boxShadow: 'var(--card-shadow-sm)' }}
+              style={{
+                display: 'flex',
+                height: '52px',
+                width: '100%',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: '16px',
+                background: '#000000',
+                fontSize: '16px',
+                fontWeight: 900,
+                color: '#FFBC00',
+                border: '2.5px solid #000000',
+                cursor: isAnimating ? 'wait' : 'pointer',
+                boxShadow: '0 4px 0 #333333',
+                gap: '8px'
+              }}
             >
-              Claim BP!
-            </button>
-
-            <button 
-              style={{ marginTop: '12px', display: 'flex', height: '44px', width: '100%', alignItems: 'center', justifyContent: 'center', borderRadius: '9999px', border: '1px solid #E6E6E6', background: '#FFF', fontSize: '14px', fontWeight: 900, color: '#000', cursor: 'pointer' }}
-            >
-              Review Answers
+              <span>领取奖励并完成对局</span>
+              <span>(+{sessionBP} BP)</span>
             </button>
           </div>
         </div>
