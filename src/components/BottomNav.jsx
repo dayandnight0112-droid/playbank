@@ -1,13 +1,13 @@
 import React from 'react';
 import { Home, Swords, Sprout, Gift, User } from 'lucide-react';
 import { playTapSound } from '../lib/soundEffects';
-import { ENABLE_GARDEN } from '../config/features';
+import { ENABLE_GARDEN, ENABLE_BATTLE_NAV } from '../config/features';
 
 /**
  * BottomNav
  * Fixed Gaming Bottom Navigation Bar:
  * ① Home (大厅)
- * ② Battle (对战/练习 - select_subject)
+ * ② Battle (对战/练习 - select_subject, 默认停用隐藏)
  * ③ Garden (庄园 - 暂时停用状态下隐藏)
  * ④ Reward (奖励/商城 - marketplace)
  * ⑤ Profile (我的)
@@ -15,7 +15,7 @@ import { ENABLE_GARDEN } from '../config/features';
 const BottomNav = ({ currentView, setCurrentView }) => {
   const navItems = [
     { id: 'home', icon: Home, label: 'Home' },
-    { id: 'select_subject', icon: Swords, label: 'Battle' },
+    ...(ENABLE_BATTLE_NAV ? [{ id: 'select_subject', icon: Swords, label: 'Battle' }] : []),
     ...(ENABLE_GARDEN ? [{ id: 'garden', icon: Sprout, label: 'Garden' }] : []),
     { id: 'marketplace', icon: Gift, label: 'Reward' },
     { id: 'profile', icon: User, label: 'Profile' }
@@ -46,7 +46,12 @@ const BottomNav = ({ currentView, setCurrentView }) => {
     >
       {navItems.map((item) => {
         const Icon = item.icon;
-        const nonHomeViews = ['select_subject', 'marketplace', 'profile', ...(ENABLE_GARDEN ? ['garden'] : [])];
+        const nonHomeViews = [
+          ...(ENABLE_BATTLE_NAV ? ['select_subject'] : []),
+          ...(ENABLE_GARDEN ? ['garden'] : []),
+          'marketplace',
+          'profile'
+        ];
         const isActive = currentView === item.id || (item.id === 'home' && !nonHomeViews.includes(currentView));
 
         return (

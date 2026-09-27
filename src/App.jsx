@@ -8,7 +8,7 @@ import Marketplace from './views/Marketplace';
 import Profile from './views/Profile';
 import Leaderboard from './views/Leaderboard';
 import Garden from './views/Garden';
-import { ENABLE_GARDEN } from './config/features';
+import { ENABLE_GARDEN, ENABLE_BATTLE_NAV } from './config/features';
 import SaveScoreModal from './components/SaveScoreModal';
 import CustomModal from './components/CustomModal';
 import BoosterOfferModal from './components/BoosterOfferModal';
@@ -772,6 +772,11 @@ function App() {
           />
         );
       case 'select_subject':
+        if (!ENABLE_BATTLE_NAV) {
+          // Battle 导航隐藏状态下，自动返回主页大厅
+          setTimeout(() => setCurrentView('home'), 0);
+          return null;
+        }
         return <SelectSubject onBack={() => setCurrentView('home')} onStartQuiz={startQuizFlow} openModal={openModal} />;
       case 'quiz':
         return (
