@@ -111,6 +111,7 @@ const Quiz = ({
   onEvaluateBossTrigger = null,
   onTriggerBossEncounter = null
 }) => {
+  const { width = typeof window !== 'undefined' ? window.innerWidth : 400, height = typeof window !== 'undefined' ? window.innerHeight : 800 } = useWindowSize();
   const rawQuestions = mockDb.getQuestions();
   const guest = mockDb.getGuestProfile();
   const multiplier = (currentUser?.score_multiplier === 3 || guest?.score_multiplier === 3) ? 3 : 1;

@@ -95,7 +95,7 @@ export default function TypingGame({
   guestProfile = null,
   userBP = 0
 }) {
-  const { width, height } = useWindowSize();
+  const { width = typeof window !== 'undefined' ? window.innerWidth : 400, height = typeof window !== 'undefined' ? window.innerHeight : 800 } = useWindowSize();
   const ageConfig = getTypingAgeConfig(age);
 
   const handleExitGame = () => {
