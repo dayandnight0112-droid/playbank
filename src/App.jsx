@@ -6,6 +6,7 @@ import SelectSubject from './views/SelectSubject';
 import Quiz from './views/Quiz';
 import Marketplace from './views/Marketplace';
 import Profile from './views/Profile';
+import Notifications from './views/Notifications';
 import Leaderboard from './views/Leaderboard';
 import Garden from './views/Garden';
 import { ENABLE_GARDEN, ENABLE_BATTLE_NAV } from './config/features';
@@ -30,11 +31,14 @@ import HomeTutorialOverlay from './components/tutorial/HomeTutorialOverlay';
 import TypingGame from './views/TypingGame';
 import AgeSelectModal from './components/typing/AgeSelectModal';
 import { getTypingAgeConfig } from './data/typingConfig';
+import { energyService } from './lib/energyService';
+import EnergyExhaustedModal from './components/common/EnergyExhaustedModal';
 
 function App() {
   const [guestProfile, setGuestProfile] = useState(() => mockDb.getGuestProfile());
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showExitRetention, setShowExitRetention] = useState(false);
+  const [showEnergyExhaustedModal, setShowEnergyExhaustedModal] = useState(false);
   const [tutorialStats, setTutorialStats] = useState({ earnedBP: 120, maxCombo: 6 });
   const [lobbyActiveModal, setLobbyActiveModal] = useState(null);
   const [showAgeSelectModal, setShowAgeSelectModal] = useState(false);
@@ -358,8 +362,15 @@ function App() {
   }, []);
 
   const handleStartChallenge = () => {
-    // Phase 5: If player is currently on Step 4 of Home Tutorial, mark it complete!
+    // Step 1: 游玩次数前置检查
     const id = currentUser?.id || guestProfile?.playerId || guestProfile?.id || 'guest';
+    const energyState = energyService.getEnergyState(id);
+    if (energyState.energy <= 0) {
+      setShowEnergyExhaustedModal(true);
+      return;
+    }
+
+    // Phase 5: If player is currently on Step 4 of Home Tutorial, mark it complete!
     const tutorial = mockDb.getHomeTutorialState(id);
     if (tutorial && tutorial.eligible && tutorial.status !== 'completed' && tutorial.currentStep === 4) {
       handleTutorialComplete();
@@ -370,6 +381,19 @@ function App() {
 
   const handleConfirmAgeAndStart = async (chosenAge) => {
     setShowAgeSelectModal(false);
+    const id = currentUser?.id || guestProfile?.playerId || guestProfile?.id || 'guest';
+
+    // Step 1: 原子扣除 1 次体力（防连点及零次数拦截）
+    const consumeRes = await energyService.consumeEnergy(id);
+    if (!consumeRes.success) {
+      if (consumeRes.reason === 'NO_ENERGY') {
+        setShowEnergyExhaustedModal(true);
+      } else {
+        console.warn('[App] Cannot consume energy:', consumeRes.message);
+      }
+      return;
+    }
+
     const validAge = parseInt(chosenAge, 10) || 10;
     setPlayerAge(validAge);
     mockDb.savePlayerAge(validAge);
@@ -378,51 +402,56 @@ function App() {
     const currentRound = gameRoundIndex || 1;
     const isMultipleChoice = currentRound % 2 === 1;
 
-    if (isMultipleChoice) {
-      // Single/Odd round: English Multiple Choice
-      const mapAgeToGrade = (age) => {
-        const num = parseInt(age, 10);
-        if (num <= 7) return { gradeId: 'year-1', gradeName: 'Year 1', form: 1 };
-        if (num === 8) return { gradeId: 'year-2', gradeName: 'Year 2', form: 2 };
-        if (num === 9) return { gradeId: 'year-3', gradeName: 'Year 3', form: 3 };
-        if (num === 10) return { gradeId: 'year-4', gradeName: 'Year 4', form: 4 };
-        if (num === 11) return { gradeId: 'year-5', gradeName: 'Year 5', form: 5 };
-        if (num === 12) return { gradeId: 'year-6', gradeName: 'Year 6', form: 6 };
-        if (num === 13) return { gradeId: 'form-1', gradeName: 'Form 1', form: 1 };
-        if (num === 14) return { gradeId: 'form-2', gradeName: 'Form 2', form: 2 };
-        if (num === 15) return { gradeId: 'form-3', gradeName: 'Form 3', form: 3 };
-        if (num === 16) return { gradeId: 'form-4', gradeName: 'Form 4', form: 4 };
-        return { gradeId: 'form-5', gradeName: 'Form 5', form: 5 };
-      };
+    try {
+      if (isMultipleChoice) {
+        // Single/Odd round: English Multiple Choice
+        const mapAgeToGrade = (age) => {
+          const num = parseInt(age, 10);
+          if (num <= 7) return { gradeId: 'year-1', gradeName: 'Year 1', form: 1 };
+          if (num === 8) return { gradeId: 'year-2', gradeName: 'Year 2', form: 2 };
+          if (num === 9) return { gradeId: 'year-3', gradeName: 'Year 3', form: 3 };
+          if (num === 10) return { gradeId: 'year-4', gradeName: 'Year 4', form: 4 };
+          if (num === 11) return { gradeId: 'year-5', gradeName: 'Year 5', form: 5 };
+          if (num === 12) return { gradeId: 'year-6', gradeName: 'Year 6', form: 6 };
+          if (num === 13) return { gradeId: 'form-1', gradeName: 'Form 1', form: 1 };
+          if (num === 14) return { gradeId: 'form-2', gradeName: 'Form 2', form: 2 };
+          if (num === 15) return { gradeId: 'form-3', gradeName: 'Form 3', form: 3 };
+          if (num === 16) return { gradeId: 'form-4', gradeName: 'Form 4', form: 4 };
+          return { gradeId: 'form-5', gradeName: 'Form 5', form: 5 };
+        };
 
-      const gradeInfo = mapAgeToGrade(validAge);
-      let selectedChapter = null;
-      try {
-        const pubChapters = await quizService.getPublishedChapters(gradeInfo.gradeId, 'english');
-        if (pubChapters && pubChapters.length > 0) {
-          selectedChapter = pubChapters[0];
+        const gradeInfo = mapAgeToGrade(validAge);
+        let selectedChapter = null;
+        try {
+          const pubChapters = await quizService.getPublishedChapters(gradeInfo.gradeId, 'english');
+          if (pubChapters && pubChapters.length > 0) {
+            selectedChapter = pubChapters[0];
+          }
+        } catch (err) {
+          console.warn('[App] Could not load published English chapters for grade:', gradeInfo.gradeId, err);
         }
-      } catch (err) {
-        console.warn('[App] Could not load published English chapters for grade:', gradeInfo.gradeId, err);
-      }
 
-      startQuizFlow({
-        gradeId: gradeInfo.gradeId,
-        gradeName: gradeInfo.gradeName,
-        form: gradeInfo.form,
-        subject: 'english',
-        subjectTitle: 'English',
-        chapterId: selectedChapter?.id || '8bde7fd7-a4c0-485c-8328-5e08a6eb3db8',
-        chapterTitle: selectedChapter?.title || 'Vocabulary & Grammar',
-        babNumber: selectedChapter?.babNumber || 'Unit 1',
-        versionNo: selectedChapter?.versionNo || 1,
-        questionCount: 10,
-        randomQuestions: true
-      });
-    } else {
-      // Double/Even round: English Typing Game
-      setPlaysToday(prev => prev + 1);
-      setCurrentView('typing');
+        startQuizFlow({
+          gradeId: gradeInfo.gradeId,
+          gradeName: gradeInfo.gradeName,
+          form: gradeInfo.form,
+          subject: 'english',
+          subjectTitle: 'English',
+          chapterId: selectedChapter?.id || '8bde7fd7-a4c0-485c-8328-5e08a6eb3db8',
+          chapterTitle: selectedChapter?.title || 'Vocabulary & Grammar',
+          babNumber: selectedChapter?.babNumber || 'Unit 1',
+          versionNo: selectedChapter?.versionNo || 1,
+          questionCount: 10,
+          randomQuestions: true
+        });
+      } else {
+        // Double/Even round: English Typing Game
+        setPlaysToday(prev => prev + 1);
+        setCurrentView('typing');
+      }
+    } catch (err) {
+      console.error('[App] Failed to start round, refunding energy:', err);
+      energyService.refundEnergy(id, 1);
     }
   };
 
@@ -765,6 +794,7 @@ function App() {
             onStartChallenge={handleStartChallenge}
             onGoMarket={() => setCurrentView('marketplace')}
             onGoBattle={handleStartChallenge}
+            onOpenBooster={() => setShowBoosterOffer(true)}
             onGoProfile={() => setCurrentView('profile')}
             onUpdateBP={(newBP) => setUserBP(newBP)}
             onActiveModalChange={setLobbyActiveModal}
@@ -838,6 +868,14 @@ function App() {
             }} 
           />
         );
+      case 'notifications':
+        return (
+          <Notifications
+            playerId={currentUser?.id || guestProfile?.playerId || guestProfile?.id || 'guest'}
+            onBack={() => setCurrentView('home')}
+            onRequestBooster={() => setShowBoosterOffer({ isFirstTimeOffer: false })}
+          />
+        );
       case 'leaderboard':
         return <Leaderboard currentUser={currentUser} guestProfile={guestProfile} />;
       case 'profile':
@@ -874,6 +912,7 @@ function App() {
             onStartChallenge={handleStartChallenge}
             onGoMarket={() => setCurrentView('marketplace')}
             onOpenLogin={() => setShowLoginModal(true)}
+            onOpenBooster={() => setShowBoosterOffer(true)}
             onUpdateBP={(newBP) => setUserBP(newBP)}
             onActiveModalChange={setLobbyActiveModal}
             externalActiveModal={lobbyActiveModal}
@@ -1036,7 +1075,11 @@ function App() {
       
       {/* Bottom Navigation is hidden on Onboarding, Tutorial, and Quiz screens */}
       {!hideBottomNav && (
-        <BottomNav currentView={currentView} setCurrentView={setCurrentView} />
+        <BottomNav
+          currentView={currentView}
+          setCurrentView={setCurrentView}
+          playerId={currentUser?.id || guestProfile?.playerId || guestProfile?.id || 'guest'}
+        />
       )}
 
       {/* Phase 2: Independent Home Tutorial Overlay (Coordinated across Home & Marketplace) */}
@@ -1115,49 +1158,35 @@ function App() {
         confirmText={modalConfig.confirmText}
       />
 
-      {/* Booster Offer Modal */}
+      {/* Energy Exhausted Modal */}
+      <EnergyExhaustedModal
+        isOpen={showEnergyExhaustedModal}
+        onClose={() => setShowEnergyExhaustedModal(false)}
+        playerId={currentUser?.id || guestProfile?.playerId || guestProfile?.id || 'guest'}
+        onOpenParentPurchase={() => setShowBoosterOffer(true)}
+      />
+
+      {/* Booster Offer Modal (Parental Purchase Flow) */}
       {showBoosterOffer && (
         <BoosterOfferModal
-          isFirstTimeOffer={showBoosterOffer.isFirstTimeOffer}
-          onClose={() => {
-            if (showBoosterOffer.isFirstTimeOffer) {
-              openModal({
-                title: 'Are you sure?',
-                message: 'Are you sure you want to miss out on the 3X BP Booster? All your future quiz answers will earn 30 BP instead of 10 BP!',
-                showCancel: true,
-                confirmText: 'Skip Booster',
-                onConfirm: () => {
-                  if (currentUser) {
-                    localStorage.setItem(`playbank_booster_rejected_${currentUser.id}`, 'true');
-                  }
-                  closeModal();
-                  setShowBoosterOffer(false);
-                  
-                  if (showBoosterOffer.fromRegistration) {
-                    openModal({
-                      title: 'Registration Successful',
-                      message: 'Your account is ready! Enjoy PlayBank!',
-                      confirmText: 'Awesome'
-                    });
-                  }
-                }
-              });
-            } else {
-              setShowBoosterOffer(false);
-            }
-          }}
-          onUnlock={async () => {
+          playerId={currentUser?.id || guestProfile?.playerId || guestProfile?.id || 'guest'}
+          isFirstTimeOffer={Boolean(showBoosterOffer?.isFirstTimeOffer)}
+          onClose={() => setShowBoosterOffer(false)}
+          onUnlock={async (order) => {
+            const activeId = currentUser?.id || guestProfile?.playerId || guestProfile?.id || 'guest';
+            energyService.upgradeToPaid(activeId);
             if (currentUser) {
               localStorage.setItem(`playbank_booster_rejected_${currentUser.id}`, 'true');
-              await playerAuthService.unlockBpBooster();
+              await playerAuthService.unlockBpBooster().catch(err => console.warn('[App] unlockBpBooster cloud error:', err));
               const wallet = await playerAuthService.getMyWallet();
               if (wallet && typeof wallet.balance_bp === 'number') {
                 setUserBP(wallet.balance_bp);
               }
               setCurrentUser(prev => prev ? ({ ...prev, score_multiplier: 3, has_booster: true }) : prev);
+            } else {
+              mockDb.updateGuestProfile({ score_multiplier: 3 });
+              setGuestProfile(mockDb.getGuestProfile());
             }
-            setShowBoosterOffer(false);
-            setShowCompleteProfile(true);
           }}
         />
       )}

@@ -222,7 +222,10 @@ export default function TypingGame({
     const duration = Math.floor((Date.now() - (startTime || Date.now())) / 1000);
     setTimeTaken(duration);
 
-    const earnedBP = questions.length * ageConfig.scorePerQuestion;
+    const session = mockDb.getCurrentSession();
+    const guest = mockDb.getGuestProfile();
+    const multiplier = (session?.score_multiplier === 3 || guest?.score_multiplier === 3) ? 3 : 1;
+    const earnedBP = questions.length * ageConfig.scorePerQuestion * multiplier;
 
     try {
       // 1. Authoritative local wallet update via mockDb

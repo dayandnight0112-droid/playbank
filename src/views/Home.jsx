@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import PrimaryButton from '../components/common/PrimaryButton';
 import CurrencyBadge from '../components/common/CurrencyBadge';
+import EnergyBadge from '../components/common/EnergyBadge';
 import AdventureScene from '../components/home/AdventureScene';
 import LobbySideAction from '../components/home/LobbySideAction';
 import DailyMissionModal from '../components/home/DailyMissionModal';
@@ -11,6 +12,7 @@ import BadgesModal from '../components/home/BadgesModal';
 import TrainingCampArt from '../components/home/TrainingCampArt';
 import { getHomeScene } from '../data/homeScenes';
 import { mockDb } from '../lib/mockDb';
+import { energyService } from '../lib/energyService';
 import { playModalSwooshSound } from '../lib/soundEffects';
 import PlayerAvatar from '../components/common/PlayerAvatar';
 
@@ -26,6 +28,7 @@ const Home = ({
   onGoMarket,
   onGoBattle,
   onOpenLogin,
+  onOpenBooster,
   onGoProfile,
   onUpdateBP,
   onActiveModalChange,
@@ -47,6 +50,24 @@ const Home = ({
 
   const [activeModal, setActiveModal] = useState(externalActiveModal || null); // 'daily' | 'streak' | 'chest' | 'event' | 'achievements'
   const [chestState, setChestState] = useState(() => mockDb.getLuckyChestState());
+
+  const playerId = currentUser?.id || guestProfile?.playerId || guestProfile?.id || 'guest';
+  const [energyState, setEnergyState] = useState(() => energyService.getEnergyState(playerId));
+
+  useEffect(() => {
+    const update = () => {
+      setEnergyState(energyService.getEnergyState(playerId));
+    };
+    update();
+    const unsub = energyService.subscribe(update);
+    window.addEventListener('playbank:energy-updated', update);
+    window.addEventListener('playbank:energy-tick', update);
+    return () => {
+      unsub();
+      window.removeEventListener('playbank:energy-updated', update);
+      window.removeEventListener('playbank:energy-tick', update);
+    };
+  }, [playerId]);
 
   const handleOpenModal = (modalName) => {
     playModalSwooshSound(false);
@@ -201,8 +222,17 @@ const Home = ({
           </div>
         </div>
 
-        {/* Right: Currency & Streaks Badges (🔥 3, 🪙 {userBP}) */}
+        {/* Right: Energy, Streaks & Currency Badges */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <EnergyBadge
+            energy={energyState.energy}
+            maxEnergy={energyState.maxEnergy}
+            isPaid={energyState.isPaid}
+            isFull={energyState.isFull}
+            formattedCountdown={energyState.formattedCountdown}
+            onClick={onOpenBooster}
+          />
+
           <CurrencyBadge
             icon="🔥"
             amount={streakDays}
@@ -288,56 +318,29 @@ const Home = ({
           onContinue={onGoBattle || onStartChallenge}
         />
 
-        {/* Right Action Column (Event, Boss Gate, Achievements - Temporarily hidden until officially unlocked) */}
-        {SHOW_RIGHT_LOBBY_ACTIONS ? (
-          <div
-            className="side-action-col"
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'flex-start',
-              gap: '12px',
-              zIndex: 15,
-              width: '56px'
-            }}
-          >
-            {/* 1. 限时活动 (Event - HOT 标识) */}
-            <LobbySideAction
-              icon="⚡"
-              label="Event"
-              badgeType="pill"
-              badgeText="HOT"
-              badgeColor="#A855F7"
-              glowColor="rgba(168, 85, 247, 0.4)"
-              onClick={() => handleOpenModal('event')}
-            />
-
-            {/* 2. 领主封印巨门 (Boss Gate - 显示 LOCKED) */}
-            <LobbySideAction
-              icon="💀"
-              label="Boss"
-              badgeType="pill"
-              badgeText="LOCKED"
-              badgeColor="#EF4444"
-              glowColor="rgba(239, 68, 68, 0.35)"
-              onClick={() => handleOpenModal('boss')}
-            />
-
-            {/* 3. 成就勋章 (Achievements - 显示进度 1/12) */}
-            <LobbySideAction
-              icon="🏆"
-              label="Badge"
-              badgeType="pill"
-              badgeText="1/12"
-              badgeColor="#EAB308"
-              glowColor="rgba(234, 179, 8, 0.4)"
-              onClick={() => handleOpenModal('achievements')}
-            />
-          </div>
-        ) : (
-          /* 保持左右对称留白，使中间内容（CONTINUE 按钮与关卡信息）视觉严格居中 */
-          <div style={{ width: '56px', pointerEvents: 'none' }} aria-hidden="true" />
-        )}
+        {/* Right Action Column (仅常驻公开 3× BP 特权入口，其余活动保持隐藏) */}
+        <div
+          className="side-action-col"
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'flex-start',
+            gap: '12px',
+            zIndex: 15,
+            width: '56px'
+          }}
+        >
+          {/* 3× BP VIP 特权入口 */}
+          <LobbySideAction
+            icon={energyState.isPaid ? '👑' : '⚡'}
+            label={energyState.isPaid ? 'VIP' : '3× BP'}
+            badgeType="pill"
+            badgeText={energyState.isPaid ? 'ACTIVE' : '10次上限'}
+            badgeColor={energyState.isPaid ? '#10B981' : '#F59E0B'}
+            glowColor={energyState.isPaid ? 'rgba(16, 185, 129, 0.45)' : 'rgba(245, 158, 11, 0.5)'}
+            onClick={onOpenBooster}
+          />
+        </div>
       </div>
 
       {/* Dedicated Daily Missions Modal (Step 26) */}

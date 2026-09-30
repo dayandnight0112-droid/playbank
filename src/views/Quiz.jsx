@@ -112,8 +112,8 @@ const Quiz = ({
   onTriggerBossEncounter = null
 }) => {
   const rawQuestions = mockDb.getQuestions();
-  const { width, height } = useWindowSize();
-  const multiplier = currentUser?.score_multiplier || 1;
+  const guest = mockDb.getGuestProfile();
+  const multiplier = (currentUser?.score_multiplier === 3 || guest?.score_multiplier === 3) ? 3 : 1;
   const scorePerQuestion = 10 * multiplier;
   const [status, setStatus] = useState('countdown'); // 'countdown' | 'playing' | 'result'
   const [countdown, setCountdown] = useState(3);

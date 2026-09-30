@@ -26,8 +26,10 @@ import {
   VolumeX,
   Music,
   UserPlus,
-  ShieldCheck
+  ShieldCheck,
+  Zap
 } from 'lucide-react';
+import { energyService } from '../lib/energyService';
 import { quizService } from '../lib/quizService';
 import { playerAuthService } from '../lib/playerAuthService';
 import { mockDb } from '../lib/mockDb';
@@ -138,12 +140,30 @@ const BadgeShield = ({ type, title, ribbonText, colorScheme, iconSvg }) => {
 /* Main Profile Component                                                     */
 /* -------------------------------------------------------------------------- */
 
-const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout, onRegister }) => {
+const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout, onRegister, onRequestBooster }) => {
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showBadgesModal, setShowBadgesModal] = useState(false);
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [expandedSessionId, setExpandedSessionId] = useState(null);
+
+  const activePlayerId = currentUser?.id || guestProfile?.playerId || guestProfile?.id || 'guest';
+  const [energyState, setEnergyState] = useState(() => energyService.getEnergyState(activePlayerId));
+  const isPaidAccount = Boolean(energyState?.isPaid || currentUser?.score_multiplier === 3);
+
+  useEffect(() => {
+    const update = () => {
+      setEnergyState(energyService.getEnergyState(activePlayerId));
+    };
+    const unsub = energyService.subscribe(update);
+    window.addEventListener('playbank:energy-updated', update);
+    window.addEventListener('playbank:booster-unlocked', update);
+    return () => {
+      unsub();
+      window.removeEventListener('playbank:energy-updated', update);
+      window.removeEventListener('playbank:booster-unlocked', update);
+    };
+  }, [activePlayerId]);
 
   // Audio & Settings State
   const [bgmVolume, setBgmVolume] = useState(() => {
@@ -810,6 +830,67 @@ const Profile = ({ currentUser, guestProfile, userBP = 0, onBack, onLogout, onRe
             </button>
           </div>
         )}
+
+        {/* PlayBank VIP & 3X BP Status Banner */}
+        <div
+          onClick={onRequestBooster}
+          style={{
+            background: isPaidAccount
+              ? 'linear-gradient(135deg, #064E3B 0%, #065F46 100%)'
+              : 'linear-gradient(135deg, #1E293B 0%, #0F172A 100%)',
+            border: isPaidAccount ? '2px solid #10B981' : '2px solid #F59E0B',
+            borderRadius: '20px',
+            padding: '16px',
+            marginBottom: '20px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            boxShadow: isPaidAccount
+              ? '0 4px 14px rgba(16, 185, 129, 0.2)'
+              : '0 4px 14px rgba(245, 158, 11, 0.2)',
+            cursor: onRequestBooster ? 'pointer' : 'default',
+            color: '#FFFFFF'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{
+              width: '42px',
+              height: '42px',
+              borderRadius: '14px',
+              backgroundColor: isPaidAccount ? '#10B981' : '#F59E0B',
+              color: '#000',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0
+            }}>
+              {isPaidAccount ? <Crown size={24} strokeWidth={2.5} /> : <Zap size={24} fill="#000" />}
+            </div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '15px', fontWeight: 900 }}>
+                  {isPaidAccount ? 'PlayBank VIP 特权已激活' : 'PlayBank 3× BP 特权包'}
+                </span>
+                <span style={{
+                  fontSize: '10px',
+                  fontWeight: 800,
+                  padding: '2px 6px',
+                  borderRadius: '6px',
+                  backgroundColor: isPaidAccount ? '#34D399' : '#FBBF24',
+                  color: '#000'
+                }}>
+                  {isPaidAccount ? '永久 10次上限' : '一次性购买 RM20'}
+                </span>
+              </div>
+              <div style={{ fontSize: '12px', color: '#CBD5E1', marginTop: '3px' }}>
+                {isPaidAccount
+                  ? '已享有 10 次游玩上限与答题 3 倍 BP 加成！'
+                  : '游玩上限由 5 增至 10，答题永久享 3× BP 收益！'}
+              </div>
+            </div>
+          </div>
+          <ChevronRight size={20} color={isPaidAccount ? '#34D399' : '#FBBF24'} />
+        </div>
 
         {/* ------------------------------------------------------------------ */}
         {/* STATS 2x2 GRID                                                     */}
