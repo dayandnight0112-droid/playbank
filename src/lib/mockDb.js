@@ -408,6 +408,8 @@ export const mockDb = {
       total_bp: guestBP || 0,
       weekly_bp: guestBP || 0,
       score_multiplier: 1,
+      source_channel: guest?.source_channel || (typeof guest?.sourceChannel === 'object' && guest?.sourceChannel !== null ? (guest.sourceChannel.title || guest.sourceChannel.id) : guest?.sourceChannel) || null,
+      sourceChannel: guest?.sourceChannel || null,
       created_at: new Date().toISOString()
     };
 

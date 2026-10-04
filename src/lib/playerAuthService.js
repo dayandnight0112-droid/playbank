@@ -289,7 +289,9 @@ class PlayerAuthService {
         updates.age_group = (typeof age_group === 'object' && age_group !== null ? age_group.id : age_group) || '13-15';
       }
       if (source_channel !== undefined) {
-        updates.source_channel = typeof source_channel === 'object' && source_channel !== null ? source_channel.id : source_channel;
+        updates.source_channel = typeof source_channel === 'object' && source_channel !== null
+          ? (source_channel.title || source_channel.id)
+          : source_channel;
       }
       if (daily_goal_minutes !== undefined) {
         updates.daily_goal_minutes = Number(daily_goal_minutes) || 10;

@@ -655,7 +655,7 @@ function App() {
               const rawAge = userProfileData?.ageGroup;
               const normalizedAgeGroup = (typeof rawAge === 'object' && rawAge !== null ? rawAge.id : rawAge) || '13-15';
               const rawChannel = userProfileData?.sourceChannel;
-              const normalizedChannel = (typeof rawChannel === 'object' && rawChannel !== null ? rawChannel.id : rawChannel) || null;
+              const normalizedChannel = (typeof rawChannel === 'object' && rawChannel !== null ? (rawChannel.title || rawChannel.id) : rawChannel) || null;
               const dailyGoalMinutes = Number(userProfileData?.dailyGoal?.minutes) || 10;
 
               try {
@@ -702,6 +702,7 @@ function App() {
                 selectedPath: tutorialPath,
                 ageGroup: userProfileData?.ageGroup,
                 sourceChannel: userProfileData?.sourceChannel,
+                source_channel: normalizedChannel,
                 selectedSubject: userProfileData?.selectedSubject,
                 subjectProficiency: userProfileData?.subjectProficiency,
                 dailyGoal: userProfileData?.dailyGoal,
