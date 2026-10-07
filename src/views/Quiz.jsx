@@ -197,6 +197,21 @@ const Quiz = ({
     setIsLoadingQuestions(true);
     setLoadError(null);
     setSubmitError(null);
+    setCurrentIndex(0);
+    setSessionBP(0);
+    setCombo(0);
+    setMaxCombo(0);
+    setCorrectCount(0);
+    setSkippedCount(0);
+    setTimeTaken(0);
+    setFeedback(null);
+    setSelectedOption(null);
+    setSelectedOptionId(null);
+    setSaveError(null);
+    setStatus('countdown');
+    setCountdown(3);
+    rewardClaimedRef.current = false;
+    hasRecordedMissionsRef.current = false;
 
     try {
       const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -824,13 +839,18 @@ const Quiz = ({
       ? `⚡ 剩余体力：${currentEnergy}/${maxEnergy}`
       : `⚡ 剩余体力：0/${maxEnergy} · 距离恢复1点还有 ${recoveryMinutes} 分钟`;
 
-    const handleClaimReward = useCallback(() => {
+    const handleClaimReward = () => {
       if (rewardClaimedRef.current) return;
       rewardClaimedRef.current = true;
-      if (currentUser) {
-        mockDb.logQuizAttempt(currentUser.id, questions[0]?.subject || 'mixed', sessionBP);
+      try {
+        if (currentUser) {
+          mockDb.logQuizAttempt(currentUser.id, questions[0]?.subject || 'mixed', sessionBP);
+        }
+      } catch (err) {
+        console.error('[Quiz] 领奖记录发生异常，自动释放锁允许重试:', err);
+        rewardClaimedRef.current = false;
       }
-    }, [currentUser, questions, sessionBP]);
+    };
 
     const handleReturnLobby = () => {
       if (isAnimating) return;

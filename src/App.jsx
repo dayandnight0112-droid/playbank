@@ -809,6 +809,7 @@ function App() {
       case 'quiz':
         return (
           <Quiz
+            key={`quiz_${gameRoundIndex}`}
             onComplete={handleQuizComplete}
             onBack={(bp, sid) => handleQuitQuiz(bp, sid)}
             onContinueNextRound={() => executeLaunchRound(playerAge)}
@@ -824,6 +825,7 @@ function App() {
       case 'typing':
         return (
           <TypingGame
+            key={`typing_${gameRoundIndex}`}
             age={playerAge}
             onComplete={handleTypingComplete}
             onContinueNextRound={() => executeLaunchRound(playerAge)}

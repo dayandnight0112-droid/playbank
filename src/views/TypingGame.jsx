@@ -209,6 +209,7 @@ export default function TypingGame({
   // Initial Data Load
   useEffect(() => {
     speechService.unlockAudio();
+    rewardClaimedRef.current = false;
 
     let isMounted = true;
     (async () => {
@@ -319,12 +320,17 @@ export default function TypingGame({
   const handleClaimReward = useCallback(() => {
     if (rewardClaimedRef.current) return;
     rewardClaimedRef.current = true;
-    const session = mockDb.getCurrentSession();
-    const guest = mockDb.getGuestProfile();
-    const multiplier = (session?.score_multiplier === 3 || guest?.score_multiplier === 3) ? 3 : 1;
-    const earnedBP = questions.length * ageConfig.scorePerQuestion * multiplier;
-    if (currentUser) {
-      mockDb.logQuizAttempt(currentUser.id, 'English Typing', earnedBP);
+    try {
+      const session = mockDb.getCurrentSession();
+      const guest = mockDb.getGuestProfile();
+      const multiplier = (session?.score_multiplier === 3 || guest?.score_multiplier === 3) ? 3 : 1;
+      const earnedBP = questions.length * ageConfig.scorePerQuestion * multiplier;
+      if (currentUser) {
+        mockDb.logQuizAttempt(currentUser.id, 'English Typing', earnedBP);
+      }
+    } catch (err) {
+      console.error('[TypingGame] 领奖记录异常，自动释放锁允许重试:', err);
+      rewardClaimedRef.current = false;
     }
   }, [currentUser, questions, ageConfig]);
 
