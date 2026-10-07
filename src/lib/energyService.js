@@ -205,11 +205,47 @@ class EnergyService {
   }
 
   /**
+   * 自动探测玩家是否拥有付费权益（从本地 session、guestProfile 或 booster 记录同步）
+   */
+  _checkPlayerPaidStatus(playerId = 'guest') {
+    if (typeof localStorage === 'undefined') return false;
+    try {
+      if (localStorage.getItem(`playbank_booster_unlocked_${playerId}`) === 'true') {
+        return true;
+      }
+      const sessStr = localStorage.getItem('playbank_session');
+      if (sessStr) {
+        const sess = JSON.parse(sessStr);
+        if (sess && (sess.has_booster || sess.score_multiplier === 3)) {
+          if (!playerId || playerId === 'guest' || playerId === sess.id) return true;
+        }
+      }
+      const guestStr = localStorage.getItem('playbank_guest_profile');
+      if (guestStr) {
+        const guest = JSON.parse(guestStr);
+        if (guest && (guest.score_multiplier === 3 || guest.has_booster)) {
+          if (!playerId || playerId === 'guest' || playerId === guest.playerId || playerId === guest.id) return true;
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+    return false;
+  }
+
+  /**
    * 获取指定玩家的当前体力状态（计算并持久化恢复结果）
    */
   getEnergyState(playerId = 'guest') {
     const now = this.getTrustedNow();
-    const raw = this._readRaw(playerId);
+    let raw = this._readRaw(playerId);
+
+    // 自动同步付费权益：如果系统判定为付费用户但当前体力池未升级，立即无损升级至 10 次上限
+    const isSystemPaid = this._checkPlayerPaidStatus(playerId);
+    if (isSystemPaid && (!raw || !raw.isPaid)) {
+      return this.upgradeToPaid(playerId);
+    }
+
     const calculated = this._calculateCurrentState(raw, now);
 
     // 如果发生了实际恢复或初次创建，更新持久化
@@ -236,7 +272,15 @@ class EnergyService {
     this._consumeLock = true;
     try {
       const now = this.getTrustedNow();
-      const raw = this._readRaw(playerId);
+      let raw = this._readRaw(playerId);
+
+      // 确保扣费前付费状态同步
+      const isSystemPaid = this._checkPlayerPaidStatus(playerId);
+      if (isSystemPaid && (!raw || !raw.isPaid)) {
+        this.upgradeToPaid(playerId);
+        raw = this._readRaw(playerId);
+      }
+
       const current = this._calculateCurrentState(raw, now);
 
       if (current.energy <= 0) {

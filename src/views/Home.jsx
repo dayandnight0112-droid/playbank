@@ -32,7 +32,9 @@ const Home = ({
   onGoProfile,
   onUpdateBP,
   onActiveModalChange,
-  externalActiveModal
+  externalActiveModal,
+  playerAge = 10,
+  onChangeAge
 }) => {
   // Player Display Info
   const playerName = currentUser
@@ -193,6 +195,35 @@ const Home = ({
               >
                 Lv.{playerLevel}
               </span>
+
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onChangeAge) onChangeAge();
+                }}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.16)',
+                  border: '1px solid rgba(255, 255, 255, 0.35)',
+                  color: '#FFFFFF',
+                  borderRadius: '9999px',
+                  padding: '1px 8px',
+                  fontSize: '11px',
+                  fontWeight: 900,
+                  letterSpacing: '0.3px',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '3px',
+                  cursor: 'pointer',
+                  backdropFilter: 'blur(4px)',
+                  transition: 'all 0.15s ease'
+                }}
+                title="点击修改年龄"
+              >
+                <span>{playerAge}岁</span>
+                <span style={{ fontSize: '10px', opacity: 0.85 }}>⚙</span>
+              </button>
 
               {!currentUser && onOpenLogin && (
                 <button

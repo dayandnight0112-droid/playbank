@@ -33,6 +33,7 @@ import AgeSelectModal from './components/typing/AgeSelectModal';
 import { getTypingAgeConfig } from './data/typingConfig';
 import { energyService } from './lib/energyService';
 import EnergyExhaustedModal from './components/common/EnergyExhaustedModal';
+import { gameLauncherService } from './lib/gameLauncherService';
 
 function App() {
   const [guestProfile, setGuestProfile] = useState(() => mockDb.getGuestProfile());
@@ -361,6 +362,13 @@ function App() {
     };
   }, []);
 
+  const [ageModalMode, setAgeModalMode] = useState('change'); // 'change' (修改年龄) | 'start' (首次确认并开局)
+
+  const handleOpenChangeAge = () => {
+    setAgeModalMode('change');
+    setShowAgeSelectModal(true);
+  };
+
   const handleStartChallenge = () => {
     // Step 1: 游玩次数前置检查
     const id = currentUser?.id || guestProfile?.playerId || guestProfile?.id || 'guest';
@@ -375,83 +383,80 @@ function App() {
     if (tutorial && tutorial.eligible && tutorial.status !== 'completed' && tutorial.currentStep === 4) {
       handleTutorialComplete();
     }
-    // Show Age Select Modal to determine exact age and round gameplay
-    setShowAgeSelectModal(true);
+
+    // Step 2 核心优化：已有保存年龄时，无需每次打断选年龄，直接使用保存年龄开局！
+    const currentAge = playerAge || mockDb.getPlayerAge();
+    if (currentAge) {
+      executeLaunchRound(currentAge);
+    } else {
+      setAgeModalMode('start');
+      setShowAgeSelectModal(true);
+    }
   };
 
-  const handleConfirmAgeAndStart = async (chosenAge) => {
-    setShowAgeSelectModal(false);
+  const executeLaunchRound = async (chosenAge) => {
     const id = currentUser?.id || guestProfile?.playerId || guestProfile?.id || 'guest';
-
-    // Step 1: 原子扣除 1 次体力（防连点及零次数拦截）
-    const consumeRes = await energyService.consumeEnergy(id);
-    if (!consumeRes.success) {
-      if (consumeRes.reason === 'NO_ENERGY') {
-        setShowEnergyExhaustedModal(true);
-      } else {
-        console.warn('[App] Cannot consume energy:', consumeRes.message);
-      }
-      return;
-    }
-
     const validAge = parseInt(chosenAge, 10) || 10;
     setPlayerAge(validAge);
     mockDb.savePlayerAge(validAge);
 
-    // Check round alternation: Odd = Multiple Choice, Even = Typing Game
-    const currentRound = gameRoundIndex || 1;
-    const isMultipleChoice = currentRound % 2 === 1;
+    // Sync cloud profile if player is authenticated
+    if (currentUser?.id && currentUser.id !== 'guest') {
+      playerAuthService.syncProfileMetadata({ exact_age: validAge }).catch(err => {
+        console.warn('[App] Failed to sync exact_age to cloud profile:', err);
+      });
+    }
 
-    try {
-      if (isMultipleChoice) {
-        // Single/Odd round: English Multiple Choice
-        const mapAgeToGrade = (age) => {
-          const num = parseInt(age, 10);
-          if (num <= 7) return { gradeId: 'year-1', gradeName: 'Year 1', form: 1 };
-          if (num === 8) return { gradeId: 'year-2', gradeName: 'Year 2', form: 2 };
-          if (num === 9) return { gradeId: 'year-3', gradeName: 'Year 3', form: 3 };
-          if (num === 10) return { gradeId: 'year-4', gradeName: 'Year 4', form: 4 };
-          if (num === 11) return { gradeId: 'year-5', gradeName: 'Year 5', form: 5 };
-          if (num === 12) return { gradeId: 'year-6', gradeName: 'Year 6', form: 6 };
-          if (num === 13) return { gradeId: 'form-1', gradeName: 'Form 1', form: 1 };
-          if (num === 14) return { gradeId: 'form-2', gradeName: 'Form 2', form: 2 };
-          if (num === 15) return { gradeId: 'form-3', gradeName: 'Form 3', form: 3 };
-          if (num === 16) return { gradeId: 'form-4', gradeName: 'Form 4', form: 4 };
-          return { gradeId: 'form-5', gradeName: 'Form 5', form: 5 };
-        };
-
-        const gradeInfo = mapAgeToGrade(validAge);
-        let selectedChapter = null;
-        try {
-          const pubChapters = await quizService.getPublishedChapters(gradeInfo.gradeId, 'english');
-          if (pubChapters && pubChapters.length > 0) {
-            selectedChapter = pubChapters[0];
-          }
-        } catch (err) {
-          console.warn('[App] Could not load published English chapters for grade:', gradeInfo.gradeId, err);
-        }
-
-        startQuizFlow({
-          gradeId: gradeInfo.gradeId,
-          gradeName: gradeInfo.gradeName,
-          form: gradeInfo.form,
-          subject: 'english',
-          subjectTitle: 'English',
-          chapterId: selectedChapter?.id || '8bde7fd7-a4c0-485c-8328-5e08a6eb3db8',
-          chapterTitle: selectedChapter?.title || 'Vocabulary & Grammar',
-          babNumber: selectedChapter?.babNumber || 'Unit 1',
-          versionNo: selectedChapter?.versionNo || 1,
-          questionCount: 10,
-          randomQuestions: true
-        });
-      } else {
-        // Double/Even round: English Typing Game
+    const currentRound = gameRoundIndex || mockDb.getGameRoundIndex() || 1;
+    const result = await gameLauncherService.launchGame({
+      playerId: id,
+      age: validAge,
+      roundIndex: currentRound,
+      onLaunchQuiz: async ({ quizParams: params }) => {
+        startQuizFlow(params);
+      },
+      onLaunchTyping: async () => {
         setPlaysToday(prev => prev + 1);
         setCurrentView('typing');
+      },
+      onEnergyExhausted: () => {
+        setShowEnergyExhaustedModal(true);
       }
-    } catch (err) {
-      console.error('[App] Failed to start round, refunding energy:', err);
-      energyService.refundEnergy(id, 1);
+    });
+
+    if (result.success) {
+      if (typeof result.nextRound === 'number') {
+        setGameRoundIndex(result.nextRound);
+      }
+    } else {
+      if (result.reason === 'NO_ENERGY') {
+        setShowEnergyExhaustedModal(true);
+      } else if (result.reason !== 'BUSY') {
+        // 下一局加载失败：保留结算页和已领取奖励，不强制退回大厅，提示可重试
+        openModal({
+          title: '下一局加载未成功',
+          message: result.error?.message || result.message || '网络不稳定或题目准备失败，体力已为您保留，请点击重试。',
+          confirmText: '我知道了'
+        });
+      }
+    }
+  };
+
+  const handleConfirmAgeFromModal = async (chosenAge) => {
+    setShowAgeSelectModal(false);
+    const validAge = parseInt(chosenAge, 10) || 10;
+    setPlayerAge(validAge);
+    mockDb.savePlayerAge(validAge);
+
+    if (currentUser?.id && currentUser.id !== 'guest') {
+      playerAuthService.syncProfileMetadata({ exact_age: validAge }).catch(err => {
+        console.warn('[App] Failed to sync exact_age to cloud profile:', err);
+      });
+    }
+
+    // 如果是从开局流程弹出的，确认后直接启动；如果是大厅点击齿轮修改，则仅保存更新
+    if (ageModalMode === 'start') {
+      await executeLaunchRound(validAge);
     }
   };
 
@@ -545,11 +550,6 @@ function App() {
   };
 
   const handleQuizComplete = (earnedBP) => {
-    // Advance game round index (Odd -> Even, Even -> Odd)
-    const nextRound = (gameRoundIndex || 1) + 1;
-    setGameRoundIndex(nextRound);
-    mockDb.saveGameRoundIndex(nextRound);
-
     // Note: earnedBP was already settled in cloud by completeGameSession RPC.
     // Local state (userBP / mockDb) has already been updated by the playbank:wallet-updated event.
     const currentBP = mockDb.getSafeUserBP();
@@ -573,11 +573,6 @@ function App() {
   };
 
   const handleTypingComplete = (earnedBP) => {
-    // Advance game round index (Even -> Odd)
-    const nextRound = (gameRoundIndex || 1) + 1;
-    setGameRoundIndex(nextRound);
-    mockDb.saveGameRoundIndex(nextRound);
-
     const currentBP = mockDb.getSafeUserBP();
 
     if (currentUser) {
@@ -800,6 +795,8 @@ function App() {
             onUpdateBP={(newBP) => setUserBP(newBP)}
             onActiveModalChange={setLobbyActiveModal}
             externalActiveModal={lobbyActiveModal}
+            playerAge={playerAge}
+            onChangeAge={handleOpenChangeAge}
           />
         );
       case 'select_subject':
@@ -814,8 +811,10 @@ function App() {
           <Quiz
             onComplete={handleQuizComplete}
             onBack={(bp, sid) => handleQuitQuiz(bp, sid)}
+            onContinueNextRound={() => executeLaunchRound(playerAge)}
             currentBP={userBP}
             currentUser={currentUser}
+            guestProfile={guestProfile}
             onGoGarden={() => setCurrentView('garden')}
             quizParams={quizParams}
             onEvaluateBossTrigger={handleEvaluateBossTrigger}
@@ -827,8 +826,12 @@ function App() {
           <TypingGame
             age={playerAge}
             onComplete={handleTypingComplete}
+            onContinueNextRound={() => executeLaunchRound(playerAge)}
             onBack={() => setCurrentView('home')}
             onQuit={() => setCurrentView('home')}
+            currentUser={currentUser}
+            guestProfile={guestProfile}
+            userBP={userBP}
           />
         );
       case 'boss_battle':
@@ -1230,9 +1233,11 @@ function App() {
       <AgeSelectModal
         isOpen={showAgeSelectModal}
         onClose={() => setShowAgeSelectModal(false)}
-        onConfirmAge={handleConfirmAgeAndStart}
+        onConfirmAge={handleConfirmAgeFromModal}
         defaultAge={playerAge}
         gameRound={gameRoundIndex}
+        title={ageModalMode === 'change' ? '修改你的实际年龄' : '请确认你的实际年龄'}
+        confirmButtonText={ageModalMode === 'change' ? '保存修改 (Save Age)' : '确认并开始 (Start Game)'}
       />
     </div>
   );

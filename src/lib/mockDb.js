@@ -1949,12 +1949,27 @@ export const mockDb = {
   // English Typing Game: Player Age and Round Index Persistence
   getPlayerAge: () => {
     if (typeof window === 'undefined') return 10;
+    // 1. Registered Profile Check (cloud session)
+    const session = mockDb.getCurrentSession();
+    if (session) {
+      const sessAge = session.exact_age || session.age;
+      if (sessAge) {
+        const parsed = parseInt(sessAge, 10);
+        if (!isNaN(parsed) && parsed >= 7 && parsed <= 17) return parsed;
+      }
+    }
+    // 2. Guest Profile Check
     const guest = mockDb.getGuestProfile();
+    if (guest?.exactAge) {
+      const parsed = parseInt(guest.exactAge, 10);
+      if (!isNaN(parsed) && parsed >= 7 && parsed <= 17) return parsed;
+    }
     const guestAge = guest?.ageGroup;
     if (guestAge) {
       const parsed = parseInt(typeof guestAge === 'object' ? guestAge.id : guestAge, 10);
       if (!isNaN(parsed) && parsed >= 7 && parsed <= 17) return parsed;
     }
+    // 3. Local Storage Check
     const saved = localStorage.getItem('playbank_player_age');
     if (saved) {
       const parsed = parseInt(saved, 10);
@@ -1967,6 +1982,20 @@ export const mockDb = {
     if (typeof window === 'undefined') return;
     const targetAge = parseInt(age, 10) || 10;
     localStorage.setItem('playbank_player_age', String(targetAge));
+    
+    // Update registered session if logged in
+    const session = mockDb.getCurrentSession();
+    if (session) {
+      session.exact_age = targetAge;
+      session.age = targetAge;
+      if (typeof mockDb.saveSession === 'function') {
+        mockDb.saveSession(session);
+      } else {
+        localStorage.setItem('playbank_session', JSON.stringify(session));
+      }
+    }
+
+    // Update guest profile
     const guest = mockDb.getGuestProfile();
     if (guest) {
       mockDb.updateGuestProfile({ exactAge: targetAge });

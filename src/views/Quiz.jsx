@@ -4,6 +4,7 @@ import { mockDb } from '../lib/mockDb';
 import { quizService } from '../lib/quizService.js';
 import { playerAuthService } from '../lib/playerAuthService.js';
 import { ENABLE_GARDEN } from '../config/features.js';
+import { energyService } from '../lib/energyService.js';
 import Confetti from 'react-confetti';
 import { useWindowSize } from 'react-use';
 
@@ -103,8 +104,11 @@ const shuffleArray = (array) => [...array].sort(() => Math.random() - 0.5);
 const Quiz = ({
   onComplete,
   onBack,
+  onContinueNextRound = null,
   currentBP,
   currentUser,
+  guestProfile = null,
+  playerId = null,
   onGoGarden,
   quizParams = null,
   onCheckBossTrigger = null,
@@ -113,7 +117,7 @@ const Quiz = ({
 }) => {
   const { width = typeof window !== 'undefined' ? window.innerWidth : 400, height = typeof window !== 'undefined' ? window.innerHeight : 800 } = useWindowSize();
   const rawQuestions = mockDb.getQuestions();
-  const guest = mockDb.getGuestProfile();
+  const guest = guestProfile || mockDb.getGuestProfile();
   const multiplier = (currentUser?.score_multiplier === 3 || guest?.score_multiplier === 3) ? 3 : 1;
   const scorePerQuestion = 10 * multiplier;
   const [status, setStatus] = useState('countdown'); // 'countdown' | 'playing' | 'result'
@@ -138,9 +142,37 @@ const Quiz = ({
   const [timeTaken, setTimeTaken] = useState(0);
   const [sessionQuestionsDetails, setSessionQuestionsDetails] = useState([]);
 
+  // Energy State & Subscription for Settlement Display
+  const activePlayerId = playerId || currentUser?.id || guestProfile?.playerId || guestProfile?.id || 'guest';
+  const [energyState, setEnergyState] = useState(() => energyService.getEnergyState(activePlayerId));
+
+  useEffect(() => {
+    setEnergyState(energyService.getEnergyState(activePlayerId));
+
+    const unsubscribe = energyService.subscribe((state) => {
+      if (!state.playerId || state.playerId === activePlayerId) {
+        setEnergyState(state);
+      }
+    });
+
+    const handleTick = () => {
+      setEnergyState(energyService.getEnergyState(activePlayerId));
+    };
+
+    window.addEventListener('playbank:energy-tick', handleTick);
+    window.addEventListener('playbank:energy-updated', handleTick);
+
+    return () => {
+      unsubscribe();
+      window.removeEventListener('playbank:energy-tick', handleTick);
+      window.removeEventListener('playbank:energy-updated', handleTick);
+    };
+  }, [activePlayerId]);
+
   // Animation Refs & State
   const bpTextRef = useRef(null);
   const claimBtnRef = useRef(null);
+  const rewardClaimedRef = useRef(false);
   const [isAnimating, setIsAnimating] = useState(false);
   const [animVars, setAnimVars] = useState({});
   const hasRecordedMissionsRef = useRef(false);
@@ -783,36 +815,41 @@ const Quiz = ({
     const totalCount = displayQuestions.length || questions.length || 1;
     const accuracy = Math.round((actualCorrect / totalCount) * 100);
 
-    const handleClaimClick = () => {
-      if (isAnimating) return;
-      if (!bpTextRef.current || !claimBtnRef.current) {
-        if (currentUser) {
-          mockDb.logQuizAttempt(currentUser.id, questions[0]?.subject || 'mixed', sessionBP);
-        }
-        onComplete(sessionBP);
-        return;
-      }
-      const startRect = bpTextRef.current.getBoundingClientRect();
-      const endRect = claimBtnRef.current.getBoundingClientRect();
-      
-      const deltaX = (endRect.left + endRect.width / 2) - (startRect.left + startRect.width / 2);
-      const deltaY = (endRect.top + endRect.height / 2) - (startRect.top + startRect.height / 2);
-      
-      setAnimVars({
-        '--start-x': `${startRect.left}px`,
-        '--start-y': `${startRect.top}px`,
-        '--delta-x': `${deltaX}px`,
-        '--delta-y': `${deltaY}px`,
-        '--start-w': `${startRect.width}px`
-      });
-      setIsAnimating(true);
-      
+    const currentEnergy = energyState?.energy ?? 0;
+    const maxEnergy = energyState?.maxEnergy ?? 5;
+    const isPaid = Boolean(energyState?.isPaid || maxEnergy === 10);
+    const hasEnergy = currentEnergy > 0;
+    const recoveryMinutes = Math.max(1, Math.ceil((energyState?.secondsToNextRecovery || 0) / 60));
+    const energyStatusText = hasEnergy
+      ? `⚡ 剩余体力：${currentEnergy}/${maxEnergy}`
+      : `⚡ 剩余体力：0/${maxEnergy} · 距离恢复1点还有 ${recoveryMinutes} 分钟`;
+
+    const handleClaimReward = useCallback(() => {
+      if (rewardClaimedRef.current) return;
+      rewardClaimedRef.current = true;
       if (currentUser) {
         mockDb.logQuizAttempt(currentUser.id, questions[0]?.subject || 'mixed', sessionBP);
       }
-      setTimeout(() => {
+    }, [currentUser, questions, sessionBP]);
+
+    const handleReturnLobby = () => {
+      if (isAnimating) return;
+      handleClaimReward();
+      if (onComplete) {
         onComplete(sessionBP);
-      }, 1200);
+      } else if (onBack) {
+        onBack(sessionBP, currentSessionIdRef.current);
+      }
+    };
+
+    const handleContinueNext = () => {
+      if (isAnimating) return;
+      handleClaimReward();
+      if (onContinueNextRound) {
+        onContinueNextRound();
+      } else if (onComplete) {
+        onComplete(sessionBP);
+      }
     };
 
     return (
@@ -823,7 +860,7 @@ const Quiz = ({
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 4px 16px', zIndex: 10 }}>
           <button
             type="button"
-            onClick={handleClaimClick}
+            onClick={handleReturnLobby}
             disabled={isAnimating}
             style={{
               width: '42px',
@@ -1073,12 +1110,54 @@ const Quiz = ({
             </div>
           </div>
 
-          {/* Bottom CTA Claim Button */}
-          <div style={{ marginTop: '20px' }}>
+          {/* Energy Status Display - 对齐主页面 VIP 风格 */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px',
+            padding: '10px 14px',
+            borderRadius: '14px',
+            background: !hasEnergy 
+              ? '#FFF1F2' 
+              : (isPaid ? 'linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%)' : '#FFFFFF'),
+            border: !hasEnergy 
+              ? '2px solid #F43F5E' 
+              : (isPaid ? '2px solid #F59E0B' : '2px solid #000000'),
+            color: !hasEnergy 
+              ? '#BE123C' 
+              : (isPaid ? '#92400E' : '#000000'),
+            fontSize: '13px',
+            fontWeight: 800,
+            marginTop: '16px',
+            boxShadow: !hasEnergy 
+              ? '0 2px 0 #F43F5E' 
+              : (isPaid ? '0 2px 0 #D97706' : '0 2px 0 #000000'),
+            textAlign: 'center'
+          }}>
+            <span>{energyStatusText}</span>
+            {isPaid && hasEnergy && (
+              <span style={{
+                background: '#F59E0B',
+                color: '#FFFFFF',
+                borderRadius: '999px',
+                padding: '1px 7px',
+                fontSize: '10.5px',
+                fontWeight: 900,
+                letterSpacing: '0.3px',
+                boxShadow: '0 1px 3px rgba(245, 158, 11, 0.4)'
+              }}>
+                VIP 10局
+              </span>
+            )}
+          </div>
+
+          {/* Bottom Action Buttons: Continue Next Round & Return to Lobby */}
+          <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <button 
               ref={claimBtnRef}
-              onClick={handleClaimClick}
-              disabled={isAnimating}
+              onClick={hasEnergy ? handleContinueNext : undefined}
+              disabled={isAnimating || !hasEnergy}
               style={{
                 display: 'flex',
                 height: '52px',
@@ -1086,18 +1165,43 @@ const Quiz = ({
                 alignItems: 'center',
                 justifyContent: 'center',
                 borderRadius: '16px',
-                background: '#000000',
+                background: hasEnergy ? '#000000' : '#9CA3AF',
                 fontSize: '16px',
                 fontWeight: 900,
-                color: '#FFBC00',
-                border: '2.5px solid #000000',
-                cursor: isAnimating ? 'wait' : 'pointer',
-                boxShadow: '0 4px 0 #333333',
-                gap: '8px'
+                color: hasEnergy ? '#FFBC00' : '#F3F4F6',
+                border: hasEnergy ? '2.5px solid #000000' : '2.5px solid #6B7280',
+                cursor: !hasEnergy ? 'not-allowed' : (isAnimating ? 'wait' : 'pointer'),
+                boxShadow: hasEnergy ? '0 4px 0 #333333' : 'none',
+                gap: '8px',
+                transition: 'transform 0.08s ease',
+                opacity: hasEnergy ? 1 : 0.85
               }}
             >
-              <span>领取奖励并完成对局</span>
-              <span>(+{sessionBP} BP)</span>
+              <span>{hasEnergy ? '继续下一局 ▶ · 消耗1⚡' : '体力恢复中'}</span>
+            </button>
+
+            <button 
+              type="button"
+              onClick={handleReturnLobby}
+              disabled={isAnimating}
+              style={{
+                display: 'flex',
+                height: '46px',
+                width: '100%',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: '14px',
+                background: '#FFFFFF',
+                fontSize: '14px',
+                fontWeight: 800,
+                color: '#000000',
+                border: '2px solid #000000',
+                cursor: isAnimating ? 'wait' : 'pointer',
+                boxShadow: '0 3px 0 #000000',
+                transition: 'transform 0.08s ease'
+              }}
+            >
+              <span>返回大厅</span>
             </button>
           </div>
         </div>

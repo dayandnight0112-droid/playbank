@@ -10,9 +10,17 @@ export default function AgeSelectModal({
   onClose,
   onConfirmAge,
   defaultAge = 10,
-  gameRound = 1
+  gameRound = 1,
+  title = '请选择你的实际年龄',
+  confirmButtonText = '开始挑战 (Start Game)'
 }) {
   const [selectedAge, setSelectedAge] = useState(() => defaultAge || 10);
+
+  React.useEffect(() => {
+    if (isOpen && defaultAge) {
+      setSelectedAge(defaultAge);
+    }
+  }, [isOpen, defaultAge]);
 
   if (!isOpen) return null;
 
@@ -107,7 +115,7 @@ export default function AgeSelectModal({
 
         {/* Modal Title */}
         <h2 style={{ fontSize: '1.35rem', fontWeight: 900, color: '#111111', margin: '0 0 6px 0' }}>
-          请选择你的实际年龄
+          {title}
         </h2>
         <p style={{ fontSize: '0.85rem', color: '#6B7280', margin: '0 0 18px 0', lineHeight: 1.4 }}>
           系统将根据你的年龄自动决定题目难度、题目数量和每题得分。
@@ -231,7 +239,7 @@ export default function AgeSelectModal({
             transition: 'transform 0.1s ease'
           }}
         >
-          <span>开始挑战 (Start Game)</span>
+          <span>{confirmButtonText}</span>
           <ArrowRight size={18} />
         </button>
       </div>

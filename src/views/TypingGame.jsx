@@ -10,6 +10,7 @@ import TypingDisplay from '../components/typing/TypingDisplay.jsx';
 import TypingHiddenInput from '../components/typing/TypingHiddenInput.jsx';
 import { mockDb } from '../lib/mockDb.js';
 import { ENABLE_GARDEN } from '../config/features.js';
+import { energyService } from '../lib/energyService.js';
 import { isSoundEnabled, setSoundEnabled, playPunchyPopSound } from '../lib/soundEffects.js';
 
 function PlayBankMiniLogo() {
@@ -89,14 +90,43 @@ function MetricItem({ label, value }) {
 export default function TypingGame({
   age = 10,
   onComplete,
+  onContinueNextRound = null,
   onBack,
   onQuit,
   currentUser = null,
   guestProfile = null,
+  playerId = null,
   userBP = 0
 }) {
   const { width = typeof window !== 'undefined' ? window.innerWidth : 400, height = typeof window !== 'undefined' ? window.innerHeight : 800 } = useWindowSize();
   const ageConfig = getTypingAgeConfig(age);
+
+  // Energy State & Subscription for Settlement Display
+  const activePlayerId = playerId || currentUser?.id || guestProfile?.playerId || guestProfile?.id || 'guest';
+  const [energyState, setEnergyState] = useState(() => energyService.getEnergyState(activePlayerId));
+
+  useEffect(() => {
+    setEnergyState(energyService.getEnergyState(activePlayerId));
+
+    const unsubscribe = energyService.subscribe((state) => {
+      if (!state.playerId || state.playerId === activePlayerId) {
+        setEnergyState(state);
+      }
+    });
+
+    const handleTick = () => {
+      setEnergyState(energyService.getEnergyState(activePlayerId));
+    };
+
+    window.addEventListener('playbank:energy-tick', handleTick);
+    window.addEventListener('playbank:energy-updated', handleTick);
+
+    return () => {
+      unsubscribe();
+      window.removeEventListener('playbank:energy-tick', handleTick);
+      window.removeEventListener('playbank:energy-updated', handleTick);
+    };
+  }, [activePlayerId]);
 
   const handleExitGame = () => {
     setShowQuitModal(false);
@@ -284,31 +314,48 @@ export default function TypingGame({
     setSoundEnabled(next);
   };
 
-  // Claim BP Button Click Handler
-  const handleClaimClick = () => {
-    if (!bpTextRef.current || !claimBtnRef.current || isAnimating) return;
-    const startRect = bpTextRef.current.getBoundingClientRect();
-    const endRect = claimBtnRef.current.getBoundingClientRect();
+  const rewardClaimedRef = useRef(false);
 
-    const deltaX = endRect.left + endRect.width / 2 - (startRect.left + startRect.width / 2);
-    const deltaY = endRect.top + endRect.height / 2 - (startRect.top + startRect.height / 2);
+  const handleClaimReward = useCallback(() => {
+    if (rewardClaimedRef.current) return;
+    rewardClaimedRef.current = true;
+    const session = mockDb.getCurrentSession();
+    const guest = mockDb.getGuestProfile();
+    const multiplier = (session?.score_multiplier === 3 || guest?.score_multiplier === 3) ? 3 : 1;
+    const earnedBP = questions.length * ageConfig.scorePerQuestion * multiplier;
+    if (currentUser) {
+      mockDb.logQuizAttempt(currentUser.id, 'English Typing', earnedBP);
+    }
+  }, [currentUser, questions, ageConfig]);
 
-    setAnimVars({
-      '--start-x': `${startRect.left}px`,
-      '--start-y': `${startRect.top}px`,
-      '--delta-x': `${deltaX}px`,
-      '--delta-y': `${deltaY}px`,
-      '--start-w': `${startRect.width}px`
-    });
-    setIsAnimating(true);
-    playPunchyPopSound();
+  const handleReturnLobby = () => {
+    if (isAnimating) return;
+    handleClaimReward();
+    const session = mockDb.getCurrentSession();
+    const guest = mockDb.getGuestProfile();
+    const multiplier = (session?.score_multiplier === 3 || guest?.score_multiplier === 3) ? 3 : 1;
+    const earnedBP = questions.length * ageConfig.scorePerQuestion * multiplier;
 
-    const earnedBP = questions.length * ageConfig.scorePerQuestion;
-    setTimeout(() => {
-      if (onComplete) {
-        onComplete(earnedBP);
-      }
-    }, 1200);
+    if (typeof onComplete === 'function') {
+      onComplete(earnedBP);
+    } else {
+      handleExitGame();
+    }
+  };
+
+  const handleContinueNext = () => {
+    if (isAnimating) return;
+    handleClaimReward();
+    const session = mockDb.getCurrentSession();
+    const guest = mockDb.getGuestProfile();
+    const multiplier = (session?.score_multiplier === 3 || guest?.score_multiplier === 3) ? 3 : 1;
+    const earnedBP = questions.length * ageConfig.scorePerQuestion * multiplier;
+
+    if (typeof onContinueNextRound === 'function') {
+      onContinueNextRound();
+    } else if (typeof onComplete === 'function') {
+      onComplete(earnedBP);
+    }
   };
 
   // Format mm:ss
@@ -390,6 +437,15 @@ export default function TypingGame({
     const earnedBP = questions.length * ageConfig.scorePerQuestion;
     const accuracy = Math.max(70, Math.round(((cleanTotalChars(questions) - totalErrors) / cleanTotalChars(questions)) * 100));
 
+    const currentEnergy = energyState?.energy ?? 0;
+    const maxEnergy = energyState?.maxEnergy ?? 5;
+    const isPaid = Boolean(energyState?.isPaid || maxEnergy === 10);
+    const hasEnergy = currentEnergy > 0;
+    const recoveryMinutes = Math.max(1, Math.ceil((energyState?.secondsToNextRecovery || 0) / 60));
+    const energyStatusText = hasEnergy
+      ? `⚡ 剩余体力：${currentEnergy}/${maxEnergy}`
+      : `⚡ 剩余体力：0/${maxEnergy} · 距离恢复1点还有 ${recoveryMinutes} 分钟`;
+
     return (
       <div
         style={{
@@ -407,13 +463,7 @@ export default function TypingGame({
         {/* Top-Left Back to Lobby Button */}
         <button
           type="button"
-          onClick={() => {
-            if (onComplete) {
-              onComplete(earnedBP);
-            } else {
-              handleExitGame();
-            }
-          }}
+          onClick={handleReturnLobby}
           style={{
             position: 'absolute',
             top: 'max(16px, env(safe-area-inset-top, 16px))',
@@ -541,31 +591,100 @@ export default function TypingGame({
               </div>
             )}
 
-            {/* Claim BP CTA Button */}
-            <button
-              ref={claimBtnRef}
-              type="button"
-              onClick={handleClaimClick}
-              disabled={isAnimating}
-              style={{
-                marginTop: '16px',
-                display: 'flex',
-                height: '48px',
-                width: '100%',
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderRadius: '999px',
-                background: '#111111',
-                fontSize: '15px',
-                fontWeight: 900,
-                color: '#FFBC00',
-                border: '2px solid #111111',
-                cursor: isAnimating ? 'wait' : 'pointer',
-                boxShadow: '3px 3px 0px #111111'
-              }}
-            >
-              领取奖励 (Claim BP!)
-            </button>
+            {/* Energy Status Display - 对齐主页面 VIP 风格 */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              padding: '10px 14px',
+              borderRadius: '999px',
+              background: !hasEnergy 
+                ? '#FFF1F2' 
+                : (isPaid ? 'linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%)' : '#FFFFFF'),
+              border: !hasEnergy 
+                ? '2px solid #F43F5E' 
+                : (isPaid ? '2px solid #F59E0B' : '2px solid #111111'),
+              color: !hasEnergy 
+                ? '#BE123C' 
+                : (isPaid ? '#92400E' : '#111111'),
+              fontSize: '13px',
+              fontWeight: 800,
+              marginTop: '16px',
+              boxShadow: !hasEnergy 
+                ? '2px 2px 0px #F43F5E' 
+                : (isPaid ? '2px 2px 0px #D97706' : '2px 2px 0px #111111'),
+              textAlign: 'center'
+            }}>
+              <span>{energyStatusText}</span>
+              {isPaid && hasEnergy && (
+                <span style={{
+                  background: '#F59E0B',
+                  color: '#FFFFFF',
+                  borderRadius: '999px',
+                  padding: '1px 7px',
+                  fontSize: '10.5px',
+                  fontWeight: 900,
+                  letterSpacing: '0.3px',
+                  boxShadow: '0 1px 3px rgba(245, 158, 11, 0.4)'
+                }}>
+                  VIP 10局
+                </span>
+              )}
+            </div>
+
+            {/* Action Buttons: Continue Next Round & Return to Lobby */}
+            <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <button
+                ref={claimBtnRef}
+                type="button"
+                onClick={hasEnergy ? handleContinueNext : undefined}
+                disabled={isAnimating || !hasEnergy}
+                style={{
+                  display: 'flex',
+                  height: '48px',
+                  width: '100%',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: '999px',
+                  background: hasEnergy ? '#111111' : '#9CA3AF',
+                  fontSize: '15px',
+                  fontWeight: 900,
+                  color: hasEnergy ? '#FFBC00' : '#F3F4F6',
+                  border: hasEnergy ? '2px solid #111111' : '2px solid #6B7280',
+                  cursor: !hasEnergy ? 'not-allowed' : (isAnimating ? 'wait' : 'pointer'),
+                  boxShadow: hasEnergy ? '3px 3px 0px #111111' : 'none',
+                  transition: 'transform 0.08s ease',
+                  opacity: hasEnergy ? 1 : 0.85
+                }}
+              >
+                <span>{hasEnergy ? '继续下一局 ▶ · 消耗1⚡' : '体力恢复中'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleReturnLobby}
+                disabled={isAnimating}
+                style={{
+                  display: 'flex',
+                  height: '44px',
+                  width: '100%',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: '999px',
+                  background: '#FFFFFF',
+                  fontSize: '14px',
+                  fontWeight: 800,
+                  color: '#111111',
+                  border: '2px solid #111111',
+                  cursor: isAnimating ? 'wait' : 'pointer',
+                  boxShadow: '2.5px 2.5px 0px #111111',
+                  transition: 'transform 0.08s ease'
+                }}
+              >
+                <span>返回大厅</span>
+              </button>
+            </div>
           </div>
         </div>
 
